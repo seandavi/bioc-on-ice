@@ -779,6 +779,19 @@ If releases are ingested out of order or one is skipped, a record retired
 upstream during the gap is attributed to the release that noticed it. That is
 accepted, and MUST be documented rather than papered over.
 
+## Retirement is not the same as merging
+
+Set difference cannot tell a record that *disappeared* from one that was
+**merged into another identifier**. dbSNP is the canonical case: rsIDs are
+routinely merged between builds, so a naive diff reports the absorbed id as
+retired when it in fact still resolves, and a client following the old id gets
+a false negative rather than a redirect.
+
+A source with merge semantics MUST therefore supply its merge history, which
+is ingested alongside the data so that a superseded identifier records what
+replaced it. A source that merges identifiers and publishes no merge table
+cannot be retired correctly and MUST NOT be ingested under this model.
+
 ## Deciding whether a source changed
 
 For unversioned sources, no HTTP-layer signal answers this. NCBI serves no
@@ -1009,8 +1022,14 @@ that any difference is ours rather than the source's.
 2. Free-text search across that metadata returns the records `query()` would.
 3. A record resolves to a fetchable URI for the underlying object, which is
    referenced and not ingested.
-4. Coverage is reported honestly as a fraction of the roughly 71,000 records,
-   with the unrepresented classes named.
+4. Coverage is reported honestly as a fraction of the **117,671** records the
+   hub actually holds, with the unrepresented classes named.
+
+The hub publishes its entire catalog as a SQLite database at
+`https://annotationhub.bioconductor.org/metadata/annotationhub.sqlite3`
+(~131 MB), with ExperimentHub alongside it. Ingest reads that file directly —
+there is no scraping and no API pagination. Note that the record count printed
+in the AnnotationHub vignette is stale; the database is authoritative.
 
 ## G. Variant resources
 
