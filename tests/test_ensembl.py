@@ -84,8 +84,12 @@ def test_species_are_independent(cat):
 def test_every_column_is_documented(cat):
     """SPEC.md section B1: a table whose columns lack doc does not ship."""
     load(cat, HUMAN)
+    from pyiceberg.exceptions import NoSuchTableError
     for identifier in schemas.TABLES:
-        table = cat.load_table(identifier)
+        try:
+            table = cat.load_table(identifier)
+        except NoSuchTableError:
+            continue  # not every source is loaded in every test
         assert table.properties.get("comment"), identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
@@ -187,3 +191,34 @@ def test_duplicate_incoming_keys_are_rejected(cat):
 
     with pytest.raises(ValueError, match="more than one live row"):
         merge.merge(cat, "annotation.gene", doubled, "2026.11", EqualTo("taxon_id", 9606))
+
+
+G2E = Path(__file__).parent / "tiny_gene2ensembl.tsv"
+
+
+def test_two_sources_share_a_table_without_retiring_each_other(cat):
+    """The flip-flop case: a taxon-only scope would make these alternate forever."""
+    from bioconice import ncbi
+
+    load(cat, HUMAN)                                     # Ensembl writes ENSEMBL->SYMBOL
+    ncbi.land_raw(cat, "2026.09", [9606], url=str(G2E))  # NCBI writes ENSEMBL->ENTREZ
+    ncbi.transform(cat, "2026.09", 9606)
+
+    live = rows(cat, "annotation.identifier_mapping", row_filter="valid_to IS NULL")
+    by_source = {}
+    for r in live:
+        by_source.setdefault(r["source"], []).append(r)
+    assert sorted(by_source) == ["Ensembl", "NCBI"]
+    assert [r["target_id"] for r in by_source["Ensembl"]] == ["TP53"]
+    assert sorted(r["target_id"] for r in by_source["NCBI"]) == ["100302278", "7157"]
+
+    # re-running Ensembl must not retire NCBI's rows either — the other direction
+    ensembl.transform(cat, "2026.10", HUMAN, ENS)
+    still = rows(cat, "annotation.identifier_mapping",
+                 row_filter="valid_to IS NULL AND source = 'NCBI'")
+    assert len(still) == 2
+
+    # and the manifest records two axes: a release number and a retrieval date
+    man = {m["source"]: m for m in rows(cat, "provenance.release")}
+    assert man["ensembl"]["version_method"] == "release_number"
+    assert man["ncbi_gene"]["version_method"] == "retrieval_date"

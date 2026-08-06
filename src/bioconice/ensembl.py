@@ -99,6 +99,20 @@ def _manifest(cat, release, ensembl_release, url, rows):
            And(EqualTo("release", release), EqualTo("source", "ensembl")))
 
 
+# Cross-source tables: a merge must only be able to retire rows it wrote, so the
+# scope names the writer as well as the species. Without this, Ensembl and NCBI
+# retire each other's cross-references on alternating ingests — silently, and
+# forever, because the "current" view is never empty.
+WRITER = {"reference.genome": EqualTo("provider", "Ensembl"),
+          "annotation.identifier_mapping": EqualTo("source", "Ensembl")}
+
+
+def _scope(identifier, taxon):
+    taxon_only = EqualTo("taxon_id", taxon)
+    writer = WRITER.get(identifier)
+    return And(taxon_only, writer) if writer else taxon_only
+
+
 def transform(cat, release, info, ensembl_release):
     """Phase 2: derive the annotation tables from landed raw rows."""
     taxon = info["taxon_id"]
@@ -168,14 +182,7 @@ def transform(cat, release, info, ensembl_release):
             FROM feat WHERE feature = 'gene' AND gene_name IS NOT NULL
         """),
     }
-    # ponytail: taxon-only scope is correct while Ensembl is the sole writer.
-    # reference.genome and annotation.identifier_mapping are cross-source tables;
-    # the moment a second source writes them, this must become
-    # And(EqualTo("taxon_id", t), EqualTo(<source column>, "Ensembl")) or the two
-    # writers will retire each other's rows on alternating ingests. Do not copy
-    # this line into a new source module unchanged.
-    scope = EqualTo("taxon_id", taxon)
-    return {k: merge.merge(cat, k, a, release, scope) for k, a in out.items()}
+    return {k: merge.merge(cat, k, a, release, _scope(k, taxon)) for k, a in out.items()}
 
 
 def ingest(cat, release, species, ensembl_release):

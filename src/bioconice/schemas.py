@@ -106,6 +106,26 @@ TABLES = {
                 "by design: unlike Iceberg snapshot summaries it does not expire.",
         properties={},
     ),
+    "raw.ncbi_gene2ensembl": TableDef(
+        schema=Schema(
+            NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(2, "gene_id", StringType(), doc="NCBI Entrez GeneID."),
+            NestedField(3, "ensembl_gene_id", StringType(),
+                        doc="Ensembl stable gene id NCBI maps this Entrez gene to."),
+            NestedField(4, "rna_accession", StringType(), doc="RefSeq RNA accession.version."),
+            NestedField(5, "ensembl_rna_id", StringType(), doc="Ensembl transcript id."),
+            NestedField(6, "protein_accession", StringType(), doc="RefSeq protein accession.version."),
+            NestedField(7, "ensembl_protein_id", StringType(), doc="Ensembl protein id."),
+            NestedField(8, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="NCBI gene2ensembl landed verbatim, filtered to the taxa we ingest. NCBI's "
+                "'-' placeholder is read as NULL. Regenerated nightly upstream, so it has no "
+                "release: the retrieval date is the version, per NLM's own citation form.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.column.ensembl_gene_id.prefix": "ensembl"},
+    ),
     "raw.ensembl_gtf": TableDef(
         schema=Schema(
             NestedField(1, "seqname", StringType(), doc="GTF column 1, the sequence name."),

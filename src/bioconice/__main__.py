@@ -1,6 +1,6 @@
 import argparse
 
-from . import catalog, ensembl
+from . import catalog, ensembl, ncbi
 
 
 def main():
@@ -13,6 +13,10 @@ def main():
     ing.add_argument("--ensembl-release", default="116")
     ing.add_argument("--transform-only", action="store_true",
                      help="re-derive from already-landed raw rows, without re-downloading")
+
+    nc = sub.add_parser("ingest-ncbi", help="load NCBI gene2ensembl cross-references")
+    nc.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
+    nc.add_argument("--taxa", default="9606,10090")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
@@ -29,6 +33,11 @@ def main():
                 print(f"{name:35} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged")
             else:
                 print(f"{name:35} {c:>10,} rows")
+    elif args.cmd == "ingest-ncbi":
+        counts = ncbi.ingest(cat, args.release, [int(t) for t in args.taxa.split(",")])
+        for name, c in counts.items():
+            print(f"{name:40} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged"
+                  if isinstance(c, dict) else f"{name:40} {c:>10,} rows")
     else:
         for ns in cat.list_namespaces():
             for t in cat.list_tables(ns):
