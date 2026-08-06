@@ -833,10 +833,25 @@ one. Each source's records are merged on the identifier fields:
 - **present with `retired_in IS NULL` but absent upstream** — set
   `retired_in` to this release
 
-Only those three sets are written; a record that survives a release unchanged
-is not rewritten. Retirement is computed by set difference against the previous
-state, which requires each source to publish a **complete** dump per release.
-Sources that publish deltas are out of scope for this model.
+These are row-level semantics, not a claim about write volume: a record that
+survives a release unchanged keeps its `first_seen` and is not logically
+touched, but an implementation MAY rewrite it physically. Storage is bounded by
+snapshot expiry rather than by write granularity, since history lives in the
+rows — see [ADR-0004](docs/adr/0004-merge-recomputes-scope.md).
+
+Every record MUST resolve to exactly one row per identifier tuple. A record
+that is retired and later reappears upstream MUST NOT produce a second row;
+Iceberg does not enforce identifier uniqueness, so this is the implementation's
+obligation.
+
+Retirement is computed by set difference against the previous state, which
+requires each source to publish a **complete** dump per release. Sources that
+publish deltas are out of scope for this model.
+
+Retirement is scoped: a merge is responsible only for the records it claims,
+and MUST NOT retire records written by a different source into the same table.
+Tables written by more than one source therefore carry the source in their
+identifier fields, and each writer's scope names it.
 
 If releases are ingested out of order or one is skipped, a record retired
 upstream during the gap is attributed to the release that noticed it. That is
