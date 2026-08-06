@@ -1,0 +1,48 @@
+# icegate configuration for the biocOnIce catalog.
+#
+# Deployed as its own icegate instance, separate from the omicidx gateway, so
+# that an anonymous-enabled config never shares a file — or a blast radius —
+# with a key-only one.
+#
+# ${VARS} resolve from Workers secrets at deploy time; no infrastructure
+# identifiers are committed here. R2_CATALOG_PREFIX is the Data Catalog UUID
+# that /v1/config returns as `overrides.prefix` — for R2 this is NOT the
+# account id.
+
+cors:
+  enabled: true
+  origins:
+    - "*" # DuckDB-WASM in the browser; R2 serves no CORS headers of its own
+
+authentication:
+  # MUST stay false until the IP-bearing log buckets leave this Cloudflare
+  # account. R2 Data Catalog access is only available at Admin level, Admin
+  # tokens cannot be scoped to a bucket, and vended SigV4 credentials inherit
+  # the token's storage permissions — so anonymous read here would hand any
+  # caller account-wide R2 read. Tracked as "Move IP-bearing log buckets out of
+  # the public account".
+  anonymous:
+    enabled: false
+
+  api_keys:
+    enabled: true
+    seandavi:
+      sha256: c3cc27c7f822a41fb7c6f05eb00b4d48ffa1c85c775f0ad9a120499c25ee907d
+      namespaces:
+        - raw
+        - reference
+        - annotation
+      permissions:
+        - read
+        - write
+
+catalogs:
+  bioconice:
+    endpoint: https://catalog.cloudflarestorage.com/${CF_ACCOUNT_ID}/bioconice
+    backend_warehouse: ${CF_ACCOUNT_ID}_bioconice
+    backend_prefix: ${R2_CATALOG_PREFIX}
+    auth:
+      bearer_token: ${CF_API_TOKEN}
+    capabilities:
+      read: true
+      write: true
