@@ -667,6 +667,17 @@ appears only as a pathway subset inside `graphite`.
 These are recorded because the gap is the argument; none is in scope before
 the delivery path and the parity layer exist.
 
+The ontology packages tell the same story more sharply, and bear directly on
+the `ontology` namespace: `DO.db` still ships a 2015 snapshot, `HPO.db` a 2023
+one while two newer snapshots sit unused in AnnotationHub, and `ontoProc`'s
+whole ontology set froze in April 2023 — including MONDO at the 2022-12-01
+release, against a monthly upstream cadence. Meanwhile `DOSE` solved its own
+currency problem by dropping those packages and downloading current data from a
+personal GitHub Pages branch, with no Bioconductor versioning, no
+AnnotationHub record, and no provenance trail at all. That is precisely the
+failure mode biocOnIce exists to remove: the choice should not be between
+stale-but-tracked and current-but-untraceable.
+
 ---
 
 # Provenance Model
