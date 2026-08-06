@@ -10,6 +10,12 @@ of truth** — read it before writing code. If a change contradicts the SPEC,
 edit SPEC.md in the same commit and say so in your report (that is how
 `taxon_id` reached `transcript`/`exon`).
 
+Decisions with a non-obvious rejected alternative are recorded as ADRs in
+`docs/adr/`. Read them before proposing an architecture change — contradicting
+one is allowed and sometimes right, but it should be argued rather than drifted
+into. SPEC.md says what the system must do; an ADR says why a decision went the
+way it did.
+
 biocOnIce is the *data*; [icegate](https://github.com/seandavi/icegate) is the
 gateway that serves it. Nothing here should grow gateway concerns (auth,
 routing, credential vending) — that boundary is deliberate.
