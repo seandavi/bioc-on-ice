@@ -89,3 +89,44 @@ def test_every_column_is_documented(cat):
         assert table.properties.get("comment"), identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+NEXT = Path(__file__).parent / "tiny_next.gtf"
+
+
+def load_from(cat, info, gtf, release, ensembl_release):
+    ensembl.land_raw(cat, release, "x", ensembl_release, url=str(gtf), info=info)
+    return ensembl.transform(cat, release, info, ensembl_release)
+
+
+def test_merge_inserts_updates_and_retires(cat):
+    load(cat, HUMAN)                                    # release 2026.08, Ensembl 116
+    genes = rows(cat, "annotation.gene")
+    assert {g["first_seen"] for g in genes} == {REL}
+    assert all(g["retired_in"] is None for g in genes)
+
+    # same data, later release: nothing should be written at all
+    counts = load_from(cat, HUMAN, GTF, "2026.09", ENS)
+    assert counts["annotation.gene"]["written"] == 0
+    assert counts["annotation.exon"]["written"] == 0
+    assert counts["annotation.gene"]["unchanged"] == 2
+
+    # next upstream release: TP53 version bumped, the lncRNA gene gone
+    counts = load_from(cat, HUMAN, NEXT, "2026.10", "117")
+    assert counts["annotation.gene"]["written"] == 2   # one changed, one retired
+
+    genes = {g["gene_id"]: g for g in rows(cat, "annotation.gene")}
+    tp53, lnc = genes["ENSG00000141510"], genes["ENSG00000288825"]
+
+    # changed in place, and first_seen is preserved rather than restamped
+    assert (tp53["version"], tp53["first_seen"], tp53["retired_in"]) == ("19", REL, None)
+    # retired: still present, still carrying its original first_seen
+    assert (lnc["first_seen"], lnc["retired_in"]) == (REL, "2026.10")
+
+    current = rows(cat, "annotation.gene", row_filter="retired_in IS NULL")
+    assert [g["gene_id"] for g in current] == ["ENSG00000141510"]
+
+    # point-in-time: the catalog as it stood at 2026.08 still has both genes
+    at_first = [g for g in genes.values()
+                if g["first_seen"] <= REL and (g["retired_in"] is None or g["retired_in"] > REL)]
+    assert len(at_first) == 2

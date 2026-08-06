@@ -24,8 +24,11 @@ def main():
             counts = ensembl.transform(cat, args.release, info, args.ensembl_release)
         else:
             counts = ensembl.ingest(cat, args.release, args.species, args.ensembl_release)
-        for name, rows in counts.items():
-            print(f"{name:35} {rows:>10,} rows")
+        for name, c in counts.items():
+            if isinstance(c, dict):
+                print(f"{name:35} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged")
+            else:
+                print(f"{name:35} {c:>10,} rows")
     else:
         for ns in cat.list_namespaces():
             for t in cat.list_tables(ns):

@@ -19,7 +19,7 @@ import urllib.request
 import duckdb
 from pyiceberg.expressions import And, EqualTo
 
-from . import schemas
+from . import merge, schemas
 
 FTP = "https://ftp.ensembl.org/pub/release-{release}"
 
@@ -83,7 +83,7 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
 
 def transform(cat, release, info, ensembl_release):
     """Phase 2: derive the annotation tables from landed raw rows."""
-    taxon, rel = info["taxon_id"], release
+    taxon = info["taxon_id"]
     raw = cat.load_table("raw.ensembl_gtf").scan(
         row_filter=And(EqualTo("taxon_id", taxon),
                        EqualTo("ensembl_release", str(ensembl_release)))).to_arrow()
@@ -114,19 +114,16 @@ def transform(cat, release, info, ensembl_release):
     out = {
         "reference.genome": q(f"""
             SELECT '{info['accession']}' AS genome_id, {taxon}::INTEGER AS taxon_id,
-                   'Ensembl' AS provider, '{info['assembly']}' AS assembly_name,
-                   '{rel}' AS first_seen, NULL::VARCHAR AS retired_in
+                   'Ensembl' AS provider, '{info['assembly']}' AS assembly_name
         """),
         "annotation.gene": q(f"""
             SELECT gene_id, {taxon}::INTEGER AS taxon_id, gene_version AS version,
-                   gene_name AS symbol, gene_biotype AS gene_type, gene_source AS source,
-                   '{rel}' AS first_seen, NULL::VARCHAR AS retired_in
+                   gene_name AS symbol, gene_biotype AS gene_type, gene_source AS source
             FROM feat WHERE feature = 'gene'
         """),
         "annotation.transcript": q(f"""
             SELECT transcript_id, {taxon}::INTEGER AS taxon_id, gene_id,
-                   transcript_version AS version, transcript_biotype AS biotype, canonical,
-                   '{rel}' AS first_seen, NULL::VARCHAR AS retired_in
+                   transcript_version AS version, transcript_biotype AS biotype, canonical
             FROM feat WHERE feature = 'transcript'
         """),
         # A CDS line carries the same transcript_id and exon_number as the exon it
@@ -136,8 +133,7 @@ def transform(cat, release, info, ensembl_release):
                    e.seqname AS sequence_name, e."start", e."end", e.strand,
                    e.exon_number::INTEGER AS rank,
                    c."start" AS cds_start, c."end" AS cds_end,
-                   try_cast(c.frame AS INTEGER) AS cds_phase,
-                   '{rel}' AS first_seen, NULL::VARCHAR AS retired_in
+                   try_cast(c.frame AS INTEGER) AS cds_phase
             FROM feat e
             LEFT JOIN feat c
               ON c.feature = 'CDS'
@@ -150,14 +146,12 @@ def transform(cat, release, info, ensembl_release):
             SELECT 'ENSEMBL' AS source_namespace, gene_id AS source_id,
                    'SYMBOL' AS target_namespace, gene_name AS target_id,
                    {taxon}::INTEGER AS taxon_id, 'Ensembl' AS source,
-                   NULL::DOUBLE AS confidence,
-                   '{rel}' AS first_seen, NULL::VARCHAR AS retired_in
+                   NULL::DOUBLE AS confidence
             FROM feat WHERE feature = 'gene' AND gene_name IS NOT NULL
         """),
     }
-    # ponytail: overwrite per species until the merge ticket lands, so first_seen
-    # is the release that last loaded the row, not the release it appeared in.
-    return {k: _write(cat, k, a, EqualTo("taxon_id", taxon)) for k, a in out.items()}
+    scope = EqualTo("taxon_id", taxon)
+    return {k: merge.merge(cat, k, a, release, scope) for k, a in out.items()}
 
 
 def ingest(cat, release, species, ensembl_release):
