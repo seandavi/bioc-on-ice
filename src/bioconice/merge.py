@@ -1,74 +1,77 @@
-"""Release-scoped merge, driven by the declared schema.
+"""Release-scoped merge maintaining full Type 2 history.
 
-A derived table holds current state plus history: `first_seen` is the release a
-record appeared in, `retired_in` the release it vanished upstream, NULL while
-current. Maintaining that against a full upstream dump sorts every record into
-one of four states:
+A row is one **version** of a record, valid over `[valid_from, valid_to)` in
+biocOnIce release coordinates. Merging the complete upstream state for a scope
+sorts every record into one of five outcomes:
 
-  new        absent locally            -> first_seen = this release
-  changed    present, attributes differ -> updated, first_seen preserved
-  unchanged  present, identical         -> carried forward untouched
-  retired    absent upstream            -> retired_in = this release
+  new         business key absent      -> insert, valid_from = this release
+  unchanged   present, attrs identical -> carried forward untouched
+  changed     present, attrs differ    -> close the old row at this release
+                                          and insert a new version
+  retired     absent upstream          -> close the old row at this release
+  history     already closed           -> untouched
 
-Which columns are keys and which are attributes comes from the table's own
-Iceberg identifier fields, so this works for any table in `schemas.TABLES`
-without being told anything about it.
+Nothing is ever updated in place. That is the point: overwriting a changed
+attribute is Kimball Type 1, which destroys history, and it is what made a
+point-in-time query return transcripts pointing at genes that did not yet
+exist. Closing and reopening also collapses "changed" and "reappeared" into one
+rule rather than two — see ADR-0006.
 
-ponytail: this recomputes the scope's complete state and overwrites the scope,
-rather than writing only the rows that changed. PyIceberg's `upsert` would do
-the latter, but it derives a filter predicate from every join key, which is
-pathological past a few thousand rows — five million exons did not finish in
-ten minutes, where overwrite takes seconds. Storage is unaffected once
-snapshots are expired, since history lives in the rows rather than in retained
-files. Upgrade path if write time ever matters: partition by taxon and replace
-only the touched partitions.
+Which columns form the business key comes from the table's own declaration, so
+this works for any table in `schemas.TABLES` without being told about it.
+
+ponytail: recomputes the scope's complete state and overwrites the scope rather
+than writing only changed rows. PyIceberg's `upsert` derives a filter predicate
+from every join key and does not complete on five million rows. Storage is
+unaffected once snapshots expire, because history lives in the rows. Upgrade
+path if write time matters: partition by taxon and replace only touched
+partitions, or go insert-only and compute `valid_to` as a `LEAD()` window in a
+view, which is where Data Vault has moved.
 """
 
 import duckdb
 
 from . import schemas
 
-VALIDITY = ("first_seen", "retired_in")
+VALIDITY = ("valid_from", "valid_to")
 
 
 def _columns(identifier, schema):
     """Business key and attributes.
 
     The join key is the *business* key, not the Iceberg identifier fields —
-    those additionally carry `first_seen`, because a retired record that
-    reappears becomes a second row. Joining on the row key would make every
-    record look new.
+    those additionally carry `valid_from`, since each change opens a new
+    version. Joining on the row key would make every record look new.
     """
     keys = list(schemas.TABLES[identifier].business_key)
     attrs = [f.name for f in schema.fields if f.name not in keys and f.name not in VALIDITY]
     return keys, attrs
 
 
-def _select(schema, side, release):
-    """Column list in declared order, sourced per branch of the merge."""
+def _cols(schema, side, release, opened=None):
+    """Column list in declared order, sourced per branch of the merge.
+
+    `live` reads the incoming row; `closing` and `history` read the stored one.
+    """
     out = []
     for f in schema.fields:
         n = f.name
-        if n == "first_seen":
-            # upstream rows keep the release they first appeared in; only a
-            # genuinely new key gets stamped with this one
-            out.append(f"coalesce(c.first_seen, '{release}')" if side == "upstream"
-                       else "c.first_seen")
-        elif n == "retired_in":
-            out.append("NULL::VARCHAR" if side == "upstream"
-                       else f"'{release}'" if side == "retiring" else "c.retired_in")
+        if n == "valid_from":
+            out.append(opened if side == "live" else "c.valid_from")
+        elif n == "valid_to":
+            out.append(f"'{release}'" if side == "closing"
+                       else "c.valid_to" if side == "history" else "NULL::VARCHAR")
         else:
-            out.append(f"{'i' if side == 'upstream' else 'c'}.\"{n}\"")
-        out[-1] += f' AS "{n}"' 
+            out.append(f'{"i" if side == "live" else "c"}."{n}"')
+        out[-1] += f' AS "{n}"'
     return ", ".join(out)
 
 
 def merge(cat, identifier, incoming, release, scope):
-    """Merge `incoming` (the complete upstream state within `scope`) into a table.
+    """Merge `incoming` — the complete upstream state within `scope` — into a table.
 
-    `scope` is an Iceberg expression bounding what this ingest is responsible
-    for — typically one species. Records outside it are never read and so are
-    never wrongly retired.
+    `scope` bounds what this ingest is responsible for, typically one species.
+    Records outside it are never read and so are never wrongly retired.
     """
     table = schemas.create(cat, identifier)
     schema = table.schema()
@@ -82,44 +85,57 @@ def merge(cat, identifier, incoming, release, scope):
     # IS DISTINCT FROM, so a NULL becoming a value (or the reverse) counts as a
     # change; plain <> would silently treat it as unchanged.
     differs = " OR ".join(f'i."{a}" IS DISTINCT FROM c."{a}"' for a in attrs) or "false"
-    live = "c.retired_in IS NULL"
-    k0 = f'"{keys[0]}"' 
+    live = "c.valid_to IS NULL"
+    k0 = f'"{keys[0]}"'
+    is_new = f"c.{k0} IS NULL"
+    # A new key, or a changed one, starts a version at this release; an
+    # unchanged one carries its own start forward.
+    opened = f"CASE WHEN {is_new} OR ({differs}) THEN '{release}' ELSE c.valid_from END"
+    # Re-ingesting the release that opened the live row is a correction *within*
+    # that release, not a new version: replace it, rather than emitting a
+    # zero-width interval and a duplicate row key.
+    supersede = f"c.valid_from < '{release}'"
 
     con.execute(f"""
         CREATE OR REPLACE TABLE merged AS
-        SELECT {_select(schema, 'upstream', release)},
-               CASE WHEN c.{k0} IS NULL THEN 'new'
+        SELECT {_cols(schema, 'live', release, opened)},
+               CASE WHEN {is_new} THEN 'new'
                     WHEN {differs} THEN 'changed' ELSE 'unchanged' END AS _state
         FROM inc i LEFT JOIN cur c ON {on} AND {live}
       UNION ALL
-        SELECT {_select(schema, 'retiring', release)}, 'retired' AS _state
+        SELECT {_cols(schema, 'closing', release)}, 'superseded' AS _state
+        FROM inc i JOIN cur c ON {on} AND {live}
+        WHERE ({differs}) AND {supersede}
+      UNION ALL
+        SELECT {_cols(schema, 'closing', release)}, 'retired' AS _state
         FROM cur c LEFT JOIN inc i ON {on}
         WHERE {live} AND i.{k0} IS NULL
       UNION ALL
-        SELECT {_select(schema, 'history', release)}, 'history' AS _state
-        FROM cur c WHERE c.retired_in IS NOT NULL
+        SELECT {_cols(schema, 'history', release)}, 'history' AS _state
+        FROM cur c WHERE c.valid_to IS NOT NULL
     """)
 
-    # Iceberg declares identifier fields but enforces nothing, so the invariant
-    # is ours: at most one live row per business key. Violating it corrupts
-    # silently — the current view still reads correctly while every join on the
-    # key fans out — so fail loudly here instead.
+    # Iceberg declares identifier fields and enforces nothing, so both
+    # invariants are ours. Violating either corrupts silently: the current view
+    # still reads correctly while joins fan out.
     kq = ", ".join(f'"{k}"' for k in keys)
-    dupes = con.sql(f"""
-        SELECT count(*) FROM (
-            SELECT {kq} FROM merged WHERE retired_in IS NULL GROUP BY ALL HAVING count(*) > 1)
-    """).fetchone()[0]
-    if dupes:
-        raise ValueError(
-            f"{identifier}: {dupes} business keys would have more than one live row. "
-            f"Either `incoming` contains duplicate keys, or a retired record was "
-            f"resurrected without its predecessor staying retired.")
+    for what, sql in (
+        ("more than one live row",
+         f"SELECT {kq} FROM merged WHERE valid_to IS NULL GROUP BY ALL HAVING count(*) > 1"),
+        ("duplicate row keys",
+         f"SELECT {kq}, valid_from FROM merged GROUP BY ALL HAVING count(*) > 1"),
+    ):
+        n = con.sql(f"SELECT count(*) FROM ({sql})").fetchone()[0]
+        if n:
+            raise ValueError(f"{identifier}: {n} business keys would have {what}. Either "
+                             f"`incoming` contains duplicate keys, or a version boundary "
+                             f"is wrong.")
 
     stats = dict(con.sql("SELECT _state, count(*) FROM merged GROUP BY 1").fetchall())
     cols = ", ".join(f'"{f.name}"' for f in schema.fields)
     final = con.sql(f"SELECT {cols} FROM merged").to_arrow_table()
     table.overwrite(final.cast(table.schema().as_arrow()), overwrite_filter=scope)
 
-    return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "retired")),
+    return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "superseded", "retired")),
             "unchanged": stats.get("unchanged", 0),
             **{s: n for s, n in stats.items() if s != "history"}}

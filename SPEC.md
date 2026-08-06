@@ -267,13 +267,13 @@ symbol
 description
 gene_type
 source
-first_seen     -- biocOnIce release
-retired_in     -- biocOnIce release, NULL while current
+valid_from     -- biocOnIce release
+valid_to     -- biocOnIce release, NULL while current
 ```
 
 Columns marked `[identifier]` form the Iceberg identifier fields — the merge
 key. They are the *unversioned* stable id: an upstream version bump is an
-update to an existing row, not a new one. `first_seen` / `retired_in` are
+update to an existing row, not a new one. `valid_from` / `valid_to` are
 explained under [Versioning Model](#versioning-model).
 
 ---
@@ -289,8 +289,8 @@ gene_id
 version
 biotype
 canonical
-first_seen
-retired_in
+valid_from
+valid_to
 ```
 
 ---
@@ -311,8 +311,8 @@ rank           -- ordinal within the transcript, 5' to 3'
 cds_start      -- NULL where this exon is not translated
 cds_end
 cds_phase      -- reading frame; not recoverable from coordinates
-first_seen
-retired_in
+valid_from
+valid_to
 ```
 
 This one table stands in for three of TxDb's. TxDb separates `exon`, `cds` and
@@ -365,14 +365,14 @@ target_id
 taxon_id
 source
 confidence
-first_seen
-retired_in
+valid_from
+valid_to
 ```
 
 Here the whole tuple `(source_namespace, source_id, target_namespace,
 target_id, taxon_id)` is the identifier — a mapping has no attributes that can
 change, so it is only ever asserted or withdrawn, never updated. That makes
-`retired_in` the only signal that a cross-reference went away, and the reason
+`valid_to` the only signal that a cross-reference went away, and the reason
 retirement has to be modelled rather than left implicit.
 
 `taxon_id` appears on `transcript`, `exon` and `identifier_mapping` beyond what
@@ -739,8 +739,10 @@ biocOnIce 2026.10
   +-- GO 2026-06-26
 ```
 
-Releases are `YYYY.MM`, ordered lexicographically, with `YYYY.MM.N` for
-corrections. A published release MUST NOT be redefined; a mistake is corrected
+Releases are `YYYY.MM`, ordered lexicographically, with **zero-padded**
+`YYYY.MM.NN` for corrections — unpadded, `'2026.10.10'` sorts before
+`'2026.10.2'` and every `valid_to > R` comparison inverts at the tenth
+correction. A published release MUST NOT be redefined; a mistake is corrected
 by publishing a successor.
 
 A **snapshot** is a mechanical record of a single write to a single table. It
@@ -750,16 +752,16 @@ bug fix). Snapshot ids are opaque and unordered across tables.
 
 ## History lives in the rows, not in the files
 
-Point-in-time access MUST be served by the `first_seen` / `retired_in` columns
+Point-in-time access MUST be served by the `valid_from` / `valid_to` columns
 on every row-bearing table, not by Iceberg time travel:
 
 ```sql
 -- the catalog as it stood at release 2026.10
-WHERE first_seen <= '2026.10'
-  AND (retired_in IS NULL OR retired_in > '2026.10')
+WHERE valid_from <= '2026.10'
+  AND (valid_to IS NULL OR valid_to > '2026.10')
 
 -- current state
-WHERE retired_in IS NULL
+WHERE valid_to IS NULL
 ```
 
 This follows from what the two mechanisms can express. A release spans tables
@@ -780,7 +782,7 @@ depend on the tag surviving.
 
 The cost of this choice is that "current" is a filter, and a client that omits
 it silently sees retired records. Clients MUST therefore default to
-`retired_in IS NULL` and require an explicit opt-in to see history.
+`valid_to IS NULL` and require an explicit opt-in to see history.
 
 ## Raw and derived are separate layers
 
@@ -802,7 +804,7 @@ The two layers MUST NOT share write semantics:
 | --- | --- | --- |
 | identity | none — a source line has no natural key | declared identifier fields |
 | write | replace wholesale per source version | merge |
-| history | accumulated source versions | `first_seen` / `retired_in` |
+| history | accumulated source versions | `valid_from` / `valid_to` |
 
 A source release that is immutable — an Ensembl release, an archived ClinVar
 month — makes raw idempotent under re-ingest without any merge machinery:
@@ -828,22 +830,26 @@ A release is cut by running every source against it, so ingest takes the
 biocOnIce release as an argument and the upstream version as a source-specific
 one. Each source's records are merged on the identifier fields:
 
-- **matched, and some attribute differs** — update the row in place
-- **not matched** — insert with `first_seen` set to this release
-- **present with `retired_in IS NULL` but absent upstream** — set
-  `retired_in` to this release
+- **not matched** — insert a version starting at this release
+- **matched, and some attribute differs** — close the current version at this
+  release and insert a new one. A row is a *version*, and nothing is ever
+  updated in place: overwriting a changed attribute destroys history, and did
+  (see [ADR-0006](docs/adr/0006-full-type-2-history.md))
+- **present with `valid_to IS NULL` but absent upstream** — close the current
+  version at this release
+- **matched and identical** — untouched
 
 These are row-level semantics, not a claim about write volume: a record that
-survives a release unchanged keeps its `first_seen` and is not logically
+survives a release unchanged keeps its `valid_from` and is not logically
 touched, but an implementation MAY rewrite it physically. Storage is bounded by
 snapshot expiry rather than by write granularity, since history lives in the
 rows — see [ADR-0004](docs/adr/0004-merge-recomputes-scope.md).
 
 A record that is retired and later reappears upstream is a **new record**, not
-a revival of the old one. It is inserted with `first_seen` set to the release
+a revival of the old one. It is inserted with `valid_from` set to the release
 it reappeared in, and the retired row is left untouched. The two rows carry
 disjoint validity intervals, so the point-in-time predicate still resolves to
-exactly one row for any release, and `retired_in IS NULL` still yields exactly
+exactly one row for any release, and `valid_to IS NULL` still yields exactly
 one current row.
 
 This makes the business key and the row key distinct, and both MUST be
@@ -851,12 +857,12 @@ declared as such:
 
 * the **business key** — `(gene_id, taxon_id)` and its equivalents — is what a
   merge joins on to classify a record as new, changed or retired.
-* the **row key** is the business key plus `first_seen`, and is what the
+* the **row key** is the business key plus `valid_from`, and is what the
   Iceberg identifier fields declare. Declaring only the business key asserts a
   uniqueness that this model does not have.
 
 The invariant an implementation MUST enforce is therefore narrower than
-uniqueness: **at most one row per business key may have `retired_in IS NULL`.**
+uniqueness: **at most one row per business key may have `valid_to IS NULL`.**
 Iceberg enforces neither, so it is the implementation's obligation.
 
 The consequence for clients is the one already stated: a query that filters
@@ -888,6 +894,16 @@ A source with merge semantics MUST therefore supply its merge history, which
 is ingested alongside the data so that a superseded identifier records what
 replaced it. A source that merges identifiers and publishes no merge table
 cannot be retired correctly and MUST NOT be ingested under this model.
+
+## Every release records what it was built from
+
+Each ingest writes a `provenance.release` row per source: the biocOnIce
+release, the source, the upstream version **in the source's own vocabulary**,
+and `version_method` — how that version was determined. `unavailable` is a
+legitimate value; a source that publishes no version MUST be recorded as such
+rather than given a fabricated one. This is what makes a release reproducible:
+resolve it here to each source's own version, then query each table at that
+release. Unlike Iceberg snapshot summaries, it does not expire.
 
 ## Deciding whether a source changed
 
@@ -942,7 +958,7 @@ resolve the things a reader cannot infer from the name and type:
 * the convention behind a number — coordinates are 1-based and
   end-inclusive, following Ensembl and GTF, and NOT the 0-based half-open
   convention of BED and UCSC
-* what a null means, where null is meaningful — `retired_in IS NULL` means
+* what a null means, where null is meaningful — `valid_to IS NULL` means
   current, not unknown
 
 ## Machine-actionable properties
@@ -1028,7 +1044,7 @@ mocks.
    query at the earlier release returns exactly the row set that release
    returned when it was current.
 2. A gene retired upstream between those releases is absent from the current
-   view, carries `retired_in` equal to the later release, and is still present
+   view, carries `valid_to` equal to the later release, and is still present
    in the point-in-time view of the earlier one.
 3. **All snapshots except the current one are expired, and both point-in-time
    queries still return identical results.** This is the criterion that proves

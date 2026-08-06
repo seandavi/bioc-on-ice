@@ -99,47 +99,61 @@ def load_from(cat, info, gtf, release, ensembl_release):
     return ensembl.transform(cat, release, info, ensembl_release)
 
 
-def test_merge_inserts_updates_and_retires(cat):
+def test_merge_versions_changes_rather_than_overwriting(cat):
     load(cat, HUMAN)                                    # release 2026.08, Ensembl 116
     genes = rows(cat, "annotation.gene")
-    assert {g["first_seen"] for g in genes} == {REL}
-    assert all(g["retired_in"] is None for g in genes)
+    assert {g["valid_from"] for g in genes} == {REL}
+    assert all(g["valid_to"] is None for g in genes)
 
-    # same data, later release: nothing should be written at all
+    # same data, later release: nothing written at all
     counts = load_from(cat, HUMAN, GTF, "2026.09", ENS)
     assert counts["annotation.gene"]["written"] == 0
-    assert counts["annotation.exon"]["written"] == 0
     assert counts["annotation.gene"]["unchanged"] == 2
 
-    # next upstream release: TP53 version bumped, the lncRNA gene gone
+    # next upstream release: TP53 version bumped 18 -> 19, the lncRNA gone
     counts = load_from(cat, HUMAN, NEXT, "2026.10", "117")
-    assert counts["annotation.gene"]["written"] == 2   # one changed, one retired
+    # one changed record costs two rows: the closed old version and the new one
+    assert counts["annotation.gene"]["changed"] == 1
+    assert counts["annotation.gene"]["superseded"] == 1
+    assert counts["annotation.gene"]["retired"] == 1
 
-    genes = {g["gene_id"]: g for g in rows(cat, "annotation.gene")}
-    tp53, lnc = genes["ENSG00000141510"], genes["ENSG00000288825"]
+    tp53 = sorted((g for g in rows(cat, "annotation.gene")
+                   if g["gene_id"] == "ENSG00000141510"), key=lambda g: g["valid_from"])
+    assert len(tp53) == 2
+    # the old attribute value survives — this is what Type 1 destroyed
+    assert (tp53[0]["version"], tp53[0]["valid_from"], tp53[0]["valid_to"]) == ("18", REL, "2026.10")
+    assert (tp53[1]["version"], tp53[1]["valid_from"], tp53[1]["valid_to"]) == ("19", "2026.10", None)
 
-    # changed in place, and first_seen is preserved rather than restamped
-    assert (tp53["version"], tp53["first_seen"], tp53["retired_in"]) == ("19", REL, None)
-    # retired: still present, still carrying its original first_seen
-    assert (lnc["first_seen"], lnc["retired_in"]) == (REL, "2026.10")
-
-    current = rows(cat, "annotation.gene", row_filter="retired_in IS NULL")
+    current = rows(cat, "annotation.gene", row_filter="valid_to IS NULL")
     assert [g["gene_id"] for g in current] == ["ENSG00000141510"]
 
-    # point-in-time: the catalog as it stood at 2026.08 still has both genes
-    at_first = [g for g in genes.values()
-                if g["first_seen"] <= REL and (g["retired_in"] is None or g["retired_in"] > REL)]
-    assert len(at_first) == 2
+
+def test_point_in_time_returns_the_attribute_of_that_release(cat):
+    """The defect that motivated ADR-0006: PIT must reconstruct values, not just rows."""
+    load(cat, HUMAN)
+    load_from(cat, HUMAN, NEXT, "2026.10", "117")
+    tp53 = [g for g in rows(cat, "annotation.gene") if g["gene_id"] == "ENSG00000141510"]
+    assert [g["version"] for g in pit(tp53, REL)] == ["18"]
+    assert [g["version"] for g in pit(tp53, "2026.10")] == ["19"]
+
+
+def test_manifest_records_what_the_release_was_built_from(cat):
+    load(cat, HUMAN)
+    m = rows(cat, "provenance.release")
+    assert len(m) == 1
+    assert (m[0]["release"], m[0]["source"], m[0]["source_version"]) == (REL, "ensembl", ENS)
+    assert m[0]["version_method"] == "release_number"
+    assert m[0]["row_count"] == 11 and m[0]["retrieved_at"].startswith("20")
 
 
 def pit(rows, release):
     """SPEC's point-in-time predicate."""
     return [r for r in rows
-            if r["first_seen"] <= release
-            and (r["retired_in"] is None or r["retired_in"] > release)]
+            if r["valid_from"] <= release
+            and (r["valid_to"] is None or r["valid_to"] > release)]
 
 
-def test_resurrection_is_a_new_record(cat):
+def test_resurrection_is_a_new_version(cat):
     load_from(cat, HUMAN, GTF, "2026.08", "116")   # lncRNA present
     load_from(cat, HUMAN, NEXT, "2026.09", "117")  # lncRNA gone
     load_from(cat, HUMAN, GTF, "2026.10", "118")   # lncRNA back
@@ -147,11 +161,11 @@ def test_resurrection_is_a_new_record(cat):
     lnc = [r for r in rows(cat, "annotation.gene") if r["gene_id"] == "ENSG00000288825"]
     # two records, not one revived record
     assert len(lnc) == 2
-    assert sorted((r["first_seen"], r["retired_in"]) for r in lnc) == [
+    assert sorted((r["valid_from"], r["valid_to"]) for r in lnc) == [
         ("2026.08", "2026.09"), ("2026.10", None)]
 
     # the invariant that actually matters: one live row per business key
-    assert len([r for r in lnc if r["retired_in"] is None]) == 1
+    assert len([r for r in lnc if r["valid_to"] is None]) == 1
 
     # disjoint intervals, so point-in-time still resolves to one row per release
     assert len(pit(lnc, "2026.08")) == 1
@@ -167,7 +181,7 @@ def test_duplicate_incoming_keys_are_rejected(cat):
 
     load(cat, HUMAN)
     gene = cat.load_table("annotation.gene")
-    cols = [f.name for f in gene.schema().fields if f.name not in ("first_seen", "retired_in")]
+    cols = [f.name for f in gene.schema().fields if f.name not in ("valid_from", "valid_to")]
     one = gene.scan(row_filter="gene_id = 'ENSG00000141510'").to_arrow().select(cols)
     doubled = pa.concat_tables([one, one])          # same business key twice
 

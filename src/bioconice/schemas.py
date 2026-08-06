@@ -17,11 +17,18 @@ from pyiceberg.types import (
     BooleanType, DoubleType, IntegerType, LongType, NestedField, StringType,
 )
 
-FIRST_SEEN = "The biocOnIce release in which this record first appeared."
-RETIRED_IN = (
-    "The biocOnIce release in which this record disappeared upstream. "
-    "NULL means the record is current — it does not mean unknown. "
-    "Queries wanting current data must filter on retired_in IS NULL."
+VALID_FROM = (
+    "The biocOnIce release from which this version of the record is valid. "
+    "A row is one *version*: any change to any attribute closes the previous "
+    "row and opens a new one, so the value here is not necessarily when the "
+    "record first existed."
+)
+VALID_TO = (
+    "The biocOnIce release at which this version stopped being current, "
+    "exclusive. NULL means this is the current version — it does not mean "
+    "unknown. Queries wanting current data must filter on valid_to IS NULL; "
+    "queries wanting release R want "
+    "valid_from <= R AND (valid_to IS NULL OR valid_to > R)."
 )
 TAXON = "NCBI taxonomy id of the organism, e.g. 9606 for human. Part of the merge key."
 COORD = "1-based-inclusive"
@@ -33,9 +40,9 @@ class TableDef:
 
     `business_key` is what identifies a *record* — what a merge joins on to
     decide whether a row is new, changed or retired. The Iceberg identifier
-    fields are the *row* key, which is the business key plus `first_seen`,
-    because a record that is retired and reappears becomes a second row with
-    its own validity interval. Declaring only the business key to Iceberg would
+    fields are the *row* key, which is the business key plus `valid_from`,
+    because every change opens a new version row. Declaring only the business
+    key to Iceberg would
     assert a uniqueness this model does not have; deriving one from the other
     keeps them from drifting.
     """
@@ -48,12 +55,18 @@ class TableDef:
     def iceberg_schema(self):
         if not self.business_key:
             return self.schema
-        names = list(self.business_key) + ["first_seen"]
+        # A versioned table's row key is the business key plus valid_from, since
+        # each change opens a new version. A table with no validity columns —
+        # the manifest — is keyed by its business key alone.
+        names = list(self.business_key)
+        if any(f.name == "valid_from" for f in self.schema.fields):
+            names.append("valid_from")
         ids = [self.schema.find_field(n).field_id for n in names]
         return Schema(*self.schema.fields, identifier_field_ids=ids)
 
 
 NAMESPACES = {
+    "provenance": "What each biocOnIce release was built from, and how we know.",
     "raw": "Source files landed verbatim, before any interpretation. Read these to "
            "re-derive or audit; query the annotation and reference namespaces instead.",
     "reference": "Genome assemblies and the sequences that make them up.",
@@ -61,6 +74,38 @@ NAMESPACES = {
 }
 
 TABLES = {
+    "provenance.release": TableDef(
+        schema=Schema(
+            NestedField(1, "release", StringType(), required=True,
+                        doc="biocOnIce release, YYYY.MM with zero-padded corrections "
+                            "YYYY.MM.NN. Zero-padded because '2026.10.10' sorts before "
+                            "'2026.10.2' and release ordering would otherwise invert."),
+            NestedField(2, "source", StringType(), required=True,
+                        doc="Source key, e.g. ensembl, ncbi_gene, go."),
+            NestedField(3, "source_version", StringType(),
+                        doc="The upstream version in the SOURCE'S OWN vocabulary, never "
+                            "normalised: '116' for Ensembl, '2026-08-06' for a source that "
+                            "publishes no version. NULL only where nothing at all is knowable."),
+            NestedField(4, "version_method", StringType(), required=True,
+                        doc="How the version was determined: release_number, "
+                            "http_last_modified, etag, ftp_index_probe, retrieval_date, "
+                            "unavailable. 'unavailable' is a legitimate value — a source that "
+                            "publishes no version is recorded as such, never given a "
+                            "fabricated one."),
+            NestedField(5, "retrieved_at", StringType(), required=True,
+                        doc="UTC timestamp at which the source was fetched."),
+            NestedField(6, "url", StringType(), doc="Canonical URL fetched."),
+            NestedField(7, "checksum", StringType(), doc="SHA-256 of the retrieved bytes, where computed."),
+            NestedField(8, "row_count", LongType(),
+                        doc="Rows landed from this source, as a cheap integrity check."),
+        ),
+        business_key=("release", "source"),
+        comment="One row per (biocOnIce release, source): what this release was built from. "
+                "This is what makes a release reproducible — resolve it here to each "
+                "source's own version, then query each table at that release. Durable "
+                "by design: unlike Iceberg snapshot summaries it does not expire.",
+        properties={},
+    ),
     "raw.ensembl_gtf": TableDef(
         schema=Schema(
             NestedField(1, "seqname", StringType(), doc="GTF column 1, the sequence name."),
@@ -82,10 +127,12 @@ TABLES = {
             NestedField(10, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(11, "ensembl_release", StringType(), required=True,
                         doc="Ensembl release this file came from, e.g. 116."),
-            NestedField(12, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
+            NestedField(12, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows. Not a validity interval: raw is replaced per source version, not versioned."),
         ),
         comment="Ensembl GTF landed verbatim, one row per feature line. Deliberately has no "
-                "merge key and no retired_in: a GTF line has no natural identity, and an "
+                "merge key and no validity interval: a GTF line has no natural identity, "
+                "and an "
                 "Ensembl release is immutable, so this table is replaced wholesale per "
                 "(taxon_id, ensembl_release) and is idempotent under re-ingest. History here "
                 "is the accumulation of releases, not a validity interval.",
@@ -102,8 +149,8 @@ TABLES = {
                         doc="Who published the assembly, e.g. Ensembl. Part of the business key: two providers may describe the same assembly, and neither may retire the other's row."),
             NestedField(4, "assembly_name", StringType(),
                         doc="Provider's assembly name, e.g. GRCh38.p14."),
-            NestedField(5, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
-            NestedField(6, "retired_in", StringType(), doc=RETIRED_IN),
+            NestedField(5, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(6, "valid_to", StringType(), doc=VALID_TO),
         ),
         business_key=("genome_id", "taxon_id", "provider"),
         comment="Genome assemblies. One row per assembly per organism per provider.",
@@ -126,8 +173,8 @@ TABLES = {
             NestedField(6, "source", StringType(),
                         doc="Ensembl annotation source, e.g. ensembl_havana. This is curation "
                             "provenance from the GTF, not biocOnIce provenance."),
-            NestedField(7, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
-            NestedField(8, "retired_in", StringType(), doc=RETIRED_IN),
+            NestedField(7, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(8, "valid_to", StringType(), doc=VALID_TO),
         ),
         business_key=("gene_id", "taxon_id"),
         comment="Genes. One row per gene per organism. Join to annotation.transcript on gene_id.",
@@ -146,8 +193,8 @@ TABLES = {
                         doc="Transcript biotype, e.g. protein_coding, retained_intron."),
             NestedField(6, "canonical", BooleanType(),
                         doc="True if Ensembl tags this as the canonical transcript of its gene."),
-            NestedField(7, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
-            NestedField(8, "retired_in", StringType(), doc=RETIRED_IN),
+            NestedField(7, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(8, "valid_to", StringType(), doc=VALID_TO),
         ),
         business_key=("transcript_id", "taxon_id"),
         comment="Transcripts. One row per transcript; a gene has many.",
@@ -182,8 +229,8 @@ TABLES = {
             NestedField(11, "cds_phase", IntegerType(),
                         doc="Reading frame of the coding segment: bases to remove from its start "
                             "to reach the first complete codon. Not recoverable from coordinates."),
-            NestedField(12, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
-            NestedField(13, "retired_in", StringType(), doc=RETIRED_IN),
+            NestedField(12, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(13, "valid_to", StringType(), doc=VALID_TO),
         ),
         business_key=("exon_id", "transcript_id", "taxon_id"),
         comment="Exons in transcript context, carrying coding bounds. Stands in for TxDb's "
@@ -211,8 +258,8 @@ TABLES = {
                         doc="Who asserts this mapping, e.g. Ensembl. Part of the business key, so that one source cannot retire another's cross-references."),
             NestedField(7, "confidence", DoubleType(),
                         doc="Asserter's confidence where one is published; NULL where none is."),
-            NestedField(8, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
-            NestedField(9, "retired_in", StringType(), doc=RETIRED_IN),
+            NestedField(8, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(9, "valid_to", StringType(), doc=VALID_TO),
         ),
         business_key=("source_namespace", "source_id", "target_namespace",
                       "target_id", "taxon_id", "source"),

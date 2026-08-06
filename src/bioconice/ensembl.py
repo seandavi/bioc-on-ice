@@ -10,11 +10,12 @@ The phases want different write semantics, which is why they are separate
 functions rather than one pipeline. An Ensembl release is immutable, so raw is
 replaced wholesale per (taxon_id, ensembl_release) and is idempotent under
 re-ingest. The derived tables have real keys and a maintained current state, so
-they are the ones that carry first_seen/retired_in and merge.
+they are the ones that carry valid_from/valid_to and merge.
 """
 
 import re
 import urllib.request
+from datetime import datetime, timezone
 
 import duckdb
 from pyiceberg.expressions import And, EqualTo
@@ -71,14 +72,31 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
         SELECT seqname, source, feature, "start", "end", score, strand, frame, attribute,
                {info['taxon_id']}::INTEGER AS taxon_id,
                '{ensembl_release}' AS ensembl_release,
-               '{release}' AS first_seen
+               '{release}' AS landed_in
         FROM read_csv('{url or gtf_url(ensembl_release, species)}', sep='\t', header=false,
                       comment='#', auto_detect=false, columns={GTF_COLUMNS})
     """).to_arrow_table()
     n = _write(cat, "raw.ensembl_gtf", arrow,
                And(EqualTo("taxon_id", info["taxon_id"]),
                    EqualTo("ensembl_release", str(ensembl_release))))
+    _manifest(cat, release, ensembl_release, url or gtf_url(ensembl_release, species), n)
     return info, n
+
+
+def _manifest(cat, release, ensembl_release, url, rows):
+    """Record what this release was built from — ADR-0007."""
+    con = duckdb.connect()
+    arrow = con.sql(f"""
+        SELECT '{release}' AS release, 'ensembl' AS source,
+               '{ensembl_release}' AS source_version,
+               'release_number' AS version_method,
+               '{datetime.now(timezone.utc).isoformat(timespec="seconds")}' AS retrieved_at,
+               '{url}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
+    """).to_arrow_table()
+    # A manifest row states what a completed ingest used; it is not versioned,
+    # so it is replaced wholesale for its (release, source) rather than merged.
+    _write(cat, "provenance.release", arrow,
+           And(EqualTo("release", release), EqualTo("source", "ensembl")))
 
 
 def transform(cat, release, info, ensembl_release):
