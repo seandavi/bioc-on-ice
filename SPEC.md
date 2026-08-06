@@ -1051,44 +1051,48 @@ in the AnnotationHub vignette is stale; the database is authoritative.
 
 # Milestones
 
-## Milestone 1 — The showcase release
+## Milestone 1 — Live catalog, DuckDB surface
 
 Goal:
 
-> Bioconductor annotation without the packages, plus data that was never
-> packageable at all — served through one endpoint.
+> A real catalog, on real infrastructure, that a stranger can query.
 
-This is the proof of concept, and it is deliberately wider than "recreate an
-OrgDb". Parity alone invites the question of why anyone would move; parity
-*plus* resources that a package cannot carry answers it.
-
-### Scope
-
-Three replacements and one addition, all reachable through icegate:
-
-1. **OrgDb** — identifier mapping and gene-level annotation, replacing
-   `org.Hs.eg.db` and `org.Mm.eg.db`
-2. **TxDb** — transcript structure and range queries, replacing
-   `TxDb.Hsapiens.*` and `TxDb.Mmusculus.*`
-3. **AnnotationHub** — the resource metadata catalog, with external objects
-   referenced rather than ingested
-4. **Variant resources with no Bioconductor equivalent** — the part that is
-   not a replacement, chosen for being too large or too fast-moving to ship as
-   a package
-
-Organisms: *Homo sapiens* and *Mus musculus*, except where a variant resource
-is human-only.
+The riskiest part of biocOnIce is not the ETL — that is incremental — it is
+the path from object storage to a client's query. Warehouse on Cloudflare R2,
+icegate in front of it, DuckDB as the query surface. Everything else waits
+until that path is proven end to end.
 
 ### Acceptance
 
-The criteria are in [Acceptance Criteria](#acceptance-criteria) and are what
-"done" means. Sections A, B and C apply to this milestone in full: point-in-
-time and retirement, self-describing tables, and access through icegate from
-R, Python, DuckDB and the browser.
+Sections A, B and C of [Acceptance Criteria](#acceptance-criteria): point-in-
+time and retirement, self-describing tables, and access through icegate
+including vended credentials, anonymous read, and browser DuckDB-WASM.
 
 ---
 
-## Milestone 2 — ExperimentHub integration
+## Milestone 2 — The parity layer
+
+An R package whose objects answer to the real Bioconductor generics, backed by
+the catalog, so existing scripts run unchanged:
+
+1. **OrgDb** — `select()`, `mapIds()`, `keys()` over identifier space,
+   replacing `org.Hs.eg.db` and `org.Mm.eg.db`
+2. **TxDb** — `genes()`, `exonsBy()`, `cdsBy()`, the UTR pair,
+   `intronsByTranscript()`, `transcriptLengths()`, replacing
+   `TxDb.Hsapiens.*` and `TxDb.Mmusculus.*`
+3. **AnnotationHub** — the resource catalog, read from the hub's published
+   SQLite database, with external objects referenced rather than ingested
+
+Scoped to the accessors named in acceptance sections D, E and F — not the whole
+of GenomicFeatures.
+
+This is deliberately **after** Milestone 1. Parity is the loudest claim
+biocOnIce makes, and making it before the delivery path works would be
+building the argument before the thing it argues about.
+
+---
+
+## Milestone 3 — ExperimentHub integration
 
 Add:
 
