@@ -1,0 +1,32 @@
+# AGENTS.md
+
+Conventions for AI agents (and humans) working on biocOnIce.
+
+## What this project is
+
+Ingest pipelines that turn public biological annotation into Iceberg tables,
+plus the thin client helper for reading them. **SPEC.md is the design source
+of truth** — read it before writing code. If a change contradicts the SPEC,
+edit SPEC.md in the same commit and say so in your report (that is how
+`taxon_id` reached `transcript`/`exon`).
+
+biocOnIce is the *data*; [icegate](https://github.com/seandavi/icegate) is the
+gateway that serves it. Nothing here should grow gateway concerns (auth,
+routing, credential vending) — that boundary is deliberate.
+
+## Coding rules
+
+- Lazy and minimal: smallest working diff, no speculative abstractions, no
+  scaffolding "for later". Deletion beats addition.
+- **New sources are SQL, not frameworks.** Each source is one module that
+  parses with DuckDB and hands Arrow tables to `ensembl.write`. If a second
+  source needs something from the first, move that one thing — don't build an
+  ingestion framework for two pipelines.
+- No new dependencies without a recorded reason. DuckDB does the parsing;
+  PyIceberg does the writing; argparse does the CLI.
+- Non-trivial logic lands with a test, and tests stay offline: fixtures over
+  network calls (`tests/tiny.gtf`). Before pushing: `uv run pytest`.
+- Ingest must stay idempotent and per-species — overwrite filtered on
+  `taxon_id`, never blind append.
+- Report honestly: if something wasn't verified against real data, say so.
+  Row counts in docs come from an actual run.

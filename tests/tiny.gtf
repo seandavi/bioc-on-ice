@@ -1,0 +1,10 @@
+#!genome-build GRCh38.p14
+17	ensembl_havana	gene	7668402	7687550	.	-	.	gene_id "ENSG00000141510"; gene_version "18"; gene_name "TP53"; gene_source "ensembl_havana"; gene_biotype "protein_coding";
+17	ensembl_havana	transcript	7668402	7687550	.	-	.	gene_id "ENSG00000141510"; gene_version "18"; transcript_id "ENST00000269305"; transcript_version "9"; gene_name "TP53"; transcript_biotype "protein_coding"; tag "Ensembl_canonical";
+17	ensembl_havana	exon	7687377	7687550	.	-	.	gene_id "ENSG00000141510"; gene_version "18"; transcript_id "ENST00000269305"; transcript_version "9"; exon_number "1"; exon_id "ENSE00002064269"; exon_version "1";
+17	ensembl_havana	exon	7676521	7676622	.	-	.	gene_id "ENSG00000141510"; gene_version "18"; transcript_id "ENST00000269305"; transcript_version "9"; exon_number "2"; exon_id "ENSE00003518480"; exon_version "1";
+17	ensembl_havana	transcript	7669612	7687538	.	-	.	gene_id "ENSG00000141510"; gene_version "18"; transcript_id "ENST00000445888"; transcript_version "6"; gene_name "TP53"; transcript_biotype "protein_coding";
+17	ensembl_havana	exon	7687377	7687538	.	-	.	gene_id "ENSG00000141510"; gene_version "18"; transcript_id "ENST00000445888"; transcript_version "6"; exon_number "1"; exon_id "ENSE00001657961"; exon_version "1";
+17	havana	gene	7590695	7591310	.	+	.	gene_id "ENSG00000288825"; gene_version "1"; gene_source "havana"; gene_biotype "lncRNA";
+17	havana	transcript	7590695	7591310	.	+	.	gene_id "ENSG00000288825"; gene_version "1"; transcript_id "ENST00000673477"; transcript_version "1"; transcript_biotype "lncRNA"; tag "Ensembl_canonical";
+17	havana	exon	7590695	7591310	.	+	.	gene_id "ENSG00000288825"; gene_version "1"; transcript_id "ENST00000673477"; transcript_version "1"; exon_number "1"; exon_id "ENSE00003862927"; exon_version "1";
