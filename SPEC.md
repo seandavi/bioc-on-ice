@@ -655,6 +655,18 @@ Recording these so they are not revisited casually:
 * **KEGG** (the OrgDb `PATH` column) — redistribution is restricted, so this
   column is knowingly out of scope for OrgDb parity.
 
+## Candidates for later releases
+
+Verified as having **no** R or Bioconductor coverage of any kind — no package,
+no CRAN client, no AnnotationHub or ExperimentHub record: **eQTL Catalogue**
+(migrating to Parquet, which suits us), **NCBI ALFA**, **MaveDB**, and **NCBI
+dbVar**. GTEx eQTL/sQTL is reachable only through a rate-limited CRAN REST
+wrapper unsuited to bulk work, with nothing at all in AnnotationHub. PharmGKB
+appears only as a pathway subset inside `graphite`.
+
+These are recorded because the gap is the argument; none is in scope before
+the delivery path and the parity layer exist.
+
 ---
 
 # Provenance Model
