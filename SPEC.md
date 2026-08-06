@@ -782,6 +782,46 @@ The cost of this choice is that "current" is a filter, and a client that omits
 it silently sees retired records. Clients MUST therefore default to
 `retired_in IS NULL` and require an explicit opt-in to see history.
 
+## Raw and derived are separate layers
+
+Ingest is ELT, in two phases with different semantics.
+
+**Land**: the source file is written verbatim into the `raw` namespace, before
+interpretation — for a GTF, all nine columns including the unparsed attribute
+blob. **Transform**: derived tables are computed by reading `raw` back out.
+
+The split buys two things. Changing how a source is *interpreted* becomes a
+re-run of transform rather than a re-download, so a parsing fix or a
+newly-needed attribute costs nothing upstream. And the raw layer is the audit
+trail: what we were given, as we were given it, separable from what we made of
+it.
+
+The two layers MUST NOT share write semantics:
+
+| | `raw` | derived |
+| --- | --- | --- |
+| identity | none — a source line has no natural key | declared identifier fields |
+| write | replace wholesale per source version | merge |
+| history | accumulated source versions | `first_seen` / `retired_in` |
+
+A source release that is immutable — an Ensembl release, an archived ClinVar
+month — makes raw idempotent under re-ingest without any merge machinery:
+replacing everything for that version is both correct and cheap. Validity
+intervals belong on the derived tables, which are the ones with keys and a
+maintained current state.
+
+Raw therefore grows with the number of source versions retained, which is the
+price of being able to re-derive without re-fetching. How many are kept is a
+retention policy, not a correctness question.
+
+## Columns exist when something fills them
+
+A column is added when a source populates it, by schema evolution, rather than
+shipped early as a permanent NULL. A column that is always NULL advertises a
+capability the catalog does not have, and is worse than its absence — a client
+cannot distinguish "not loaded yet" from "not applicable". Gene descriptions
+and assembly checksums are absent for this reason until NCBI ingest lands.
+
 ## Ingest is release-scoped
 
 A release is cut by running every source against it, so ingest takes the
