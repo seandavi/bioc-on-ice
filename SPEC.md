@@ -126,6 +126,7 @@ reference
 annotation
 taxonomy
 ontology
+variant
 experiment
 resource
 provenance
@@ -225,10 +226,15 @@ sequence_id
 genome_id
 name
 length
+is_circular
 md5
 uri
 format
 ```
+
+`length` and `is_circular` are what a client needs to reconstruct `seqinfo()`
+and to clamp `promoters()` at chromosome ends; without them, flanking queries
+run off the end of a sequence silently.
 
 Example:
 
@@ -302,12 +308,31 @@ start
 end
 strand
 rank           -- ordinal within the transcript, 5' to 3'
+cds_start      -- NULL where this exon is not translated
+cds_end
+cds_phase      -- reading frame; not recoverable from coordinates
 first_seen
 retired_in
 ```
 
-`rank` is what lets a transcript's exons be reassembled in biological order
-rather than coordinate order, which matters on the minus strand.
+This one table stands in for three of TxDb's. TxDb separates `exon`, `cds` and
+a `splicing` junction carrying `(tx_id, exon_rank, exon_id, cds_id,
+cds_phase)`; because a row here is already keyed by exon *and* transcript, it
+is that junction, and a coding segment always falls within an exon of the same
+transcript, so the CDS bounds ride along.
+
+`rank` is load-bearing, not a convenience: it is the only thing that orders a
+transcript's exons biologically rather than by coordinate, which is the
+difference between correct and reversed on the minus strand. Without it
+`exonsBy(by="tx")`, `intronsByTranscript()`, `transcriptLengths()`,
+`extractTranscriptSeqs()` and the whole `mapToTranscripts()` family cannot be
+served. A GTF supplies it as `exon_number`, so omitting it is a modelling
+error rather than a data limitation.
+
+`cds_phase` is likewise unrecoverable downstream — coordinates do not imply
+frame — and without it `proteinToGenome()` and any correct-frame translation
+are impossible. UTRs are NOT stored: they are derived from CDS bounds, and a
+transcript with no CDS correctly has no UTRs rather than empty ones.
 
 ---
 
@@ -574,6 +599,61 @@ resource
 type=tiledb
 uri=r2://spatial/sample1
 ```
+
+---
+
+# Variant Resources
+
+Namespace:
+
+```
+variant
+```
+
+These are the part of the showcase that is **not** a replacement. They are
+selected for being things a Bioconductor annotation package cannot carry, so
+their presence argues for the architecture rather than merely matching it.
+
+## Selection rule
+
+A resource qualifies only if it is (a) redistributable by a third party, (b)
+published as a complete dump per release, since retirement is computed by set
+difference, and (c) not already served well by a maintained Bioconductor
+package. Licence is a hard gate assessed **before** any ingest work.
+
+## Selected for the first release
+
+| Resource | Why | Licence |
+| --- | --- | --- |
+| **Open Targets Platform** | already native Parquet on EBI's FTP, complete versioned re-release per cycle, and it now absorbs Open Targets Genetics | CC0 1.0 |
+| **ClinVar** | the canonical fast-moving resource — comprehensive TSV weekly, archived monthly — and Bioconductor ships none of it | NCBI open, attribution requested |
+| **GWAS Catalog** | cheap flat TSV, complete per release, and joins to Open Targets on study accessions | EMBL-EBI terms |
+
+ClinVar MUST be ingested from the tab-delimited comprehensive release, not the
+VCF, which NCBI marks partial. Reproducible pins use the archived monthly
+release; the weekly serves currency.
+
+## Ruled out, and why
+
+Recording these so they are not revisited casually:
+
+* **COSMIC** — downloads are registration-gated and the academic grant runs to
+  the registered user, not to a republisher. Also blocks using Open Targets'
+  Cancer Gene Census evidence as an indirect route.
+* **DisGeNET** — non-commercial and share-alike; the NC term alone is
+  disqualifying for a public catalog.
+* **gnomAD** — ODbL share-alike would propagate to every derived table we
+  publish, and the bundled SpliceAI columns are separately non-commercial.
+  Highest profile of any candidate, so this is a decision to revisit
+  deliberately with a licensing call, not to drift into.
+* **dbSNP** — 28 GB of VCF for a resource that moves every year or two; the
+  worst effort-to-value ratio on the list, notwithstanding that Bioconductor's
+  SNPlocs packages are frozen at build 155.
+* **HPO** — a custom licence requiring that the logical relationships not be
+  altered, which normalising into `ontology.relationship` arguably does. Needs
+  review before ingest.
+* **KEGG** (the OrgDb `PATH` column) — redistribution is restricted, so this
+  column is knowingly out of scope for OrgDb parity.
 
 ---
 
@@ -880,70 +960,116 @@ mocks.
 5. Table data is read directly from object storage via vended credentials;
    only metadata traffic crosses the gateway.
 
+## D. OrgDb parity
+
+`org.Hs.eg.db` exposes 26 columns off a central ENTREZID key, and `select()`
+is explicitly many-to-many.
+
+1. These columns are served: ENTREZID, ENSEMBL, ENSEMBLTRANS, ENSEMBLPROT,
+   SYMBOL, ALIAS, GENENAME, GENETYPE, REFSEQ, UNIPROT, ACCNUM, UCSCKG, MAP,
+   OMIM, PMID, GO, GOALL, ONTOLOGY, ONTOLOGYALL, EVIDENCE, EVIDENCEALL.
+2. Knowingly **not** served, and documented as such: PATH (KEGG, redistribution
+   restricted) and the legacy protein-domain columns PFAM, PROSITE, IPI,
+   ENZYME. A criterion that is out of scope must be stated, not silently
+   dropped.
+3. A key with several matches returns **every** match — the full multiset, one
+   row per match, matching `select()`'s row-multiplication rule. Returning a
+   deduplicated or first-match-only result is a failure, since `mapIds()`'s
+   `multiVals` behaviour is a client-side collapse of exactly this.
+4. `GOALL` / `ONTOLOGYALL` / `EVIDENCEALL` include ancestor terms. This is a
+   transitive closure over the GO graph, not a join, and is the form GO
+   enrichment consumes.
+5. For a fixed gene set, results are compared against a real `org.Hs.eg.db`
+   and every difference is attributable to a stated source-release difference.
+
+## E. TxDb parity
+
+Compared against a TxDb built by `txdbmaker` **from the same Ensembl GTF**, so
+that any difference is ours rather than the source's.
+
+1. `exonsBy(by="tx")` returns each transcript's exons ordered by rank, verified
+   on minus-strand transcripts where rank and coordinate order disagree.
+2. `intronsByTranscript()`, `fiveUTRsByTranscript()` and
+   `threeUTRsByTranscript()` reproduce. A transcript with no CDS yields no
+   UTRs rather than empty ones.
+3. `cds()` and `cdsBy(by="tx")` reproduce, including `cds_phase`.
+4. `transcriptLengths(with.cds_len=TRUE, with.utr5_len=TRUE,
+   with.utr3_len=TRUE)` reproduces.
+5. `seqinfo()` carries sequence lengths and circularity, so `promoters()`
+   clamps correctly at chromosome ends.
+6. A range-overlap query returns the same features as the equivalent
+   `subsetByOverlaps` against the TxDb.
+
+## F. AnnotationHub parity
+
+1. An AnnotationHub record is representable with all of its metadata fields —
+   title, dataprovider, species, taxonomyid, genome, description,
+   coordinate_1_based, maintainer, rdatadateadded, preparerclass, tags,
+   rdatapath, sourceurl, sourcetype, rdataclass — plus its accession.
+2. Free-text search across that metadata returns the records `query()` would.
+3. A record resolves to a fetchable URI for the underlying object, which is
+   referenced and not ingested.
+4. Coverage is reported honestly as a fraction of the roughly 71,000 records,
+   with the unrepresented classes named.
+
+## G. Variant resources
+
+1. Open Targets Platform, ClinVar and GWAS Catalog are queryable through the
+   same catalog, each carrying its licence and required attribution in table
+   metadata.
+2. A cross-resource join is demonstrated that no combination of current
+   Bioconductor packages can perform — for example ClinVar clinical
+   significance joined to GWAS Catalog associations and Open Targets evidence
+   for one gene, in a single query.
+3. Currency is demonstrated against the packaged alternatives, which are
+   frozen at dbSNP 155 (2021) for SNPlocs, dbSNP 137 for SIFT and dbSNP 131
+   for PolyPhen, with no ClinVar package at all and `ensemblVEP` removed after
+   Bioconductor 3.20.
+4. Every ingested resource's redistribution terms are recorded, and a resource
+   whose licence has not been positively established is not ingested.
+
 ---
 
 # Milestones
 
-## Milestone 1 — OrgDb/TxDb replacement
+## Milestone 1 — The showcase release
 
 Goal:
 
-> Demonstrate that major annotation packages can be recreated.
+> Bioconductor annotation without the packages, plus data that was never
+> packageable at all — served through one endpoint.
 
-Resources:
+This is the proof of concept, and it is deliberately wider than "recreate an
+OrgDb". Parity alone invites the question of why anyone would move; parity
+*plus* resources that a package cannot carry answers it.
 
-### Organisms
+### Scope
 
-Start:
+Three replacements and one addition, all reachable through icegate:
 
-* Homo sapiens
-* Mus musculus
+1. **OrgDb** — identifier mapping and gene-level annotation, replacing
+   `org.Hs.eg.db` and `org.Mm.eg.db`
+2. **TxDb** — transcript structure and range queries, replacing
+   `TxDb.Hsapiens.*` and `TxDb.Mmusculus.*`
+3. **AnnotationHub** — the resource metadata catalog, with external objects
+   referenced rather than ingested
+4. **Variant resources with no Bioconductor equivalent** — the part that is
+   not a replacement, chosen for being too large or too fast-moving to ship as
+   a package
 
-### Tables
+Organisms: *Homo sapiens* and *Mus musculus*, except where a variant resource
+is human-only.
 
-Implement:
+### Acceptance
 
-* taxon
-* genome
-* gene
-* transcript
-* exon
-* identifier_mapping
-* ontology
-* annotation
-
-Sources:
-
-* NCBI Gene
-* Ensembl
-* GO
-
-Acceptance criteria:
-
-* reproduce common OrgDb queries
-* reproduce TxDb range queries
-* accessible through R and Python
-* Iceberg snapshots reproducible
+The criteria are in [Acceptance Criteria](#acceptance-criteria) and are what
+"done" means. Sections A, B and C apply to this milestone in full: point-in-
+time and retirement, self-describing tables, and access through icegate from
+R, Python, DuckDB and the browser.
 
 ---
 
-## Milestone 2 — AnnotationHub catalog
-
-Add:
-
-* resource metadata
-* providers
-* licenses
-* checksums
-* external object references
-
-Acceptance:
-
-Existing AnnotationHub resources can be represented.
-
----
-
-## Milestone 3 — ExperimentHub integration
+## Milestone 2 — ExperimentHub integration
 
 Add:
 
