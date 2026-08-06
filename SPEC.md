@@ -839,10 +839,29 @@ touched, but an implementation MAY rewrite it physically. Storage is bounded by
 snapshot expiry rather than by write granularity, since history lives in the
 rows — see [ADR-0004](docs/adr/0004-merge-recomputes-scope.md).
 
-Every record MUST resolve to exactly one row per identifier tuple. A record
-that is retired and later reappears upstream MUST NOT produce a second row;
-Iceberg does not enforce identifier uniqueness, so this is the implementation's
-obligation.
+A record that is retired and later reappears upstream is a **new record**, not
+a revival of the old one. It is inserted with `first_seen` set to the release
+it reappeared in, and the retired row is left untouched. The two rows carry
+disjoint validity intervals, so the point-in-time predicate still resolves to
+exactly one row for any release, and `retired_in IS NULL` still yields exactly
+one current row.
+
+This makes the business key and the row key distinct, and both MUST be
+declared as such:
+
+* the **business key** — `(gene_id, taxon_id)` and its equivalents — is what a
+  merge joins on to classify a record as new, changed or retired.
+* the **row key** is the business key plus `first_seen`, and is what the
+  Iceberg identifier fields declare. Declaring only the business key asserts a
+  uniqueness that this model does not have.
+
+The invariant an implementation MUST enforce is therefore narrower than
+uniqueness: **at most one row per business key may have `retired_in IS NULL`.**
+Iceberg enforces neither, so it is the implementation's obligation.
+
+The consequence for clients is the one already stated: a query that filters
+neither to current nor to a release will see every historical row, and a join
+on a business key alone will fan out.
 
 Retirement is computed by set difference against the previous state, which
 requires each source to publish a **complete** dump per release. Sources that
