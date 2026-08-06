@@ -31,8 +31,15 @@ from . import schemas
 VALIDITY = ("first_seen", "retired_in")
 
 
-def _columns(schema):
-    keys = [schema.find_field(i).name for i in schema.identifier_field_ids]
+def _columns(identifier, schema):
+    """Business key and attributes.
+
+    The join key is the *business* key, not the Iceberg identifier fields —
+    those additionally carry `first_seen`, because a retired record that
+    reappears becomes a second row. Joining on the row key would make every
+    record look new.
+    """
+    keys = list(schemas.TABLES[identifier].business_key)
     attrs = [f.name for f in schema.fields if f.name not in keys and f.name not in VALIDITY]
     return keys, attrs
 
@@ -65,7 +72,7 @@ def merge(cat, identifier, incoming, release, scope):
     """
     table = schemas.create(cat, identifier)
     schema = table.schema()
-    keys, attrs = _columns(schema)
+    keys, attrs = _columns(identifier, schema)
 
     con = duckdb.connect()
     con.register("inc", incoming)
@@ -93,10 +100,25 @@ def merge(cat, identifier, incoming, release, scope):
         FROM cur c WHERE c.retired_in IS NOT NULL
     """)
 
+    # Iceberg declares identifier fields but enforces nothing, so the invariant
+    # is ours: at most one live row per business key. Violating it corrupts
+    # silently — the current view still reads correctly while every join on the
+    # key fans out — so fail loudly here instead.
+    kq = ", ".join(f'"{k}"' for k in keys)
+    dupes = con.sql(f"""
+        SELECT count(*) FROM (
+            SELECT {kq} FROM merged WHERE retired_in IS NULL GROUP BY ALL HAVING count(*) > 1)
+    """).fetchone()[0]
+    if dupes:
+        raise ValueError(
+            f"{identifier}: {dupes} business keys would have more than one live row. "
+            f"Either `incoming` contains duplicate keys, or a retired record was "
+            f"resurrected without its predecessor staying retired.")
+
     stats = dict(con.sql("SELECT _state, count(*) FROM merged GROUP BY 1").fetchall())
     cols = ", ".join(f'"{f.name}"' for f in schema.fields)
     final = con.sql(f"SELECT {cols} FROM merged").to_arrow_table()
-    table.overwrite(final.cast(schema.as_arrow()), overwrite_filter=scope)
+    table.overwrite(final.cast(table.schema().as_arrow()), overwrite_filter=scope)
 
     return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "retired")),
             "unchanged": stats.get("unchanged", 0),

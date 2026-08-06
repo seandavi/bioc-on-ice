@@ -130,3 +130,46 @@ def test_merge_inserts_updates_and_retires(cat):
     at_first = [g for g in genes.values()
                 if g["first_seen"] <= REL and (g["retired_in"] is None or g["retired_in"] > REL)]
     assert len(at_first) == 2
+
+
+def pit(rows, release):
+    """SPEC's point-in-time predicate."""
+    return [r for r in rows
+            if r["first_seen"] <= release
+            and (r["retired_in"] is None or r["retired_in"] > release)]
+
+
+def test_resurrection_is_a_new_record(cat):
+    load_from(cat, HUMAN, GTF, "2026.08", "116")   # lncRNA present
+    load_from(cat, HUMAN, NEXT, "2026.09", "117")  # lncRNA gone
+    load_from(cat, HUMAN, GTF, "2026.10", "118")   # lncRNA back
+
+    lnc = [r for r in rows(cat, "annotation.gene") if r["gene_id"] == "ENSG00000288825"]
+    # two records, not one revived record
+    assert len(lnc) == 2
+    assert sorted((r["first_seen"], r["retired_in"]) for r in lnc) == [
+        ("2026.08", "2026.09"), ("2026.10", None)]
+
+    # the invariant that actually matters: one live row per business key
+    assert len([r for r in lnc if r["retired_in"] is None]) == 1
+
+    # disjoint intervals, so point-in-time still resolves to one row per release
+    assert len(pit(lnc, "2026.08")) == 1
+    assert len(pit(lnc, "2026.09")) == 0   # genuinely absent that release
+    assert len(pit(lnc, "2026.10")) == 1
+
+
+def test_duplicate_incoming_keys_are_rejected(cat):
+    """The invariant is ours to enforce — Iceberg declares it and checks nothing."""
+    import pyarrow as pa
+    from pyiceberg.expressions import EqualTo
+    from bioconice import merge
+
+    load(cat, HUMAN)
+    gene = cat.load_table("annotation.gene")
+    cols = [f.name for f in gene.schema().fields if f.name not in ("first_seen", "retired_in")]
+    one = gene.scan(row_filter="gene_id = 'ENSG00000141510'").to_arrow().select(cols)
+    doubled = pa.concat_tables([one, one])          # same business key twice
+
+    with pytest.raises(ValueError, match="more than one live row"):
+        merge.merge(cat, "annotation.gene", doubled, "2026.11", EqualTo("taxon_id", 9606))

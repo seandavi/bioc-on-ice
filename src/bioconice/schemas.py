@@ -29,9 +29,28 @@ COORD = "1-based-inclusive"
 
 @dataclass(frozen=True)
 class TableDef:
+    """A declared table.
+
+    `business_key` is what identifies a *record* — what a merge joins on to
+    decide whether a row is new, changed or retired. The Iceberg identifier
+    fields are the *row* key, which is the business key plus `first_seen`,
+    because a record that is retired and reappears becomes a second row with
+    its own validity interval. Declaring only the business key to Iceberg would
+    assert a uniqueness this model does not have; deriving one from the other
+    keeps them from drifting.
+    """
+
     schema: Schema
     comment: str
+    business_key: tuple = ()
     properties: dict = field(default_factory=dict)
+
+    def iceberg_schema(self):
+        if not self.business_key:
+            return self.schema
+        names = list(self.business_key) + ["first_seen"]
+        ids = [self.schema.find_field(n).field_id for n in names]
+        return Schema(*self.schema.fields, identifier_field_ids=ids)
 
 
 NAMESPACES = {
@@ -79,14 +98,15 @@ TABLES = {
             NestedField(1, "genome_id", StringType(), required=True,
                         doc="Assembly accession, e.g. GCA_000001405.29. Stable across releases."),
             NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
-            NestedField(3, "provider", StringType(), doc="Who published the assembly, e.g. Ensembl."),
+            NestedField(3, "provider", StringType(), required=True,
+                        doc="Who published the assembly, e.g. Ensembl. Part of the business key: two providers may describe the same assembly, and neither may retire the other's row."),
             NestedField(4, "assembly_name", StringType(),
                         doc="Provider's assembly name, e.g. GRCh38.p14."),
             NestedField(5, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
             NestedField(6, "retired_in", StringType(), doc=RETIRED_IN),
-            identifier_field_ids=[1, 2],
         ),
-        comment="Genome assemblies. One row per assembly per organism.",
+        business_key=("genome_id", "taxon_id", "provider"),
+        comment="Genome assemblies. One row per assembly per organism per provider.",
         properties={"bioc.column.genome_id.prefix": "insdc.gca",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
@@ -108,8 +128,8 @@ TABLES = {
                             "provenance from the GTF, not biocOnIce provenance."),
             NestedField(7, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
             NestedField(8, "retired_in", StringType(), doc=RETIRED_IN),
-            identifier_field_ids=[1, 2],
         ),
+        business_key=("gene_id", "taxon_id"),
         comment="Genes. One row per gene per organism. Join to annotation.transcript on gene_id.",
         properties={"bioc.column.gene_id.prefix": "ensembl",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
@@ -128,8 +148,8 @@ TABLES = {
                         doc="True if Ensembl tags this as the canonical transcript of its gene."),
             NestedField(7, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
             NestedField(8, "retired_in", StringType(), doc=RETIRED_IN),
-            identifier_field_ids=[1, 2],
         ),
+        business_key=("transcript_id", "taxon_id"),
         comment="Transcripts. One row per transcript; a gene has many.",
         properties={"bioc.column.transcript_id.prefix": "ensembl",
                     "bioc.column.gene_id.prefix": "ensembl",
@@ -164,8 +184,8 @@ TABLES = {
                             "to reach the first complete codon. Not recoverable from coordinates."),
             NestedField(12, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
             NestedField(13, "retired_in", StringType(), doc=RETIRED_IN),
-            identifier_field_ids=[1, 2, 3],
         ),
+        business_key=("exon_id", "transcript_id", "taxon_id"),
         comment="Exons in transcript context, carrying coding bounds. Stands in for TxDb's "
                 "exon, cds and splicing tables: a row is already keyed by exon and transcript, "
                 "so it is the splicing junction, and a coding segment always falls within an "
@@ -187,13 +207,15 @@ TABLES = {
                         doc="Authority of the target identifier, e.g. SYMBOL."),
             NestedField(4, "target_id", StringType(), required=True, doc="Identifier in target_namespace."),
             NestedField(5, "taxon_id", IntegerType(), required=True, doc=TAXON),
-            NestedField(6, "source", StringType(), doc="Who asserts this mapping, e.g. Ensembl."),
+            NestedField(6, "source", StringType(), required=True,
+                        doc="Who asserts this mapping, e.g. Ensembl. Part of the business key, so that one source cannot retire another's cross-references."),
             NestedField(7, "confidence", DoubleType(),
                         doc="Asserter's confidence where one is published; NULL where none is."),
             NestedField(8, "first_seen", StringType(), required=True, doc=FIRST_SEEN),
             NestedField(9, "retired_in", StringType(), doc=RETIRED_IN),
-            identifier_field_ids=[1, 2, 3, 4, 5],
         ),
+        business_key=("source_namespace", "source_id", "target_namespace",
+                      "target_id", "taxon_id", "source"),
         comment="Cross-references between identifier authorities. Mappings are many-to-many in "
                 "both directions. The whole tuple is the key: a mapping has no attributes that "
                 "can change, so it is only ever asserted or withdrawn, never updated.",
@@ -208,4 +230,4 @@ def create(cat, identifier):
     cat.create_namespace_if_not_exists(ns, properties={"comment": NAMESPACES[ns]})
     d = TABLES[identifier]
     return cat.create_table_if_not_exists(
-        identifier, schema=d.schema, properties={"comment": d.comment, **d.properties})
+        identifier, schema=d.iceberg_schema(), properties={"comment": d.comment, **d.properties})
