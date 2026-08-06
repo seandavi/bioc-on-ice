@@ -823,6 +823,65 @@ WHERE symbol='TP53'
 
 ---
 
+# Acceptance Criteria
+
+What "it works" means. Each criterion is stated so that it can fail: a claim
+that cannot be checked against a live catalog is not a criterion.
+
+Criteria are verified by an acceptance suite run against a real deployment
+with real clients, following icegate's convention — not by unit tests with
+mocks.
+
+## A. Versioning and point-in-time
+
+1. Two releases are cut from two different Ensembl releases. A point-in-time
+   query at the earlier release returns exactly the row set that release
+   returned when it was current.
+2. A gene retired upstream between those releases is absent from the current
+   view, carries `retired_in` equal to the later release, and is still present
+   in the point-in-time view of the earlier one.
+3. **All snapshots except the current one are expired, and both point-in-time
+   queries still return identical results.** This is the criterion that proves
+   history lives in the rows; if it fails, the versioning model is wrong.
+4. Re-ingesting a source whose content has not changed adds no data files and
+   changes no row.
+5. Warehouse size after N releases grows with upstream churn, not with N times
+   the size of the catalog.
+6. Every ingest writes a `provenance.source` row carrying URL, retrieval
+   timestamp, upstream version where one exists, and `ETag` / `Last-Modified`
+   where the server supplies them.
+
+## B. Self-description
+
+1. Every column of every published table has a non-empty `doc`; every table has
+   a `comment`; every namespace has a description. A table failing this does
+   not ship.
+2. Those descriptions are visible to a client that has only the catalog
+   endpoint — verified in both R and Python, through the Arrow field metadata,
+   with no biocOnIce library installed.
+3. Every identifier column declares a Bioregistry prefix that resolves, and
+   every coordinate column declares `1-based-inclusive`.
+4. An LLM agent given catalog access, a fixed set of biological questions, and
+   **no access to this spec or to biocOnIce documentation** writes SQL that
+   returns the correct answers. This is the operational definition of
+   agent-aware, and the question set is version-controlled alongside the suite.
+
+## C. Access through icegate
+
+1. The catalog is served through icegate and every criterion in this document
+   is verified through that endpoint, not against the backend catalog directly.
+2. PyIceberg, DuckDB, and R read the catalog using only stock Iceberg client
+   configuration — an endpoint, a warehouse name, and a token. No
+   biocOnIce-specific client code is required to read any table.
+3. Browser-based DuckDB-WASM reads the catalog, exercising icegate's CORS
+   handling.
+4. Anonymous read access works for the public namespaces, and the public
+   catalog cannot be written through, whatever key is presented.
+5. Table data is read directly from object storage via vended credentials;
+   only metadata traffic crosses the gateway.
+
+---
+
 # Milestones
 
 ## Milestone 1 — OrgDb/TxDb replacement
