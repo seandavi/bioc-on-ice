@@ -15,12 +15,11 @@ cors:
     - "*" # DuckDB-WASM in the browser; R2 serves no CORS headers of its own
 
 authentication:
-  # MUST stay false until the IP-bearing log buckets leave this Cloudflare
-  # account. R2 Data Catalog access is only available at Admin level, Admin
-  # tokens cannot be scoped to a bucket, and vended SigV4 credentials inherit
-  # the token's storage permissions — so anonymous read here would hand any
-  # caller account-wide R2 read. Tracked as "Move IP-bearing log buckets out of
-  # the public account".
+  # Still false, but the reason changed (ADR-0010/0011 in this repo): the
+  # IP-bearing logs left for GCS in #31, and the backend now uses a
+  # bucket-scoped read-only vending token, verified 2026-08-07 to contain
+  # vended credentials to the bioconice bucket, read-only. Flip to true once
+  # the post-deploy gateway verification in icegate#34 passes.
   anonymous:
     enabled: false
 
@@ -35,9 +34,26 @@ authentication:
         - raw
         - reference
         - annotation
+        - ontology
+        - clinical
       permissions:
         - read
         - write
+
+    # Personal read-only key (plaintext: Secret Manager
+    # bioconice-icegate-key-seandavi-ro, cdsci-infra). Exercises the RO token
+    # path end to end — same path anonymous will use.
+    seandavi-ro:
+      sha256: 7b12156e9a414f28369067c27b0b10107baae6ffc2ce7c03181eb2da488a855e
+      namespaces:
+        - provenance
+        - raw
+        - reference
+        - annotation
+        - ontology
+        - clinical
+      permissions:
+        - read
 
     # Shared evaluation key for the Bioconductor team, read-only. Separate from
     # the ingest key on purpose: a key handed to several people must not be able
@@ -58,8 +74,14 @@ catalogs:
     endpoint: https://catalog.cloudflarestorage.com/${CF_ACCOUNT_ID}/bioconice
     backend_warehouse: ${CF_ACCOUNT_ID}_bioconice
     backend_prefix: ${R2_CATALOG_PREFIX}
+    # Two backend tokens (icegate#34): the read-only, bucket-scoped vending
+    # token is the default every request falls back to; the write token is
+    # selected only for principals granted `write`. CF_API_TOKEN is still the
+    # legacy Admin token — replace with a bucket-scoped RW vending token when
+    # minted (then nothing Admin-level remains in this Worker).
     auth:
-      bearer_token: ${CF_API_TOKEN}
+      bearer_token: ${CF_API_TOKEN_RO}
+      bearer_token_write: ${CF_API_TOKEN}
     capabilities:
       read: true
       write: true

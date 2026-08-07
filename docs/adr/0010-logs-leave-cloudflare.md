@@ -2,7 +2,10 @@
 
 **Status**: Accepted — the `cloudflare-managed` Logpush job (`1360530`) was
 confirmed editable via the standard Logpush API on 2026-08-07 (a no-op `PUT`
-succeeded), so it can be repointed or disabled like any other job. Supersedes
+succeeded), so it can be repointed or disabled like any other job. The gate's
+account-inventory step is retired by
+[ADR-0011](0011-bucket-scoped-vending-tokens.md); the log migration stands on
+its own. Supersedes
 the *direction* of [ADR-0009](0009-biocOnIce-moves-accounts-not-the-logs.md);
 the trust-domain principle of
 [ADR-0005](0005-cloudflare-account-is-the-trust-domain.md) is unchanged and is
