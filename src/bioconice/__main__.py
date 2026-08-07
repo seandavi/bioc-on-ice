@@ -1,6 +1,6 @@
 import argparse
 
-from . import catalog, ensembl, ncbi
+from . import bugsigdb, catalog, ensembl, ncbi
 
 
 def main():
@@ -19,6 +19,12 @@ def main():
     nc.add_argument("--taxa", default="9606,10090",
                     help="taxa to DERIVE annotation for; raw is always landed whole")
 
+    bs = sub.add_parser("ingest-bugsigdb", help="land a BugSigDB export release (no transform yet)")
+    bs.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
+    bs.add_argument("--version", default=bugsigdb.DEFAULT_VERSION,
+                    help="BugSigDBExports release tag, e.g. v1.3.1. Tags are immutable; "
+                         "the devel branch re-exports hourly and is not")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -34,6 +40,9 @@ def main():
                 print(f"{name:35} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged")
             else:
                 print(f"{name:35} {c:>10,} rows")
+    elif args.cmd == "ingest-bugsigdb":
+        n = bugsigdb.land_raw(cat, args.release, args.version)
+        print(f"{'raw.bugsigdb_full_dump':40} {n:>10,} rows  ({args.version})")
     elif args.cmd == "ingest-ncbi":
         counts = ncbi.ingest(cat, args.release, [int(t) for t in args.taxa.split(",")])
         for name, c in counts.items():

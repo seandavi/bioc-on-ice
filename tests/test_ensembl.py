@@ -308,6 +308,62 @@ def test_gene_history_is_landed_but_not_interpreted(cat):
     assert "11337" not in {g["gene_id"] for g in rows(cat, "annotation.ncbi_gene")}
 
 
+BSDB = Path(__file__).parent / "tiny_bugsigdb.csv"
+
+
+def test_bugsigdb_lands_verbatim(cat):
+    from bioconice import bugsigdb
+    n = bugsigdb.land_raw(cat, REL, version="v1.3.1", url=str(BSDB))
+    assert n == 2
+    rows = {r["bsdb_id"]: r for r in rows_of(cat)}
+    a = rows["bsdb:83/1/1"]
+
+    # the banner line is parsed for in-band provenance, not landed as data
+    assert a["export_timestamp"] == "2026-04-24_00:41_UTC"
+    assert a["bugsigdb_version"] == "v1.3.1" and a["landed_in"] == REL
+
+    # 'NA' is BugSigDB's missing marker and reads as NULL, like NCBI's '-'
+    assert a["keywords"] is None
+    assert rows["bsdb:83/1/2"]["shannon"] is None
+
+    # member lists keep BOTH separators — splitting on '|' alone would turn one
+    # taxon into its whole lineage
+    assert ";" in a["ncbi_taxonomy_ids"] and "|" in a["ncbi_taxonomy_ids"]
+    first_member = a["ncbi_taxonomy_ids"].split(";")[0]
+    assert first_member.split("|")[-1] == "40214"      # the curated taxon
+    assert first_member.split("|")[0] == "3379134"     # top of its lineage
+    assert a["metaphlan_taxon_names"].startswith("k__")
+
+    # upstream 'Source' is renamed, since `source` means asserter elsewhere here
+    assert a["source_in_paper"] and "source" not in a
+
+
+def rows_of(cat):
+    return cat.load_table("raw.bugsigdb_full_dump").scan().to_arrow().to_pylist()
+
+
+def test_bugsigdb_relands_a_tag_idempotently(cat):
+    """A tag is immutable, so re-landing it must replace rather than duplicate."""
+    from bioconice import bugsigdb
+    bugsigdb.land_raw(cat, REL, version="v1.3.1", url=str(BSDB))
+    bugsigdb.land_raw(cat, "2026.09", version="v1.3.1", url=str(BSDB))
+    assert len(rows_of(cat)) == 2
+
+    # a different tag accumulates alongside it rather than replacing it
+    bugsigdb.land_raw(cat, "2026.09", version="v1.3.0", url=str(BSDB))
+    assert len(rows_of(cat)) == 4
+    assert {r["bugsigdb_version"] for r in rows_of(cat)} == {"v1.3.0", "v1.3.1"}
+
+
+def test_bugsigdb_manifest_uses_the_release_tag_not_a_date(cat):
+    """BugSigDB publishes citable tags, so recording a retrieval date would lose information."""
+    from bioconice import bugsigdb
+    bugsigdb.land_raw(cat, REL, version="v1.3.1", url=str(BSDB))
+    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "bugsigdb")
+    assert (m["source_version"], m["version_method"]) == ("v1.3.1", "release_number")
+    assert m["row_count"] == 2
+
+
 def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):
     """Otherwise a bad URL leaves the previous landing in place and reports success."""
     from bioconice import ncbi
