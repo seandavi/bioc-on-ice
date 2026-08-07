@@ -84,6 +84,7 @@ def test_species_are_independent(cat):
 def test_every_column_is_documented(cat):
     """SPEC.md section B1: a table whose columns lack doc does not ship."""
     load(cat, HUMAN)
+    load_ncbi(cat, REL)   # every declared table, or the new ones go unchecked
     from pyiceberg.exceptions import NoSuchTableError
     for identifier in schemas.TABLES:
         try:
@@ -193,16 +194,31 @@ def test_duplicate_incoming_keys_are_rejected(cat):
         merge.merge(cat, "annotation.gene", doubled, "2026.11", EqualTo("taxon_id", 9606))
 
 
-G2E = Path(__file__).parent / "tiny_gene2ensembl.tsv"
+NCBI_URLS = {name: str(Path(__file__).parent / f"tiny_{name}.tsv")
+             for name in ("gene2ensembl", "gene_info", "gene_history")}
+
+
+def load_ncbi(cat, release, taxa=(9606,)):
+    from bioconice import ncbi
+    counts = ncbi.land_raw(cat, release, urls=NCBI_URLS)
+    for taxon in taxa:
+        ncbi.transform(cat, release, taxon)
+    return counts
+
+
+def maps(cat, **kw):
+    """Live NCBI cross-references as {(source_namespace, target_namespace): [target_id]}."""
+    out = {}
+    for r in rows(cat, "annotation.identifier_mapping",
+                  row_filter="valid_to IS NULL AND source = 'NCBI'", **kw):
+        out.setdefault((r["source_namespace"], r["target_namespace"]), []).append(r["target_id"])
+    return {k: sorted(v) for k, v in out.items()}
 
 
 def test_two_sources_share_a_table_without_retiring_each_other(cat):
     """The flip-flop case: a taxon-only scope would make these alternate forever."""
-    from bioconice import ncbi
-
-    load(cat, HUMAN)                                     # Ensembl writes ENSEMBL->SYMBOL
-    ncbi.land_raw(cat, "2026.09", [9606], url=str(G2E))  # NCBI writes ENSEMBL->ENTREZ
-    ncbi.transform(cat, "2026.09", 9606)
+    load(cat, HUMAN)              # Ensembl writes ENSEMBL->SYMBOL
+    load_ncbi(cat, "2026.09")     # NCBI writes ENSEMBL->ENTREZ and the gene_info xrefs
 
     live = rows(cat, "annotation.identifier_mapping", row_filter="valid_to IS NULL")
     by_source = {}
@@ -210,15 +226,92 @@ def test_two_sources_share_a_table_without_retiring_each_other(cat):
         by_source.setdefault(r["source"], []).append(r)
     assert sorted(by_source) == ["Ensembl", "NCBI"]
     assert [r["target_id"] for r in by_source["Ensembl"]] == ["TP53"]
-    assert sorted(r["target_id"] for r in by_source["NCBI"]) == ["100302278", "7157"]
+    assert maps(cat)[("ENSEMBL", "ENTREZ")] == ["100302278", "7157"]
 
     # re-running Ensembl must not retire NCBI's rows either — the other direction
+    n_ncbi = len(by_source["NCBI"])
     ensembl.transform(cat, "2026.10", HUMAN, ENS)
     still = rows(cat, "annotation.identifier_mapping",
                  row_filter="valid_to IS NULL AND source = 'NCBI'")
-    assert len(still) == 2
+    assert len(still) == n_ncbi
 
     # and the manifest records two axes: a release number and a retrieval date
     man = {m["source"]: m for m in rows(cat, "provenance.release")}
     assert man["ensembl"]["version_method"] == "release_number"
     assert man["ncbi_gene"]["version_method"] == "retrieval_date"
+
+
+def test_gene_info_and_gene2ensembl_merge_together(cat):
+    """Both feed identifier_mapping; two merges into one scope would flip-flop."""
+    load_ncbi(cat, "2026.09")
+    m = maps(cat)
+    # gene2ensembl's contribution survives alongside gene_info's
+    assert m[("ENSEMBL", "ENTREZ")] == ["100302278", "7157"]
+    assert m[("ENTREZ", "SYMBOL")] == ["MIR1244-1", "REG-17-1", "TP53"]
+    assert m[("ENTREZ", "ALIAS")] == ["BCC7", "BMFS5", "LFS1", "MIRN1244", "P53", "TRP53",
+                                      "mir-1244-1"]
+    # dbXrefs: split at the FIRST colon, so HGNC's prefixed id survives whole
+    assert m[("ENTREZ", "HGNC")] == ["HGNC:11998", "HGNC:35297"]
+    # NCBI abbreviates the authority MIM; it is stored under the authority's name
+    assert m[("ENTREZ", "OMIM")] == ["191170"]
+    assert ("ENTREZ", "MIM") not in m
+    # re-running is a no-op, not a churn of retire-and-reassert
+    counts = load_ncbi(cat, "2026.10")
+    from bioconice import ncbi
+    assert ncbi.transform(cat, "2026.10", 9606)["annotation.identifier_mapping"]["written"] == 0
+    assert counts["raw.ncbi_gene_info"] == 5
+
+
+def test_raw_is_landed_whole_and_only_transform_is_scoped(cat):
+    """Raw is not a function of what we derive: mouse lands even deriving only human."""
+    load_ncbi(cat, "2026.09", taxa=(9606,))
+
+    assert {r["taxon_id"] for r in rows(cat, "raw.ncbi_gene_info")} == {9606, 10090}
+    assert {r["taxon_id"] for r in rows(cat, "raw.ncbi_gene_history")} == {9606, 10090}
+    # ...but only the taxon we transformed is derived
+    assert {g["taxon_id"] for g in rows(cat, "annotation.ncbi_gene")} == {9606}
+
+    # deriving mouse later needs no re-fetch, and does not disturb human
+    from bioconice import ncbi
+    ncbi.transform(cat, "2026.10", 10090)
+    live = rows(cat, "annotation.ncbi_gene", row_filter="valid_to IS NULL")
+    assert {g["taxon_id"] for g in live} == {9606, 10090}
+    assert {g["valid_from"] for g in live if g["taxon_id"] == 9606} == {"2026.09"}
+
+
+def test_ncbi_gene_carries_the_attributes_ensembl_cannot(cat):
+    load_ncbi(cat, "2026.09")
+    genes = {g["gene_id"]: g for g in rows(cat, "annotation.ncbi_gene")}
+
+    tp53 = genes["7157"]
+    assert tp53["description"] == "tumor protein p53"      # OrgDb GENENAME
+    assert tp53["map_location"] == "17p13.1"               # OrgDb MAP
+    assert tp53["gene_type"] == "protein-coding"           # NCBI's vocabulary, not Ensembl's
+    assert tp53["symbol"] == "TP53"
+
+    # NEWENTRY is NCBI's placeholder record, not a gene
+    assert "100000000" not in genes
+    assert "NEWENTRY" not in maps(cat)[("ENTREZ", "SYMBOL")]
+    # biological-region records are kept — gene_type is what distinguishes them
+    assert genes["110006319"]["gene_type"] == "biological-region"
+
+
+def test_gene_history_is_landed_but_not_interpreted(cat):
+    """Supersession modelling is still open (#15 item 4); the tombstones are here anyway."""
+    load_ncbi(cat, "2026.09")
+    hist = {h["discontinued_gene_id"]: h for h in rows(cat, "raw.ncbi_gene_history")}
+    assert len(hist) == 3
+    # a real GeneID means "merged into"; NCBI's '-' means retired with no successor
+    assert hist["11337"]["gene_id"] == "7157"
+    assert hist["5555"]["gene_id"] is None
+    # nothing derives from it, so no annotation table mentions a discontinued id
+    assert "11337" not in {g["gene_id"] for g in rows(cat, "annotation.ncbi_gene")}
+
+
+def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):
+    """Otherwise a bad URL leaves the previous landing in place and reports success."""
+    from bioconice import ncbi
+    empty = tmp_path / "empty.tsv"
+    empty.write_text("#tax_id\tGeneID\tDiscontinued_GeneID\tDiscontinued_Symbol\tDiscontinue_Date\n")
+    with pytest.raises(SystemExit, match="yielded no rows"):
+        ncbi._land(cat, "2026.09", "gene_history", url=str(empty))

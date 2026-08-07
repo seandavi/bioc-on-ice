@@ -1,0 +1,4 @@
+#tax_id	GeneID	Discontinued_GeneID	Discontinued_Symbol	Discontinue_Date
+9606	7157	11337	TP53I1	20050301
+9606	-	5555	OLDGENE	20031113
+10090	-	99999	Oldmouse	20120101

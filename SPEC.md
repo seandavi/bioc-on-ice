@@ -264,7 +264,6 @@ gene_id        -- stable, unversioned: ENSG00000141510   [identifier]
 taxon_id                                                 [identifier]
 version        -- upstream record version, changes over releases
 symbol
-description
 gene_type
 source
 valid_from     -- biocOnIce release
@@ -275,6 +274,44 @@ Columns marked `[identifier]` form the Iceberg identifier fields — the merge
 key. They are the *unversioned* stable id: an upstream version bump is an
 update to an existing row, not a new one. `valid_from` / `valid_to` are
 explained under [Versioning Model](#versioning-model).
+
+This is the gene as **Ensembl** defines it, keyed by Ensembl stable id.
+
+---
+
+## ncbi_gene
+
+The gene as **NCBI Gene** defines it, keyed by Entrez GeneID.
+
+```sql
+ncbi_gene
+---------
+gene_id        -- Entrez GeneID: 7157                     [identifier]
+taxon_id                                                  [identifier]
+symbol
+description    -- 'tumor protein p53'; OrgDb's GENENAME
+gene_type      -- NCBI's vocabulary: protein-coding, ncRNA
+chromosome
+map_location   -- cytogenetic band, 17p13.1; OrgDb's MAP
+valid_from
+valid_to
+```
+
+Descriptions, cytogenetic bands and NCBI gene types are **not** columns on
+`gene`, and this is the one place two sources describing the same entity are
+kept in separate tables rather than distinguished by a `source` column in one.
+The reason is the key, not the provenance: `gene_info` is keyed by Entrez id,
+and the Entrez↔Ensembl mapping is many-to-many in both directions — 261 of
+human's 38,284 mapped Ensembl genes correspond to more than one Entrez gene.
+Writing `description` onto an Ensembl-keyed row would therefore mean silently
+choosing one of several NCBI records for those genes. Joining through
+`identifier_mapping` keeps that fan-out visible to the client instead of
+resolving it at write time.
+
+"Gene" here is NCBI's sense of the word: most rows are `gene_type`
+`biological-region` — regulatory features, 128,261 of human's 193,809 records
+against 20,595 protein-coding. They are kept rather than filtered, because
+`gene_type` distinguishes them and OrgDb's ENTREZID key space includes them.
 
 ---
 
@@ -806,6 +843,14 @@ The two layers MUST NOT share write semantics:
 | write | replace wholesale per source version | merge |
 | history | accumulated source versions | `valid_from` / `valid_to` |
 
+A source file is landed **whole**. It MUST NOT be filtered down to the subset
+the derived tables currently need — not to the species we happen to annotate,
+not to the record types we happen to read. A filter at land time makes `raw` a
+function of what we derive, so adding a species or a column later costs a
+re-fetch, and it quietly breaks the layer's other purpose: raw is a resource in
+its own right, useful to somebody whose question is not ours. Scoping belongs in
+transform, which is per-species by design.
+
 A source release that is immutable — an Ensembl release, an archived ClinVar
 month — makes raw idempotent under re-ingest without any merge machinery:
 replacing everything for that version is both correct and cheap. Validity
@@ -821,8 +866,11 @@ retention policy, not a correctness question.
 A column is added when a source populates it, by schema evolution, rather than
 shipped early as a permanent NULL. A column that is always NULL advertises a
 capability the catalog does not have, and is worse than its absence — a client
-cannot distinguish "not loaded yet" from "not applicable". Gene descriptions
-and assembly checksums are absent for this reason until NCBI ingest lands.
+cannot distinguish "not loaded yet" from "not applicable". Assembly checksums
+are absent for this reason until a source fills them. Gene descriptions were
+too, until NCBI Gene landed — and they arrived in `annotation.ncbi_gene` rather
+than as a column on `annotation.gene`, because the source that fills them is
+keyed by Entrez id rather than by Ensembl id.
 
 ## Ingest is release-scoped
 

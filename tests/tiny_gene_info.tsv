@@ -1,0 +1,6 @@
+#tax_id	GeneID	Symbol	LocusTag	Synonyms	dbXrefs	chromosome	map_location	description	type_of_gene	Symbol_from_nomenclature_authority	Full_name_from_nomenclature_authority	Nomenclature_status	Other_designations	Modification_date	Feature_type
+9606	7157	TP53	-	BCC7|BMFS5|LFS1|P53|TRP53	MIM:191170|HGNC:HGNC:11998|Ensembl:ENSG00000141510|AllianceGenome:HGNC:11998	17	17p13.1	tumor protein p53	protein-coding	TP53	tumor protein p53	O	cellular tumor antigen p53	20260801	-
+9606	100302278	MIR1244-1	-	MIRN1244|mir-1244-1	miRBase:MI0006381|HGNC:HGNC:35297|Ensembl:ENSG00000288825	12	12p13.31	microRNA 1244-1	ncRNA	MIR1244-1	microRNA 1244-1	O	hsa-mir-1244-1	20260801	-
+9606	110006319	REG-17-1	-	-	-	17	17p13.1	silencer	biological-region	-	-	-	-	20260801	regulatory:silencer
+9606	100000000	NEWENTRY	-	-	-	-	-	Record to support submission of GeneRIFs for a gene not in Gene.	other	-	-	-	-	20241113	-
+10090	22059	Trp53	-	bfy|bhy|p44|p53	MGI:MGI:98834|Ensembl:ENSMUSG00000059552	11	11 B2	transformation related protein 53	protein-coding	Trp53	transformation related protein 53	O	cellular tumor antigen p53	20260801	-
