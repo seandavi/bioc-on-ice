@@ -1,6 +1,9 @@
 # 0005 — The Cloudflare account is the trust domain
 
-**Status**: Accepted
+**Status**: Accepted — the trust-domain principle below stands and is unchanged.
+The *choice of which side moves* (logs out, biocOnIce stays) is superseded by
+[ADR-0009](0009-biocOnIce-moves-accounts-not-the-logs.md), which argues the
+growth-versus-migration axis was the wrong one. Read both.
 
 ## Context
 
