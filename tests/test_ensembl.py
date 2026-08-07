@@ -41,17 +41,17 @@ def test_raw_is_verbatim(cat):
 def test_derived_tables(cat):
     load(cat, HUMAN)
 
-    genes = rows(cat, "annotation.gene")
+    genes = rows(cat, "annotation.ensembl__gene")
     assert len(genes) == 2
     tp53 = next(g for g in genes if g["symbol"] == "TP53")
     assert (tp53["gene_id"], tp53["version"]) == ("ENSG00000141510", "18")
     assert next(g for g in genes if g["gene_id"] == "ENSG00000288825")["symbol"] is None
 
-    tx = rows(cat, "annotation.transcript")
+    tx = rows(cat, "annotation.ensembl__transcript")
     assert len(tx) == 3
     assert sum(t["canonical"] for t in tx) == 2
 
-    exons = sorted(rows(cat, "annotation.exon", row_filter="transcript_id = 'ENST00000269305'"),
+    exons = sorted(rows(cat, "annotation.ensembl__exon", row_filter="transcript_id = 'ENST00000269305'"),
                    key=lambda e: e["rank"])
     assert [e["rank"] for e in exons] == [1, 2]
     # rank 1 is the higher coordinate on the minus strand: ordering by position
@@ -68,14 +68,14 @@ def test_transform_reruns_from_raw_without_refetch(cat):
     load(cat, HUMAN)
     # no url, no network: everything transform needs is already landed
     ensembl.transform(cat, REL, HUMAN, ENS)
-    assert len(rows(cat, "annotation.gene")) == 2
-    assert len(rows(cat, "annotation.exon")) == 4
+    assert len(rows(cat, "annotation.ensembl__gene")) == 2
+    assert len(rows(cat, "annotation.ensembl__exon")) == 4
 
 
 def test_species_are_independent(cat):
     load(cat, HUMAN)
     load(cat, MOUSE)
-    genes = rows(cat, "annotation.gene")
+    genes = rows(cat, "annotation.ensembl__gene")
     assert len(genes) == 4
     assert {g["taxon_id"] for g in genes} == {9606, 10090}
     assert len(rows(cat, "raw.ensembl__gtf")) == 22
@@ -106,30 +106,30 @@ def load_from(cat, info, gtf, release, ensembl_release):
 
 def test_merge_versions_changes_rather_than_overwriting(cat):
     load(cat, HUMAN)                                    # release 2026.08, Ensembl 116
-    genes = rows(cat, "annotation.gene")
+    genes = rows(cat, "annotation.ensembl__gene")
     assert {g["valid_from"] for g in genes} == {REL}
     assert all(g["valid_to"] is None for g in genes)
 
     # same data, later release: nothing written at all
     counts = load_from(cat, HUMAN, GTF, "2026.09", ENS)
-    assert counts["annotation.gene"]["written"] == 0
-    assert counts["annotation.gene"]["unchanged"] == 2
+    assert counts["annotation.ensembl__gene"]["written"] == 0
+    assert counts["annotation.ensembl__gene"]["unchanged"] == 2
 
     # next upstream release: TP53 version bumped 18 -> 19, the lncRNA gone
     counts = load_from(cat, HUMAN, NEXT, "2026.10", "117")
     # one changed record costs two rows: the closed old version and the new one
-    assert counts["annotation.gene"]["changed"] == 1
-    assert counts["annotation.gene"]["superseded"] == 1
-    assert counts["annotation.gene"]["retired"] == 1
+    assert counts["annotation.ensembl__gene"]["changed"] == 1
+    assert counts["annotation.ensembl__gene"]["superseded"] == 1
+    assert counts["annotation.ensembl__gene"]["retired"] == 1
 
-    tp53 = sorted((g for g in rows(cat, "annotation.gene")
+    tp53 = sorted((g for g in rows(cat, "annotation.ensembl__gene")
                    if g["gene_id"] == "ENSG00000141510"), key=lambda g: g["valid_from"])
     assert len(tp53) == 2
     # the old attribute value survives — this is what Type 1 destroyed
     assert (tp53[0]["version"], tp53[0]["valid_from"], tp53[0]["valid_to"]) == ("18", REL, "2026.10")
     assert (tp53[1]["version"], tp53[1]["valid_from"], tp53[1]["valid_to"]) == ("19", "2026.10", None)
 
-    current = rows(cat, "annotation.gene", row_filter="valid_to IS NULL")
+    current = rows(cat, "annotation.ensembl__gene", row_filter="valid_to IS NULL")
     assert [g["gene_id"] for g in current] == ["ENSG00000141510"]
 
 
@@ -137,7 +137,7 @@ def test_point_in_time_returns_the_attribute_of_that_release(cat):
     """The defect that motivated ADR-0006: PIT must reconstruct values, not just rows."""
     load(cat, HUMAN)
     load_from(cat, HUMAN, NEXT, "2026.10", "117")
-    tp53 = [g for g in rows(cat, "annotation.gene") if g["gene_id"] == "ENSG00000141510"]
+    tp53 = [g for g in rows(cat, "annotation.ensembl__gene") if g["gene_id"] == "ENSG00000141510"]
     assert [g["version"] for g in pit(tp53, REL)] == ["18"]
     assert [g["version"] for g in pit(tp53, "2026.10")] == ["19"]
 
@@ -163,7 +163,7 @@ def test_resurrection_is_a_new_version(cat):
     load_from(cat, HUMAN, NEXT, "2026.09", "117")  # lncRNA gone
     load_from(cat, HUMAN, GTF, "2026.10", "118")   # lncRNA back
 
-    lnc = [r for r in rows(cat, "annotation.gene") if r["gene_id"] == "ENSG00000288825"]
+    lnc = [r for r in rows(cat, "annotation.ensembl__gene") if r["gene_id"] == "ENSG00000288825"]
     # two records, not one revived record
     assert len(lnc) == 2
     assert sorted((r["valid_from"], r["valid_to"]) for r in lnc) == [
@@ -185,13 +185,13 @@ def test_duplicate_incoming_keys_are_rejected(cat):
     from bioconice import merge
 
     load(cat, HUMAN)
-    gene = cat.load_table("annotation.gene")
+    gene = cat.load_table("annotation.ensembl__gene")
     cols = [f.name for f in gene.schema().fields if f.name not in ("valid_from", "valid_to")]
     one = gene.scan(row_filter="gene_id = 'ENSG00000141510'").to_arrow().select(cols)
     doubled = pa.concat_tables([one, one])          # same business key twice
 
     with pytest.raises(ValueError, match="more than one live row"):
-        merge.merge(cat, "annotation.gene", doubled, "2026.11", EqualTo("taxon_id", 9606))
+        merge.merge(cat, "annotation.ensembl__gene", doubled, "2026.11", EqualTo("taxon_id", 9606))
 
 
 NCBI_URLS = {name: str(Path(__file__).parent / f"tiny_{name}.tsv")

@@ -17,9 +17,9 @@ Ensembl 116 for human and mouse is live on Cloudflare R2:
 | Table | Human | Mouse |
 | --- | --- | --- |
 | `raw.ensembl_gtf` | 11,248,794 | 8,417,898 |
-| `annotation.gene` | 78,941 | 78,348 |
-| `annotation.transcript` | 646,577 | 481,956 |
-| `annotation.exon` | 5,087,789 | 3,763,037 |
+| `annotation.ensembl__gene` | 78,941 | 78,348 |
+| `annotation.ensembl__transcript` | 646,577 | 481,956 |
+| `annotation.ensembl__exon` | 5,087,789 | 3,763,037 |
 | `annotation.identifier_mapping` | 43,458 | 77,797 |
 
 Ingest takes under a minute per species.
@@ -93,9 +93,9 @@ coding bounds:
 
 ```sql
 SELECT e.rank, e.start, e.end, e.strand, e.cds_start, e.cds_end, e.cds_phase
-FROM bioc.annotation.gene g
-JOIN bioc.annotation.transcript t USING (gene_id, taxon_id)
-JOIN bioc.annotation.exon e USING (transcript_id, taxon_id)
+FROM bioc.annotation.ensembl__gene g
+JOIN bioc.annotation.ensembl__transcript t USING (gene_id, taxon_id)
+JOIN bioc.annotation.ensembl__exon e USING (transcript_id, taxon_id)
 WHERE g.symbol = 'TP53' AND g.taxon_id = 9606 AND t.canonical
 ORDER BY e.rank;
 ```

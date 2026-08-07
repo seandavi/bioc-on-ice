@@ -103,7 +103,7 @@ def _manifest(cat, release, ensembl_release, url, rows):
 # scope names the writer as well as the species. Without this, Ensembl and NCBI
 # retire each other's cross-references on alternating ingests — silently, and
 # forever, because the "current" view is never empty.
-WRITER = {"reference.genome": EqualTo("provider", "Ensembl"),
+WRITER = {"reference.ensembl__genome": EqualTo("provider", "Ensembl"),
           "annotation.identifier_mapping": EqualTo("source", "Ensembl")}
 
 
@@ -144,23 +144,23 @@ def transform(cat, release, info, ensembl_release):
 
     q = lambda sql: con.sql(sql).to_arrow_table()
     out = {
-        "reference.genome": q(f"""
+        "reference.ensembl__genome": q(f"""
             SELECT '{info['accession']}' AS genome_id, {taxon}::INTEGER AS taxon_id,
                    'Ensembl' AS provider, '{info['assembly']}' AS assembly_name
         """),
-        "annotation.gene": q(f"""
+        "annotation.ensembl__gene": q(f"""
             SELECT gene_id, {taxon}::INTEGER AS taxon_id, gene_version AS version,
                    gene_name AS symbol, gene_biotype AS gene_type, gene_source AS source
             FROM feat WHERE feature = 'gene'
         """),
-        "annotation.transcript": q(f"""
+        "annotation.ensembl__transcript": q(f"""
             SELECT transcript_id, {taxon}::INTEGER AS taxon_id, gene_id,
                    transcript_version AS version, transcript_biotype AS biotype, canonical
             FROM feat WHERE feature = 'transcript'
         """),
         # A CDS line carries the same transcript_id and exon_number as the exon it
         # lies in, which is what lets coding bounds and phase ride on the exon row.
-        "annotation.exon": q(f"""
+        "annotation.ensembl__exon": q(f"""
             SELECT e.exon_id, e.transcript_id, {taxon}::INTEGER AS taxon_id,
                    e.seqname AS sequence_name, e."start", e."end", e.strand,
                    e.exon_number::INTEGER AS rank,

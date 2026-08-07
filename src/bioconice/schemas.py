@@ -153,7 +153,7 @@ TABLES = {
                             "for genes placed on more than one, or 'Un' for unplaced."),
             NestedField(8, "map_location", StringType(),
                         doc="Cytogenetic band, e.g. 17p13.1. Not a coordinate; for coordinates "
-                            "use annotation.exon."),
+                            "use annotation.ensembl__exon."),
             NestedField(9, "description", StringType(),
                         doc="Descriptive gene name, e.g. 'tumor protein p53'. This is the "
                             "column OrgDb serves as GENENAME."),
@@ -364,7 +364,7 @@ TABLES = {
                     "bioc.column.start.coordinate_system": COORD,
                     "bioc.column.end.coordinate_system": COORD},
     ),
-    "reference.genome": TableDef(
+    "reference.ensembl__genome": TableDef(
         schema=Schema(
             NestedField(1, "genome_id", StringType(), required=True,
                         doc="Assembly accession, e.g. GCA_000001405.29. Stable across releases."),
@@ -381,7 +381,7 @@ TABLES = {
         properties={"bioc.column.genome_id.prefix": "insdc.gca",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
-    "annotation.gene": TableDef(
+    "annotation.ensembl__gene": TableDef(
         schema=Schema(
             NestedField(1, "gene_id", StringType(), required=True,
                         doc="Ensembl stable gene id without version, e.g. ENSG00000141510. "
@@ -402,7 +402,7 @@ TABLES = {
         ),
         business_key=("gene_id", "taxon_id"),
         comment="Genes as Ensembl defines them. One row per gene per organism. Join to "
-                "annotation.transcript on gene_id. Descriptions and cytogenetic bands are not "
+                "annotation.ensembl__transcript on gene_id. Descriptions and cytogenetic bands are not "
                 "here: they come from NCBI, keyed by Entrez id, in annotation.ncbi__gene.",
         properties={"bioc.column.gene_id.prefix": "ensembl",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
@@ -415,7 +415,7 @@ TABLES = {
             NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(3, "symbol", StringType(),
                         doc="NCBI's default symbol, e.g. TP53. May disagree with the symbol "
-                            "Ensembl carries in annotation.gene; neither is corrected to match "
+                            "Ensembl carries in annotation.ensembl__gene; neither is corrected to match "
                             "the other."),
             NestedField(4, "description", StringType(),
                         doc="Descriptive gene name, e.g. 'tumor protein p53'. This is OrgDb's "
@@ -423,7 +423,7 @@ TABLES = {
             NestedField(5, "gene_type", StringType(),
                         doc="NCBI gene type, e.g. protein-coding, ncRNA, pseudo. OrgDb's "
                             "GENETYPE. NCBI's hyphenated vocabulary, deliberately not mapped "
-                            "onto Ensembl's biotype names in annotation.gene.gene_type."),
+                            "onto Ensembl's biotype names in annotation.ensembl__gene.gene_type."),
             NestedField(6, "chromosome", StringType(),
                         doc="Chromosome as NCBI names it. Pipe-separated where NCBI places the "
                             "gene on more than one, kept as published."),
@@ -434,7 +434,7 @@ TABLES = {
         ),
         business_key=("gene_id", "taxon_id"),
         comment="Genes as NCBI Gene defines them, keyed by Entrez GeneID. Separate from "
-                "annotation.gene rather than extra columns on it, because gene_info is keyed by "
+                "annotation.ensembl__gene rather than extra columns on it, because gene_info is keyed by "
                 "Entrez id and the Entrez-to-Ensembl mapping is many-to-many in both directions: "
                 "writing a description onto an Ensembl-keyed row would mean silently picking one "
                 "of several Entrez records for the genes where they disagree. Reach it from an "
@@ -449,13 +449,13 @@ TABLES = {
         properties={"bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
-    "annotation.transcript": TableDef(
+    "annotation.ensembl__transcript": TableDef(
         schema=Schema(
             NestedField(1, "transcript_id", StringType(), required=True,
                         doc="Ensembl stable transcript id without version, e.g. ENST00000269305."),
             NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(3, "gene_id", StringType(),
-                        doc="Ensembl stable gene id of the parent gene. Joins to annotation.gene."),
+                        doc="Ensembl stable gene id of the parent gene. Joins to annotation.ensembl__gene."),
             NestedField(4, "version", StringType(), doc="Upstream record version at this release."),
             NestedField(5, "biotype", StringType(),
                         doc="Transcript biotype, e.g. protein_coding, retained_intron."),
@@ -470,14 +470,14 @@ TABLES = {
                     "bioc.column.gene_id.prefix": "ensembl",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
-    "annotation.exon": TableDef(
+    "annotation.ensembl__exon": TableDef(
         schema=Schema(
             NestedField(1, "exon_id", StringType(), required=True,
                         doc="Ensembl stable exon id without version, e.g. ENSE00002064269. "
                             "NOT unique on its own: one exon is shared by every transcript "
                             "containing it, so the key is (exon_id, transcript_id, taxon_id)."),
             NestedField(2, "transcript_id", StringType(), required=True,
-                        doc="Transcript this row places the exon in. Joins to annotation.transcript."),
+                        doc="Transcript this row places the exon in. Joins to annotation.ensembl__transcript."),
             NestedField(3, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(4, "sequence_name", StringType(),
                         doc="Sequence the exon lies on, as named by Ensembl, e.g. 17 — not chr17."),
