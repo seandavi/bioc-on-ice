@@ -1,7 +1,7 @@
 import argparse
 
 from . import bugsigdb, catalog, ensembl, ncbi
-from . import ncbi_pubmed
+from . import ncbi_accession, ncbi_pubmed
 
 
 def main():
@@ -18,6 +18,12 @@ def main():
     nc = sub.add_parser("ingest-ncbi", help="land the NCBI Gene dumps whole, then derive")
     nc.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
     nc.add_argument("--taxa", default="9606,10090",
+                    help="taxa to DERIVE annotation for; raw is always landed whole")
+
+    na = sub.add_parser("ingest-ncbi-accession",
+                        help="land NCBI gene2accession whole, then derive")
+    na.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
+    na.add_argument("--taxa", default="9606,10090",
                     help="taxa to DERIVE annotation for; raw is always landed whole")
 
     bs = sub.add_parser("ingest-bugsigdb", help="land a BugSigDB export release (no transform yet)")
@@ -56,6 +62,12 @@ def main():
                   if isinstance(c, dict) else f"{name:40} {c:>10,} rows")
     elif args.cmd == "ingest-ncbi-pubmed":
         counts = ncbi_pubmed.ingest(cat, args.release, [int(t) for t in args.taxa.split(",")])
+        for name, c in counts.items():
+            print(f"{name:40} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged"
+                  if isinstance(c, dict) else f"{name:40} {c:>10,} rows")
+    elif args.cmd == "ingest-ncbi-accession":
+        counts = ncbi_accession.ingest(cat, args.release,
+                                       [int(t) for t in args.taxa.split(",")])
         for name, c in counts.items():
             print(f"{name:40} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged"
                   if isinstance(c, dict) else f"{name:40} {c:>10,} rows")
