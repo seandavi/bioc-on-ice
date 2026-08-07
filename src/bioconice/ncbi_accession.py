@@ -4,10 +4,9 @@ Same FTP directory, same unversioned nightly regeneration, so the version is
 again the retrieval date. Raw is landed whole and verbatim — every organism
 and every accession status — and it is by far the largest landing in the
 catalog (~1e9 rows upstream; gene2accession is a superset of gene2refseq), so
-landing streams in record batches exactly as ncbi._land does. It is its own
-module rather than a fourth entry in ncbi.COLUMNS so that this landing can
-run, fail, and re-run on its own schedule without dragging the three small
-dumps along.
+landing streams in record batches via ncbi._land. It is its own module rather
+than a fourth entry in ncbi.COLUMNS so that this landing can run, fail, and
+re-run on its own schedule without dragging the three small dumps along.
 
 It is a further writer to `annotation.identifier_mapping`, and it merges in
 its own call, so it needs its own scope: (taxon, source='NCBI_ACCESSION') —
@@ -15,30 +14,27 @@ deliberately NOT 'NCBI'. ncbi.transform already merges its gene_info +
 gene2ensembl cross-references in ONE call scoped to source='NCBI'; a second
 merge call into that same scope would retire that call's rows on every run,
 the flip-flop effect (ADR-0004). One merge call, one writer, one source
-value. Folding this derive into ncbi.py's single call — retiring
-'NCBI_ACCESSION' — is a candidate for the planned reuse pass, not something
-to do by side effect from a sibling module.
+value. Folding this derive into ncbi.py's call was considered in the reuse
+pass and rejected: a separate merge call is exactly what ADR-0004's
+writer-scope rule prescribes, and coupling the two ingest paths would force
+them to rerun together.
 
 Accession versions are kept exactly as the file gives them (NM_000546.6, not
 NM_000546): the versioned form is what the record asserts, and stripping the
 version is interpretation a reader can do with split_part.
 """
 
-from datetime import datetime, timezone
-
 import duckdb
-import pyarrow as pa
 from pyiceberg.expressions import And, EqualTo
 
-from . import merge, schemas
-from .ensembl import _write
+from . import merge
+from .ncbi import DATA, _land, _manifest
 
-URL = "https://ftp.ncbi.nlm.nih.gov/gene/DATA/gene2accession.gz"
+URL = f"{DATA}gene2accession.gz"
 
 # File order, upstream's dots turned into underscores ('accession.version' is
 # not a valid column name; the upstream names are recorded in the column docs).
-# `auto_detect` is off, so a column NCBI inserts or reorders fails loudly here
-# instead of quietly shifting every value one to the left.
+# Same contract as ncbi.COLUMNS: auto_detect off, names from the spec.
 COLUMNS = (
     "{'taxon_id':'INTEGER','gene_id':'VARCHAR','status':'VARCHAR',"
     "'rna_nucleotide_accession_version':'VARCHAR','rna_nucleotide_gi':'VARCHAR',"
@@ -50,61 +46,12 @@ COLUMNS = (
     "'mature_peptide_gi':'VARCHAR','symbol':'VARCHAR'}"
 )
 
-BATCH = 1_000_000
-
 
 def land_raw(cat, release, url=None):
-    """Phase 1: gene2accession, verbatim and whole, streamed in batches.
-
-    Same replace-first-batch-then-append shape as ncbi._land, and the same
-    ponytail there applies: a crash between batches leaves a partial landing
-    that a re-run repairs.
-    """
-    identifier = "raw.ncbi__gene2accession"
-    table = schemas.create(cat, identifier)
-    arrow_schema = table.schema().as_arrow()
-    con = duckdb.connect()
-    reader = con.sql(f"""
-        SELECT *, '{release}' AS landed_in
-        FROM read_csv('{url or URL}', sep='\t', header=true,
-                      auto_detect=false, columns={COLUMNS}, nullstr='-')
-    """).to_arrow_reader(BATCH)
-
-    n = 0
-    for batch in reader:
-        # Casting to the declared schema is the check: a null in an identifier
-        # field fails here rather than landing quietly.
-        arrow = pa.Table.from_batches([batch]).cast(arrow_schema)
-        if n:
-            table.append(arrow)
-        else:
-            table.overwrite(arrow)
-        n += arrow.num_rows
-    if not n:
-        # Otherwise a bad URL silently leaves the previous landing in place and
-        # reports success.
-        raise SystemExit(f"{identifier}: {url or URL} yielded no rows")
-    _manifest(cat, release, n)
-    return {identifier: n}
-
-
-def _manifest(cat, release, rows):
-    """Record what this release was built from — ADR-0007.
-
-    Keyed apart from ncbi.py's 'ncbi_gene' row, since the two land
-    independently and would otherwise clobber each other's manifest.
-    """
-    now = datetime.now(timezone.utc)
-    con = duckdb.connect()
-    arrow = con.sql(f"""
-        SELECT '{release}' AS release, 'ncbi_gene2accession' AS source,
-               '{now.date()}' AS source_version,
-               'retrieval_date' AS version_method,
-               '{now.isoformat(timespec="seconds")}' AS retrieved_at,
-               '{URL}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
-    """).to_arrow_table()
-    _write(cat, "provenance.release", arrow,
-           And(EqualTo("release", release), EqualTo("source", "ncbi_gene2accession")))
+    """Phase 1: stream gene2accession verbatim and whole into raw.ncbi__gene2accession."""
+    n = _land(cat, release, "raw.ncbi__gene2accession", url or URL, COLUMNS)
+    _manifest(cat, release, "ncbi_gene2accession", URL, n)
+    return n
 
 
 def transform(cat, release, taxon):
@@ -121,10 +68,9 @@ def transform(cat, release, taxon):
     Like the other dumps, the file arrives sorted by tax_id upstream, so the
     taxon filter prunes nearly every Parquet row group on min/max stats.
     """
-    raw = cat.load_table("raw.ncbi__gene2accession").scan(
-        row_filter=EqualTo("taxon_id", taxon)).to_arrow()
     con = duckdb.connect()
-    con.register("acc", raw)
+    con.register("acc", cat.load_table("raw.ncbi__gene2accession").scan(
+        row_filter=EqualTo("taxon_id", taxon)).to_arrow())
 
     mapping = con.sql(f"""
         SELECT DISTINCT source_namespace, source_id, target_namespace, target_id,
@@ -155,7 +101,7 @@ def transform(cat, release, taxon):
 
 
 def ingest(cat, release, taxa):
-    out = dict(land_raw(cat, release))
+    out = {"raw.ncbi__gene2accession": land_raw(cat, release)}
     for taxon in taxa:
         for k, v in transform(cat, release, taxon).items():
             out[f"{k} [{taxon}]"] = v

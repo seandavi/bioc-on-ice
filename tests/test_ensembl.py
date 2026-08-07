@@ -30,7 +30,7 @@ def cat(tmp_path, monkeypatch):
 
 def test_raw_is_verbatim(cat):
     load(cat, HUMAN)
-    raw = rows(cat, "raw.ensembl_gtf")
+    raw = rows(cat, "raw.ensembl__gtf")
     assert len(raw) == 11  # every data line, including CDS and five_prime_utr
     assert {r["feature"] for r in raw} == {"gene", "transcript", "exon", "CDS", "five_prime_utr"}
     # the attribute blob is kept whole, so attributes we do not parse survive
@@ -78,7 +78,7 @@ def test_species_are_independent(cat):
     genes = rows(cat, "annotation.gene")
     assert len(genes) == 4
     assert {g["taxon_id"] for g in genes} == {9606, 10090}
-    assert len(rows(cat, "raw.ensembl_gtf")) == 22
+    assert len(rows(cat, "raw.ensembl__gtf")) == 22
 
 
 def test_every_column_is_documented(cat):
@@ -259,29 +259,29 @@ def test_gene_info_and_gene2ensembl_merge_together(cat):
     counts = load_ncbi(cat, "2026.10")
     from bioconice import ncbi
     assert ncbi.transform(cat, "2026.10", 9606)["annotation.identifier_mapping"]["written"] == 0
-    assert counts["raw.ncbi_gene_info"] == 5
+    assert counts["raw.ncbi__gene_info"] == 5
 
 
 def test_raw_is_landed_whole_and_only_transform_is_scoped(cat):
     """Raw is not a function of what we derive: mouse lands even deriving only human."""
     load_ncbi(cat, "2026.09", taxa=(9606,))
 
-    assert {r["taxon_id"] for r in rows(cat, "raw.ncbi_gene_info")} == {9606, 10090}
-    assert {r["taxon_id"] for r in rows(cat, "raw.ncbi_gene_history")} == {9606, 10090}
+    assert {r["taxon_id"] for r in rows(cat, "raw.ncbi__gene_info")} == {9606, 10090}
+    assert {r["taxon_id"] for r in rows(cat, "raw.ncbi__gene_history")} == {9606, 10090}
     # ...but only the taxon we transformed is derived
-    assert {g["taxon_id"] for g in rows(cat, "annotation.ncbi_gene")} == {9606}
+    assert {g["taxon_id"] for g in rows(cat, "annotation.ncbi__gene")} == {9606}
 
     # deriving mouse later needs no re-fetch, and does not disturb human
     from bioconice import ncbi
     ncbi.transform(cat, "2026.10", 10090)
-    live = rows(cat, "annotation.ncbi_gene", row_filter="valid_to IS NULL")
+    live = rows(cat, "annotation.ncbi__gene", row_filter="valid_to IS NULL")
     assert {g["taxon_id"] for g in live} == {9606, 10090}
     assert {g["valid_from"] for g in live if g["taxon_id"] == 9606} == {"2026.09"}
 
 
 def test_ncbi_gene_carries_the_attributes_ensembl_cannot(cat):
     load_ncbi(cat, "2026.09")
-    genes = {g["gene_id"]: g for g in rows(cat, "annotation.ncbi_gene")}
+    genes = {g["gene_id"]: g for g in rows(cat, "annotation.ncbi__gene")}
 
     tp53 = genes["7157"]
     assert tp53["description"] == "tumor protein p53"      # OrgDb GENENAME
@@ -299,13 +299,13 @@ def test_ncbi_gene_carries_the_attributes_ensembl_cannot(cat):
 def test_gene_history_is_landed_but_not_interpreted(cat):
     """Supersession modelling is still open (#15 item 4); the tombstones are here anyway."""
     load_ncbi(cat, "2026.09")
-    hist = {h["discontinued_gene_id"]: h for h in rows(cat, "raw.ncbi_gene_history")}
+    hist = {h["discontinued_gene_id"]: h for h in rows(cat, "raw.ncbi__gene_history")}
     assert len(hist) == 3
     # a real GeneID means "merged into"; NCBI's '-' means retired with no successor
     assert hist["11337"]["gene_id"] == "7157"
     assert hist["5555"]["gene_id"] is None
     # nothing derives from it, so no annotation table mentions a discontinued id
-    assert "11337" not in {g["gene_id"] for g in rows(cat, "annotation.ncbi_gene")}
+    assert "11337" not in {g["gene_id"] for g in rows(cat, "annotation.ncbi__gene")}
 
 
 BSDB = Path(__file__).parent / "tiny_bugsigdb.csv"
@@ -339,7 +339,7 @@ def test_bugsigdb_lands_verbatim(cat):
 
 
 def rows_of(cat):
-    return cat.load_table("raw.bugsigdb_full_dump").scan().to_arrow().to_pylist()
+    return cat.load_table("raw.bugsigdb__full_dump").scan().to_arrow().to_pylist()
 
 
 def test_bugsigdb_relands_a_tag_idempotently(cat):
@@ -370,4 +370,5 @@ def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):
     empty = tmp_path / "empty.tsv"
     empty.write_text("#tax_id\tGeneID\tDiscontinued_GeneID\tDiscontinued_Symbol\tDiscontinue_Date\n")
     with pytest.raises(SystemExit, match="yielded no rows"):
-        ncbi._land(cat, "2026.09", "gene_history", url=str(empty))
+        ncbi._land(cat, "2026.09", "raw.ncbi__gene_history", str(empty),
+                   ncbi.COLUMNS["gene_history"])

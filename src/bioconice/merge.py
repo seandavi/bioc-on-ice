@@ -24,9 +24,14 @@ ponytail: recomputes the scope's complete state and overwrites the scope rather
 than writing only changed rows. PyIceberg's `upsert` derives a filter predicate
 from every join key and does not complete on five million rows. Storage is
 unaffected once snapshots expire, because history lives in the rows. Upgrade
-path if write time matters: partition by taxon and replace only touched
-partitions, or go insert-only and compute `valid_to` as a `LEAD()` window in a
-view, which is where Data Vault has moved.
+path if write time matters — first choice: DuckDB MERGE INTO pushed down
+against the Iceberg REST catalog (duckdb-iceberg supports MERGE per the DuckDB
+release notes), gated on two verifications: it must work through icegate
+against R2 Data Catalog (beta; delete-file support unverified), and the
+offline test substrate — the local sqlite PyIceberg catalog — cannot take
+DuckDB writes, so the local path stays PyIceberg regardless. Second choice:
+go insert-only and compute `valid_to` as a `LEAD()` window in a view, which
+is where Data Vault has moved.
 """
 
 import duckdb

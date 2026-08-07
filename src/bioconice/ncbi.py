@@ -20,6 +20,10 @@ taxon-only scope each ingest would retire the other's rows on alternating runs,
 silently and forever. Data Vault calls that the flip-flop effect. The same trap
 exists one level in: gene2ensembl and gene_info both produce cross-references,
 so they are merged in a single call rather than one each.
+
+`_land` and `_manifest` are the shared machinery for every NCBI dump: the
+sibling gene2* modules differ from this one only in URL, raw table, column
+spec and derivation, so they import from here rather than restating it.
 """
 
 from datetime import datetime, timezone
@@ -35,15 +39,18 @@ DATA = "https://ftp.ncbi.nlm.nih.gov/gene/DATA/"
 
 # One DuckDB column spec per dump, in file order. `auto_detect` is off against
 # these, so a column NCBI inserts or reorders fails loudly here instead of
-# quietly shifting every value one to the left.
+# quietly shifting every value one to the left. Upstream's '#tax_id' is named
+# taxon_id directly: with an explicit spec the names come from here, not the
+# header. The gene2* dumps in the sibling modules keep their own specs, because
+# each lands on its own schedule under its own manifest row.
 COLUMNS = {
     "gene2ensembl": (
-        "{'tax_id':'INTEGER','gene_id':'VARCHAR','ensembl_gene_id':'VARCHAR',"
+        "{'taxon_id':'INTEGER','gene_id':'VARCHAR','ensembl_gene_id':'VARCHAR',"
         "'rna_accession':'VARCHAR','ensembl_rna_id':'VARCHAR',"
         "'protein_accession':'VARCHAR','ensembl_protein_id':'VARCHAR'}"
     ),
     "gene_info": (
-        "{'tax_id':'INTEGER','gene_id':'VARCHAR','symbol':'VARCHAR','locus_tag':'VARCHAR',"
+        "{'taxon_id':'INTEGER','gene_id':'VARCHAR','symbol':'VARCHAR','locus_tag':'VARCHAR',"
         "'synonyms':'VARCHAR','dbxrefs':'VARCHAR','chromosome':'VARCHAR',"
         "'map_location':'VARCHAR','description':'VARCHAR','type_of_gene':'VARCHAR',"
         "'symbol_authority':'VARCHAR','full_name_authority':'VARCHAR',"
@@ -51,7 +58,7 @@ COLUMNS = {
         "'modification_date':'VARCHAR','feature_type':'VARCHAR'}"
     ),
     "gene_history": (
-        "{'tax_id':'INTEGER','gene_id':'VARCHAR','discontinued_gene_id':'VARCHAR',"
+        "{'taxon_id':'INTEGER','gene_id':'VARCHAR','discontinued_gene_id':'VARCHAR',"
         "'discontinued_symbol':'VARCHAR','discontinue_date':'VARCHAR'}"
     ),
 }
@@ -59,25 +66,25 @@ COLUMNS = {
 BATCH = 1_000_000
 
 
-def _land(cat, release, name, url=None):
-    """Stream one dump verbatim into its raw table, replacing what was there.
+def _land(cat, release, identifier, url, columns):
+    """Stream one NCBI dump verbatim into its raw table, replacing what was there.
 
-    Replace-with-the-first-batch then append, rather than one atomic overwrite,
-    because these do not fit in memory whole.
+    Shared by all four NCBI landings — a dump differs only in URL, raw table
+    and column spec. Replace-with-the-first-batch then append, rather than one
+    atomic overwrite, because these do not fit in memory whole.
 
     ponytail: a crash between batches leaves the table partly landed. Re-running
     the ingest repairs it and raw carries no validity interval to corrupt, so the
     exposure is a wrong row count until then. Upgrade path if that is not good
     enough: land into a staging table and swap.
     """
-    identifier = f"raw.ncbi_{name}"
     table = schemas.create(cat, identifier)
     arrow_schema = table.schema().as_arrow()
     con = duckdb.connect()
     reader = con.sql(f"""
-        SELECT * RENAME (tax_id AS taxon_id), '{release}' AS landed_in
-        FROM read_csv('{url or f"{DATA}{name}.gz"}', sep='\t', header=true,
-                      auto_detect=false, columns={COLUMNS[name]}, nullstr='-')
+        SELECT *, '{release}' AS landed_in
+        FROM read_csv('{url}', sep='\t', header=true,
+                      auto_detect=false, columns={columns}, nullstr='-')
     """).to_arrow_reader(BATCH)
 
     n = 0
@@ -93,35 +100,41 @@ def _land(cat, release, name, url=None):
     if not n:
         # Otherwise a bad URL silently leaves the previous landing in place and
         # reports success.
-        raise SystemExit(f"{identifier}: {url or name} yielded no rows")
+        raise SystemExit(f"{identifier}: {url} yielded no rows")
     return n
+
+
+def _manifest(cat, release, source, url, rows):
+    """Record what this release was built from — ADR-0007.
+
+    Shared by the NCBI ingests, each under its own `source` key: they land
+    independently, and one overwriting another's manifest row would misreport
+    what either was built from.
+    """
+    now = datetime.now(timezone.utc)
+    con = duckdb.connect()
+    arrow = con.sql(f"""
+        SELECT '{release}' AS release, '{source}' AS source,
+               '{now.date()}' AS source_version,
+               'retrieval_date' AS version_method,
+               '{now.isoformat(timespec="seconds")}' AS retrieved_at,
+               '{url}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
+    """).to_arrow_table()
+    _write(cat, "provenance.release", arrow,
+           And(EqualTo("release", release), EqualTo("source", source)))
 
 
 def land_raw(cat, release, urls=None):
     """Phase 1: all three NCBI Gene dumps, verbatim and unfiltered."""
     urls = urls or {}
-    counts = {f"raw.ncbi_{name}": _land(cat, release, name, urls.get(name))
+    counts = {f"raw.ncbi__{name}": _land(cat, release, f"raw.ncbi__{name}",
+                                         urls.get(name, f"{DATA}{name}.gz"), COLUMNS[name])
               for name in COLUMNS}
-    _manifest(cat, release, sum(counts.values()))
-    return counts
-
-
-def _manifest(cat, release, rows):
-    """Record what this release was built from — ADR-0007."""
-    now = datetime.now(timezone.utc)
-    con = duckdb.connect()
-    arrow = con.sql(f"""
-        SELECT '{release}' AS release, 'ncbi_gene' AS source,
-               '{now.date()}' AS source_version,
-               'retrieval_date' AS version_method,
-               '{now.isoformat(timespec="seconds")}' AS retrieved_at,
-               '{DATA}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
-    """).to_arrow_table()
     # One source, three files: `url` is the directory they came from and
     # `row_count` their total, because the manifest is keyed (release, source).
     # Per-file provenance needs a third key column — issue #8.
-    _write(cat, "provenance.release", arrow,
-           And(EqualTo("release", release), EqualTo("source", "ncbi_gene")))
+    _manifest(cat, release, "ncbi_gene", DATA, sum(counts.values()))
+    return counts
 
 
 def transform(cat, release, taxon):
@@ -132,7 +145,7 @@ def transform(cat, release, taxon):
     """
     con = duckdb.connect()
     for name in ("gene2ensembl", "gene_info"):
-        con.register(name, cat.load_table(f"raw.ncbi_{name}").scan(
+        con.register(name, cat.load_table(f"raw.ncbi__{name}").scan(
             row_filter=EqualTo("taxon_id", taxon)).to_arrow())
 
     # NEWENTRY is NCBI's placeholder for GeneRIF submissions against a gene that
@@ -186,8 +199,8 @@ def transform(cat, release, taxon):
     # gene_info and gene2ensembl both write cross-references, so they merge in
     # one call: two merges into this same scope would retire each other's rows.
     return {
-        "annotation.ncbi_gene": merge.merge(
-            cat, "annotation.ncbi_gene", gene, release, EqualTo("taxon_id", taxon)),
+        "annotation.ncbi__gene": merge.merge(
+            cat, "annotation.ncbi__gene", gene, release, EqualTo("taxon_id", taxon)),
         "annotation.identifier_mapping": merge.merge(
             cat, "annotation.identifier_mapping", mapping, release,
             And(EqualTo("taxon_id", taxon), EqualTo("source", "NCBI"))),
