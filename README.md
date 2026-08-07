@@ -40,13 +40,28 @@ own right rather than a function of what we currently derive:
 | `annotation.ncbi_gene` | 193,809 | 112,257 |
 | `annotation.identifier_mapping` (NCBI-asserted) | 455,272 | 391,608 |
 
-Landing all three dumps and deriving both species takes 2m56s end to end and
-peaks at 2.5 GB of memory — the files are streamed in record batches rather than
-built as one Arrow table. **Verified against a local warehouse, not yet pushed
-to R2**, so the live catalog is a release behind on the NCBI tables.
+Landing all three dumps and deriving both species takes 2m56s into a local
+warehouse and 9m52s into R2, peaking at 2.7 GB of memory — the files are streamed
+in record batches rather than built as one Arrow table, so ingest does not need a
+large machine.
 
-Not yet: provenance rows, sequence lengths, the icegate deployment, and
-everything in Milestone 2.
+Both sources coexist in `annotation.identifier_mapping` without retiring each
+other: 121,255 Ensembl-asserted rows and 846,880 NCBI-asserted rows, live
+simultaneously. That is the merge scope naming its writer, verified at scale.
+
+Serving is live behind icegate at
+`https://icegate-bioconice.seandavi.workers.dev`, key-only — anonymous read stays
+disabled until biocOnIce has its own Cloudflare account
+([ADR-0009](docs/adr/0009-biocOnIce-moves-accounts-not-the-logs.md)).
+
+Not yet: the `ensembl` row of the release manifest (see below), sequence lengths,
+and everything in Milestone 2.
+
+> **Known gap.** `provenance.release` currently holds only the `ncbi_gene` row.
+> The manifest is written by each source's `land_raw`, and R2's Ensembl data was
+> landed before [ADR-0007](docs/adr/0007-release-manifest.md) existed, so release
+> 2026.08 is not yet reproducible from the manifest alone. Re-landing the GTFs
+> fixes it; making the manifest writable without a re-land would be better.
 
 ## Query it
 
