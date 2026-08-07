@@ -3,7 +3,11 @@
 **Status**: Accepted — the trust-domain principle below stands and is unchanged.
 The *choice of which side moves* (logs out, biocOnIce stays) is superseded by
 [ADR-0009](0009-biocOnIce-moves-accounts-not-the-logs.md), which argues the
-growth-versus-migration axis was the wrong one. Read both.
+growth-versus-migration axis was the wrong one. Read both. The Note's claim
+that bucket-scoped storage tokens cannot combine with catalog access was true
+when written and stopped being true on 2026-07-09 — see
+[ADR-0011](0011-bucket-scoped-vending-tokens.md), which followed the Note's
+own instruction to re-check the permission groups.
 
 ## Context
 
