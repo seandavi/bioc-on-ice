@@ -1,6 +1,9 @@
 # 0009 — biocOnIce moves accounts, not the logs
 
-**Status**: Accepted. Revisits the *direction* chosen in
+**Status**: Superseded by [ADR-0010](0010-logs-leave-cloudflare.md), which
+reverses the direction again: this ADR priced the new account as three secrets,
+but account creation turned out to carry a security review, an accounting
+workflow, and a permanent invoice stream. Revisits the *direction* chosen in
 [ADR-0005](0005-cloudflare-account-is-the-trust-domain.md), not its principle.
 
 ## Context
