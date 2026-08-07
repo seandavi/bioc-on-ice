@@ -26,10 +26,12 @@ sibling gene2* modules differ from this one only in URL, raw table, column
 spec and derivation, so they import from here rather than restating it.
 """
 
+import time
 from datetime import datetime, timezone
 
 import duckdb
 import pyarrow as pa
+from pyiceberg.exceptions import RESTError
 from pyiceberg.expressions import And, EqualTo
 
 from . import merge, schemas
@@ -64,16 +66,42 @@ COLUMNS = {
 }
 
 BATCH = 1_000_000
+# Rows accumulated per Iceberg commit. R2 Data Catalog rate-limits commits
+# per table ("429: too many commits to this table or view"), so committing
+# every read batch — 82 commits for gene2pubmed — exhausts the budget on
+# large dumps. Memory stays bounded: 5M rows of the widest dump peaked well
+# under the 2.7 GB the 1M-batch pipeline measured end to end.
+ROWS_PER_COMMIT = 5_000_000
+
+
+def _commit(table, arrow, first):
+    """One overwrite-or-append, riding out the catalog's commit rate limit.
+
+    pyiceberg's own retry gives up within seconds; the 429 window is longer
+    than that, so wait it out here rather than dying mid-landing.
+    """
+    for attempt in range(10):
+        try:
+            (table.overwrite if first else table.append)(arrow)
+            return
+        except RESTError as err:
+            if "429" not in str(err) and "TooManyRequests" not in type(err).__name__:
+                raise
+            time.sleep(65)
+    raise RuntimeError(f"commit still rate-limited after {attempt + 1} waits")
 
 
 def _land(cat, release, identifier, url, columns):
     """Stream one NCBI dump verbatim into its raw table, replacing what was there.
 
     Shared by all four NCBI landings — a dump differs only in URL, raw table
-    and column spec. Replace-with-the-first-batch then append, rather than one
-    atomic overwrite, because these do not fit in memory whole.
+    and column spec. Replace-with-the-first-chunk then append, rather than one
+    atomic overwrite, because these do not fit in memory whole. Reads in
+    BATCH-row record batches but commits only every ROWS_PER_COMMIT rows —
+    reading is memory-bound, committing is rate-limited, and the two limits
+    want different granularities.
 
-    ponytail: a crash between batches leaves the table partly landed. Re-running
+    ponytail: a crash between commits leaves the table partly landed. Re-running
     the ingest repairs it and raw carries no validity interval to corrupt, so the
     exposure is a wrong row count until then. Upgrade path if that is not good
     enough: land into a staging table and swap.
@@ -88,15 +116,18 @@ def _land(cat, release, identifier, url, columns):
     """).to_arrow_reader(BATCH)
 
     n = 0
+    pending = []
     for batch in reader:
         # Casting to the declared schema is the check: a null in an identifier
         # field fails here rather than landing quietly.
-        arrow = pa.Table.from_batches([batch]).cast(arrow_schema)
-        if n:
-            table.append(arrow)
-        else:
-            table.overwrite(arrow)
-        n += arrow.num_rows
+        pending.append(pa.Table.from_batches([batch]).cast(arrow_schema))
+        if sum(t.num_rows for t in pending) >= ROWS_PER_COMMIT:
+            _commit(table, pa.concat_tables(pending), first=not n)
+            n += sum(t.num_rows for t in pending)
+            pending = []
+    if pending:
+        _commit(table, pa.concat_tables(pending), first=not n)
+        n += sum(t.num_rows for t in pending)
     if not n:
         # Otherwise a bad URL silently leaves the previous landing in place and
         # reports success.
