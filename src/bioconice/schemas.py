@@ -32,6 +32,11 @@ VALID_TO = (
 )
 TAXON = "NCBI taxonomy id of the organism, e.g. 9606 for human. Part of the merge key."
 COORD = "1-based-inclusive"
+ALPHA_DIVERSITY = (
+    "Direction this alpha-diversity metric moved in group 1: 'increased', 'decreased' "
+    "or 'unchanged'. NOT a diversity value — there is no number here to plot. NULL "
+    "where the study did not report the metric, which is the majority."
+)
 
 
 @dataclass(frozen=True)
@@ -208,6 +213,122 @@ TABLES = {
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.discontinued_gene_id.prefix": "ncbigene"},
+    ),
+    "raw.bugsigdb_full_dump": TableDef(
+        schema=Schema(
+            NestedField(1, "bsdb_id", StringType(), required=True,
+                        doc="BugSigDB signature id, e.g. 'bsdb:83/1/1'. Compound: "
+                            "study/experiment/signature. Unique per row (7,425 of 7,425 "
+                            "distinct at v1.3.1), so it is the natural key even though raw "
+                            "declares none."),
+            NestedField(2, "study", StringType(), doc="Wiki page name of the study, e.g. 'Study 83'."),
+            NestedField(3, "study_design", StringType(),
+                        doc="e.g. case-control, cross-sectional observational, laboratory "
+                            "experiment, prospective cohort."),
+            NestedField(4, "pmid", StringType(), doc="PubMed id of the source publication."),
+            NestedField(5, "doi", StringType(), doc="DOI of the source publication."),
+            NestedField(6, "url", StringType(), doc="Publication URL as curated."),
+            NestedField(7, "authors_list", StringType(), doc="Author list of the publication, free text."),
+            NestedField(8, "title", StringType(), doc="Title of the publication."),
+            NestedField(9, "journal", StringType(), doc="Journal name."),
+            NestedField(10, "year", StringType(), doc="Publication year. String, not an integer, "
+                                                      "because raw is landed unparsed."),
+            NestedField(11, "keywords", StringType(), doc="Curator keywords; frequently absent."),
+            NestedField(12, "experiment", StringType(),
+                        doc="Wiki page name of the experiment within the study, e.g. 'Experiment 1'. "
+                            "One study has many experiments; one experiment has many signatures."),
+            NestedField(13, "location_of_subjects", StringType(), doc="Geographic origin of subjects."),
+            NestedField(14, "host_species", StringType(), doc="Host organism, e.g. Homo sapiens. Not "
+                                                              "the microbes — those are the signature."),
+            NestedField(15, "body_site", StringType(), doc="Sampled body site as curated text."),
+            NestedField(16, "uberon_id", StringType(), doc="UBERON CURIE for body_site, e.g. UBERON:0001988."),
+            NestedField(17, "condition", StringType(), doc="Studied condition as curated text."),
+            NestedField(18, "efo_id", StringType(), doc="EFO CURIE for condition, e.g. EFO:0001073."),
+            NestedField(19, "group_0_name", StringType(), doc="Name of the control/reference group."),
+            NestedField(20, "group_1_name", StringType(), doc="Name of the group the signature describes."),
+            NestedField(21, "group_1_definition", StringType(), doc="Free-text inclusion criteria for group 1."),
+            NestedField(22, "group_0_sample_size", StringType(), doc="Subjects in group 0. String: not always numeric."),
+            NestedField(23, "group_1_sample_size", StringType(), doc="Subjects in group 1. String: not always numeric."),
+            NestedField(24, "antibiotics_exclusion", StringType(),
+                        doc="Antibiotic washout required for inclusion, e.g. '3 months'."),
+            NestedField(25, "sequencing_type", StringType(),
+                        doc="Assay: 16S, WMS (whole metagenome shotgun), 'ITS / ITS2', PCR."),
+            NestedField(26, "variable_region_16s", StringType(),
+                        doc="16S hypervariable region, upstream column '16S variable region'. Digits "
+                            "are CONCATENATED region numbers, not a number: '34' means V3-V4, '4' "
+                            "means V4, '12' means V1-V2. Do not cast this to an integer."),
+            NestedField(27, "sequencing_platform", StringType(), doc="Instrument/platform reported."),
+            NestedField(28, "data_transformation", StringType(),
+                        doc="e.g. relative abundances, raw counts, centered log-ratio."),
+            NestedField(29, "statistical_test", StringType(), doc="Test used for differential abundance."),
+            NestedField(30, "significance_threshold", StringType(), doc="Alpha, e.g. '0.05'. String, unparsed."),
+            NestedField(31, "mht_correction", StringType(),
+                        doc="Whether multiple-hypothesis correction was applied: 'TRUE'/'FALSE' as "
+                            "strings, since raw is unparsed."),
+            NestedField(32, "lda_score_above", StringType(), doc="LEfSe LDA score cutoff where one was used."),
+            NestedField(33, "matched_on", StringType(),
+                        doc="Comma-separated variables the groups were matched on, e.g. 'age,sex'."),
+            NestedField(34, "confounders_controlled_for", StringType(), doc="Comma-separated confounders adjusted for."),
+            NestedField(35, "pielou", StringType(), doc=ALPHA_DIVERSITY),
+            NestedField(36, "shannon", StringType(), doc=ALPHA_DIVERSITY),
+            NestedField(37, "chao1", StringType(), doc=ALPHA_DIVERSITY),
+            NestedField(38, "simpson", StringType(), doc=ALPHA_DIVERSITY),
+            NestedField(39, "inverse_simpson", StringType(), doc=ALPHA_DIVERSITY),
+            NestedField(40, "richness", StringType(), doc=ALPHA_DIVERSITY),
+            NestedField(41, "signature_page_name", StringType(),
+                        doc="Wiki page name of the signature within its experiment, e.g. 'Signature 1'."),
+            NestedField(42, "source_in_paper", StringType(),
+                        doc="Where in the publication the signature was read from, e.g. 'Table 2', "
+                            "'Figure 3'. Upstream column name is 'Source'; renamed here because "
+                            "`source` elsewhere in this catalog means the asserting authority."),
+            NestedField(43, "curated_date", StringType(),
+                        doc="Date of curation as published, e.g. '10 January 2021'. Human-readable, "
+                            "not ISO 8601 — parsing it is a transform concern."),
+            NestedField(44, "curator", StringType(), doc="Wiki username of the curator."),
+            NestedField(45, "revision_editor", StringType(), doc="Wiki username of the last editor."),
+            NestedField(46, "description", StringType(), doc="Curator's description of the signature."),
+            NestedField(47, "abundance_in_group_1", StringType(),
+                        doc="Direction of the signature: 'increased' or 'decreased' in group 1 "
+                            "relative to group 0. This is what makes a signature signed — the same "
+                            "taxa increased and decreased are different signatures."),
+            NestedField(48, "metaphlan_taxon_names", StringType(),
+                        doc="Signature members as MetaPhlAn lineages. TWO levels of nesting, kept "
+                            "verbatim: ';' separates members, '|' separates ranks within one "
+                            "member's lineage, with k__/p__/c__/o__/f__/g__/s__ rank prefixes. "
+                            "Splitting on '|' alone silently turns one taxon into seven."),
+            NestedField(49, "ncbi_taxonomy_ids", StringType(),
+                        doc="Signature members as NCBI taxon ids, same two-level nesting as "
+                            "metaphlan_taxon_names: ';' between members, '|' up each member's "
+                            "lineage from kingdom to the curated rank. The LAST element of each "
+                            "'|' group is the taxon actually reported; the rest are its lineage."),
+            NestedField(50, "state", StringType(),
+                        doc="Curation state. Only 'Complete' appears: the export filters incomplete "
+                            "records upstream, so this is not a usable filter here."),
+            NestedField(51, "reviewer", StringType(), doc="Wiki username of the reviewer."),
+            NestedField(52, "export_timestamp", StringType(),
+                        doc="The export's own self-declared timestamp, taken from the banner line "
+                            "of the CSV, e.g. '2026-04-24_00:41_UTC'. In-band provenance: it is "
+                            "the only version marker when landing from the hourly devel export, "
+                            "which carries no tag."),
+            NestedField(53, "bugsigdb_version", StringType(), required=True,
+                        doc="The BugSigDBExports release tag this file came from, e.g. 'v1.3.1'. "
+                            "Raw is replaced wholesale per value of this column."),
+            NestedField(54, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="BugSigDB's full_dump.csv landed verbatim: one row per curated microbial signature, "
+                "flattened across study, experiment and signature. Every column is a string and "
+                "nothing is split, per the raw contract — in particular the two member-list columns "
+                "keep their ';' and '|' nesting. BugSigDB's 'NA' placeholder is read as NULL, the "
+                "same treatment NCBI's '-' gets. Landed from a release TAG rather than the hourly "
+                "devel export, so it is immutable and citable (each release has a Zenodo DOI). "
+                "Licence CC BY 4.0, declared both in .zenodo.json and in the file's own banner line.",
+        properties={"bioc.column.pmid.prefix": "pubmed",
+                    "bioc.column.doi.prefix": "doi",
+                    "bioc.column.efo_id.prefix": "efo",
+                    "bioc.column.uberon_id.prefix": "uberon",
+                    "bioc.column.ncbi_taxonomy_ids.prefix": "ncbitaxon",
+                    "bioc.license": "CC-BY-4.0"},
     ),
     "raw.ensembl_gtf": TableDef(
         schema=Schema(

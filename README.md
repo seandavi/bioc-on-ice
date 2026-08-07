@@ -49,6 +49,16 @@ Both sources coexist in `annotation.identifier_mapping` without retiring each
 other: 121,255 Ensembl-asserted rows and 846,880 NCBI-asserted rows, live
 simultaneously. That is the merge scope naming its writer, verified at scale.
 
+**BugSigDB** is landed but not yet transformed: `raw.bugsigdb_full_dump`, 7,425
+curated microbial signatures at release tag `v1.3.1`, CC BY 4.0. Landed from a
+tag rather than the hourly `devel` export, so it is immutable and citable — each
+release carries a Zenodo DOI. Turning the two nested member-list columns into a
+signature↔taxon table is the next step and wants NCBI Taxonomy (#18) first.
+
+The release manifest now carries both version axes at once, which is the point of
+[ADR-0007](docs/adr/0007-release-manifest.md): `bugsigdb` resolves to `v1.3.1` by
+`release_number`, `ncbi_gene` to a date by `retrieval_date`.
+
 Serving is live behind icegate at
 `https://icegate-bioconice.seandavi.workers.dev`, key-only — anonymous read stays
 disabled until biocOnIce has its own Cloudflare account
