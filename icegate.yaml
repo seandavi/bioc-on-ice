@@ -15,13 +15,23 @@ cors:
     - "*" # DuckDB-WASM in the browser; R2 serves no CORS headers of its own
 
 authentication:
-  # Still false, but the reason changed (ADR-0010/0011 in this repo): the
-  # IP-bearing logs left for GCS in #31, and the backend now uses a
-  # bucket-scoped read-only vending token, verified 2026-08-07 to contain
-  # vended credentials to the bioconice bucket, read-only. Flip to true once
-  # the post-deploy gateway verification in icegate#34 passes.
+  # SPEC C4: anonymous public read, live since 2026-08-07. Safe in a shared
+  # account because vended credentials inherit the bucket-scoped read-only
+  # backend token (ADR-0011) — verified at backend and gateway: reads of
+  # bioconice allowed; writes, foreign buckets, and catalog mutations all
+  # refused. Namespaces and permissions MUST stay explicit: absent lists
+  # default to empty, which grants nothing.
   anonymous:
-    enabled: false
+    enabled: true
+    namespaces:
+      - provenance
+      - raw
+      - reference
+      - annotation
+      - ontology
+      - clinical
+    permissions:
+      - read
 
   api_keys:
     enabled: true

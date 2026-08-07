@@ -60,9 +60,11 @@ The release manifest now carries both version axes at once, which is the point o
 `release_number`, `ncbi_gene` to a date by `retrieval_date`.
 
 Serving is live behind icegate at
-`https://icegate-bioconice.seandavi.workers.dev`, key-only — anonymous read stays
-disabled until biocOnIce has its own Cloudflare account
-([ADR-0009](docs/adr/0009-biocOnIce-moves-accounts-not-the-logs.md)).
+`https://icegate-bioconice.seandavi.workers.dev` with **anonymous public
+read** — no token needed. Vended credentials are contained to this catalog's
+bucket, read-only, by a bucket-scoped backend token
+([ADR-0011](docs/adr/0011-bucket-scoped-vending-tokens.md)). Write access
+remains key-only.
 
 Not yet: the `ensembl` row of the release manifest (see below), sequence lengths,
 and everything in Milestone 2.
@@ -75,12 +77,14 @@ and everything in Milestone 2.
 
 ## Query it
 
+No account, no token — anonymous read is public:
+
 ```sql
 INSTALL iceberg; LOAD iceberg;
-CREATE SECRET r2cat (TYPE ICEBERG, TOKEN getenv('CF_API_TOKEN'));
-ATTACH '55bf7202fe14474e57a300f56a652f64_bioconice' AS bioc (
+ATTACH 'bioconice' AS bioc (
     TYPE ICEBERG,
-    ENDPOINT 'https://catalog.cloudflarestorage.com/55bf7202fe14474e57a300f56a652f64/bioconice'
+    ENDPOINT 'https://icegate-bioconice.seandavi.workers.dev',
+    AUTHORIZATION_TYPE 'none'
 );
 ```
 
