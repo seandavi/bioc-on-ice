@@ -26,15 +26,32 @@ authentication:
 
   api_keys:
     enabled: true
+
+    # Ingest key. The only principal that may write.
     seandavi:
       sha256: c3cc27c7f822a41fb7c6f05eb00b4d48ffa1c85c775f0ad9a120499c25ee907d
       namespaces:
+        - provenance
         - raw
         - reference
         - annotation
       permissions:
         - read
         - write
+
+    # Shared evaluation key for the Bioconductor team, read-only. Separate from
+    # the ingest key on purpose: a key handed to several people must not be able
+    # to write, and it has to be revocable without breaking ingest. Rotate by
+    # replacing this digest — the plaintext is not recoverable from it.
+    bioconductor:
+      sha256: 41fb922a6ea918a1db39312bf0b93b4153aa65467cc7e824be0957b6e30b4ddf
+      namespaces:
+        - provenance
+        - raw
+        - reference
+        - annotation
+      permissions:
+        - read
 
 catalogs:
   bioconice:
