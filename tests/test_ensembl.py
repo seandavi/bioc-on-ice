@@ -43,13 +43,19 @@ def test_derived_tables(cat):
 
     genes = rows(cat, "annotation.gene")
     assert len(genes) == 2
+    # stacked table: every row names its asserting provider
+    assert {g["source"] for g in genes} == {"ENSEMBL"}
     tp53 = next(g for g in genes if g["symbol"] == "TP53")
     assert (tp53["gene_id"], tp53["version"]) == ("ENSG00000141510", "18")
+    # the provider's own curation tag is a separate column, not `source`
+    assert tp53["curation_source"] == "ensembl_havana"
     assert next(g for g in genes if g["gene_id"] == "ENSG00000288825")["symbol"] is None
 
     tx = rows(cat, "annotation.transcript")
     assert len(tx) == 3
     assert sum(t["canonical"] for t in tx) == 2
+    assert {t["source"] for t in tx} == {"ENSEMBL"}
+    assert {g["source"] for g in rows(cat, "reference.genome")} == {"ENSEMBL"}
 
     exons = sorted(rows(cat, "annotation.exon", row_filter="transcript_id = 'ENST00000269305'"),
                    key=lambda e: e["rank"])
@@ -239,6 +245,47 @@ def test_two_sources_share_a_table_without_retiring_each_other(cat):
     man = {m["source"]: m for m in rows(cat, "provenance.release")}
     assert man["ensembl"]["version_method"] == "release_number"
     assert man["ncbi_gene"]["version_method"] == "retrieval_date"
+
+
+def test_stacked_gene_table_writers_do_not_retire_each_other(cat):
+    """annotation.gene is stacked by `source` (issue #55): a second annotation
+    provider in the SAME taxon is new rows, and with the writer named in each
+    merge scope neither provider's ingest retires the other's rows."""
+    import pyarrow as pa
+    from pyiceberg.expressions import And, EqualTo
+    from bioconice import merge
+
+    load(cat, HUMAN)                                   # ENSEMBL writes 2 genes
+    gene = cat.load_table("annotation.gene")
+    cols = [f for f in gene.schema().as_arrow()
+            if f.name not in ("valid_from", "valid_to")]
+    refseq = pa.Table.from_pylist([
+        {"gene_id": "GeneID:7157", "taxon_id": 9606, "source": "REFSEQ",
+         "symbol": "TP53", "gene_type": "protein-coding"},
+        {"gene_id": "GeneID:100302278", "taxon_id": 9606, "source": "REFSEQ",
+         "symbol": "MIR1244-1", "gene_type": "ncRNA"},
+    ], schema=pa.schema(cols))
+    scope = And(EqualTo("taxon_id", 9606), EqualTo("source", "REFSEQ"))
+    counts = merge.merge(cat, "annotation.gene", refseq, "2026.09", scope)
+    assert counts["new"] == 2 and counts.get("retired", 0) == 0
+
+    def live_by_source():
+        out = {}
+        for g in rows(cat, "annotation.gene", row_filter="valid_to IS NULL"):
+            out.setdefault(g["source"], []).append(g["gene_id"])
+        return out
+
+    live = live_by_source()
+    assert sorted(live) == ["ENSEMBL", "REFSEQ"]
+    assert len(live["ENSEMBL"]) == 2 and len(live["REFSEQ"]) == 2
+
+    # re-running either writer leaves the other's live rows untouched
+    counts = ensembl.transform(cat, "2026.10", HUMAN, ENS)
+    assert counts["annotation.gene"]["written"] == 0
+    assert len(live_by_source()["REFSEQ"]) == 2
+    counts = merge.merge(cat, "annotation.gene", refseq, "2026.11", scope)
+    assert counts["written"] == 0
+    assert len(live_by_source()["ENSEMBL"]) == 2
 
 
 def test_gene_info_and_gene2ensembl_merge_together(cat):

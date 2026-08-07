@@ -22,7 +22,11 @@ Ensembl 116 for human and mouse is live on Cloudflare R2:
 | `annotation.exon` | 5,087,789 | 3,763,037 |
 | `annotation.identifier_mapping` | 43,458 | 77,797 |
 
-Ingest takes under a minute per species.
+Ingest takes under a minute per species. The genome-feature tables
+(`annotation.gene`, `annotation.transcript`, `annotation.exon`,
+`reference.genome`) are stacked multi-writer tables: every row names its
+asserting provider in a `source` column — `'ENSEMBL'` today — so RefSeq or
+GENCODE later land as new rows, not new tables.
 
 NCBI Gene adds the attributes a GTF cannot carry — descriptions, aliases,
 cytogenetic bands, Entrez cross-references. Its raw tables are landed **whole**,
@@ -94,9 +98,10 @@ coding bounds:
 ```sql
 SELECT e.rank, e.start, e.end, e.strand, e.cds_start, e.cds_end, e.cds_phase
 FROM bioc.annotation.gene g
-JOIN bioc.annotation.transcript t USING (gene_id, taxon_id)
-JOIN bioc.annotation.exon e USING (transcript_id, taxon_id)
-WHERE g.symbol = 'TP53' AND g.taxon_id = 9606 AND t.canonical
+JOIN bioc.annotation.transcript t USING (gene_id, taxon_id, source)
+JOIN bioc.annotation.exon e USING (transcript_id, taxon_id, source)
+WHERE g.symbol = 'TP53' AND g.taxon_id = 9606 AND g.source = 'ENSEMBL'
+  AND t.canonical
 ORDER BY e.rank;
 ```
 
@@ -135,7 +140,11 @@ creating one. Coordinates are 1-based and end-inclusive, following Ensembl and
 GTF, **not** the 0-based half-open convention of BED and UCSC. UTRs are derived
 from CDS bounds rather than stored, so a transcript with no CDS has no UTRs
 instead of empty ones. Every column carries an Iceberg `doc`, which reaches R
-and Python clients as Arrow field metadata.
+and Python clients as Arrow field metadata. Plain-named tables in a derived
+namespace (`annotation.gene`, `annotation.identifier_mapping`) are
+multi-writer: rows are discriminated — and merge-scoped — by `source`, the
+asserting provider; single-source views carry a `source__` prefix
+(`annotation.ncbi__gene`).
 
 A biocOnIce release is a point-in-time claim across the whole catalog,
 expressed by the `first_seen` / `retired_in` columns rather than by Iceberg

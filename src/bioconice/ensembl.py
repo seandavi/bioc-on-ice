@@ -11,6 +11,11 @@ functions rather than one pipeline. An Ensembl release is immutable, so raw is
 replaced wholesale per (taxon_id, ensembl_release) and is idempotent under
 re-ingest. The derived tables have real keys and a maintained current state, so
 they are the ones that carry valid_from/valid_to and merge.
+
+The derived genome-feature tables are stacked multi-writer tables discriminated
+by a `source` column; this module is the SOURCE = 'ENSEMBL' writer, stamping
+that into every derived row and into every merge scope. See ncbi.py's module
+docstring for why a scope that fails to name its writer flip-flops.
 """
 
 import re
@@ -23,6 +28,11 @@ from pyiceberg.expressions import And, EqualTo
 from . import merge, schemas
 
 FTP = "https://ftp.ensembl.org/pub/release-{release}"
+
+# This writer's name in the stacked tables' controlled vocabulary ('ENSEMBL',
+# 'REFSEQ', 'GENCODE', ...): the value of every derived row's `source` column
+# and of the writer leg of every merge scope.
+SOURCE = "ENSEMBL"
 
 GTF_COLUMNS = (
     "{'seqname':'VARCHAR','source':'VARCHAR','feature':'VARCHAR',"
@@ -99,18 +109,22 @@ def _manifest(cat, release, ensembl_release, url, rows):
            And(EqualTo("release", release), EqualTo("source", "ensembl")))
 
 
-# Cross-source tables: a merge must only be able to retire rows it wrote, so the
-# scope names the writer as well as the species. Without this, Ensembl and NCBI
-# retire each other's cross-references on alternating ingests — silently, and
-# forever, because the "current" view is never empty.
-WRITER = {"reference.genome": EqualTo("provider", "Ensembl"),
+# Every derived table is multi-writer: a merge must only be able to retire rows
+# it wrote, so the scope names the writer as well as the species. Without this,
+# a second writer into the same taxon — NCBI in identifier_mapping today, RefSeq
+# or GENCODE in the genome-feature tables tomorrow — and Ensembl retire each
+# other's rows on alternating ingests: silently, and forever, because the
+# "current" view is never empty. identifier_mapping predates the controlled
+# vocabulary and keeps its 'Ensembl' spelling; migrating it is a data op.
+WRITER = {"reference.genome": EqualTo("source", SOURCE),
+          "annotation.gene": EqualTo("source", SOURCE),
+          "annotation.transcript": EqualTo("source", SOURCE),
+          "annotation.exon": EqualTo("source", SOURCE),
           "annotation.identifier_mapping": EqualTo("source", "Ensembl")}
 
 
 def _scope(identifier, taxon):
-    taxon_only = EqualTo("taxon_id", taxon)
-    writer = WRITER.get(identifier)
-    return And(taxon_only, writer) if writer else taxon_only
+    return And(EqualTo("taxon_id", taxon), WRITER[identifier])
 
 
 def transform(cat, release, info, ensembl_release):
@@ -146,22 +160,25 @@ def transform(cat, release, info, ensembl_release):
     out = {
         "reference.genome": q(f"""
             SELECT '{info['accession']}' AS genome_id, {taxon}::INTEGER AS taxon_id,
-                   'Ensembl' AS provider, '{info['assembly']}' AS assembly_name
+                   '{SOURCE}' AS source, '{info['assembly']}' AS assembly_name
         """),
         "annotation.gene": q(f"""
-            SELECT gene_id, {taxon}::INTEGER AS taxon_id, gene_version AS version,
-                   gene_name AS symbol, gene_biotype AS gene_type, gene_source AS source
+            SELECT gene_id, {taxon}::INTEGER AS taxon_id, '{SOURCE}' AS source,
+                   gene_version AS version, gene_name AS symbol,
+                   gene_biotype AS gene_type, gene_source AS curation_source
             FROM feat WHERE feature = 'gene'
         """),
         "annotation.transcript": q(f"""
-            SELECT transcript_id, {taxon}::INTEGER AS taxon_id, gene_id,
-                   transcript_version AS version, transcript_biotype AS biotype, canonical
+            SELECT transcript_id, {taxon}::INTEGER AS taxon_id, '{SOURCE}' AS source,
+                   gene_id, transcript_version AS version,
+                   transcript_biotype AS biotype, canonical
             FROM feat WHERE feature = 'transcript'
         """),
         # A CDS line carries the same transcript_id and exon_number as the exon it
         # lies in, which is what lets coding bounds and phase ride on the exon row.
         "annotation.exon": q(f"""
             SELECT e.exon_id, e.transcript_id, {taxon}::INTEGER AS taxon_id,
+                   '{SOURCE}' AS source,
                    e.seqname AS sequence_name, e."start", e."end", e.strand,
                    e.exon_number::INTEGER AS rank,
                    c."start" AS cds_start, c."end" AS cds_end,
