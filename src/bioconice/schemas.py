@@ -536,6 +536,44 @@ TABLES = {
                 "can change, so it is only ever asserted or withdrawn, never updated.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
+    "raw.ncbi_gene2pubmed": TableDef(
+        schema=Schema(
+            NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(2, "gene_id", StringType(), required=True, doc="NCBI Entrez GeneID."),
+            NestedField(3, "pubmed_id", StringType(), required=True,
+                        doc="PubMed id (PMID) of a publication NCBI links to this gene."),
+            NestedField(4, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="NCBI gene2pubmed landed verbatim and whole — every organism, ~40M rows, not "
+                "only the taxa we derive annotation for, since a third species should not cost "
+                "a re-fetch. Regenerated nightly upstream, so it has no release: the retrieval "
+                "date is the version.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.column.pubmed_id.prefix": "pubmed"},
+    ),
+    "annotation.gene_pubmed": TableDef(
+        schema=Schema(
+            NestedField(1, "gene_id", StringType(), required=True,
+                        doc="NCBI Entrez GeneID, e.g. 7157. Part of the merge key."),
+            NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(3, "pubmed_id", StringType(), required=True,
+                        doc="PubMed id (PMID) of a publication discussing this gene. This is "
+                            "the column OrgDb serves as PMID."),
+            NestedField(4, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(5, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("gene_id", "taxon_id", "pubmed_id"),
+        comment="Gene-to-publication links as NCBI Gene curates them, keyed by Entrez GeneID. "
+                "One row per (gene, publication): a gene has many publications and a "
+                "publication many genes. The whole tuple is the key — a link has no "
+                "attributes that can change, so it is only ever asserted or withdrawn, "
+                "never updated.",
+        properties={"bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.pubmed_id.prefix": "pubmed"},
+    ),
 }
 
 

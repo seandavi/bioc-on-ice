@@ -1,6 +1,7 @@
 import argparse
 
 from . import bugsigdb, catalog, ensembl, ncbi
+from . import ncbi_pubmed
 
 
 def main():
@@ -25,6 +26,11 @@ def main():
                     help="BugSigDBExports release tag, e.g. v1.3.1. Tags are immutable; "
                          "the devel branch re-exports hourly and is not")
 
+    npm = sub.add_parser("ingest-ncbi-pubmed", help="land NCBI gene2pubmed whole, then derive")
+    npm.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
+    npm.add_argument("--taxa", default="9606,10090",
+                     help="taxa to DERIVE annotation for; raw is always landed whole")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -45,6 +51,11 @@ def main():
         print(f"{'raw.bugsigdb_full_dump':40} {n:>10,} rows  ({args.version})")
     elif args.cmd == "ingest-ncbi":
         counts = ncbi.ingest(cat, args.release, [int(t) for t in args.taxa.split(",")])
+        for name, c in counts.items():
+            print(f"{name:40} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged"
+                  if isinstance(c, dict) else f"{name:40} {c:>10,} rows")
+    elif args.cmd == "ingest-ncbi-pubmed":
+        counts = ncbi_pubmed.ingest(cat, args.release, [int(t) for t in args.taxa.split(",")])
         for name, c in counts.items():
             print(f"{name:40} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged"
                   if isinstance(c, dict) else f"{name:40} {c:>10,} rows")
