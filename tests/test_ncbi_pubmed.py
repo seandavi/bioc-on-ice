@@ -43,10 +43,10 @@ def test_raw_is_landed_whole_and_only_transform_is_scoped(cat, g2p):
     """Raw is not a function of what we derive: mouse lands even deriving only human."""
     n = ncbi_pubmed.land_raw(cat, REL, url=g2p)
     assert n == 5  # verbatim: the duplicate link lands too
-    assert {r["taxon_id"] for r in rows(cat, "raw.ncbi_gene2pubmed")} == {9606, 10090}
+    assert {r["taxon_id"] for r in rows(cat, "raw.ncbi__gene2pubmed")} == {9606, 10090}
 
     ncbi_pubmed.transform(cat, REL, 9606)
-    links = rows(cat, "annotation.gene_pubmed")
+    links = rows(cat, "annotation.ncbi__gene_pubmed")
     assert {l["taxon_id"] for l in links} == {9606}
     # DISTINCT: the duplicated (7157, 2000000) link is one row, not a merge error
     assert sorted((l["gene_id"], l["pubmed_id"]) for l in links) == [
@@ -58,12 +58,12 @@ def test_rerun_is_idempotent_and_taxa_are_independent(cat, g2p):
     ncbi_pubmed.ingest(cat, REL, [9606], url=g2p)
     # same data, later release: carried forward, not a churn of retire-and-reassert
     counts = ncbi_pubmed.ingest(cat, "2026.09", [9606], url=g2p)
-    c = counts["annotation.gene_pubmed [9606]"]
+    c = counts["annotation.ncbi__gene_pubmed [9606]"]
     assert c["written"] == 0 and c["unchanged"] == 3
 
     # deriving mouse later needs no re-fetch, and does not disturb human
     ncbi_pubmed.transform(cat, "2026.10", 10090)
-    live = rows(cat, "annotation.gene_pubmed", row_filter="valid_to IS NULL")
+    live = rows(cat, "annotation.ncbi__gene_pubmed", row_filter="valid_to IS NULL")
     assert {l["taxon_id"] for l in live} == {9606, 10090}
     assert {l["valid_from"] for l in live if l["taxon_id"] == 9606} == {REL}
 
@@ -75,7 +75,7 @@ def test_manifest_and_column_docs(cat, g2p):
     assert m["row_count"] == 5 and m["retrieved_at"].startswith("20")
 
     # SPEC.md section B1: a table whose columns lack doc does not ship
-    for identifier in ("raw.ncbi_gene2pubmed", "annotation.gene_pubmed"):
+    for identifier in ("raw.ncbi__gene2pubmed", "annotation.ncbi__gene_pubmed"):
         table = cat.load_table(identifier)
         assert table.properties.get("comment"), identifier
         for f in table.schema().fields:

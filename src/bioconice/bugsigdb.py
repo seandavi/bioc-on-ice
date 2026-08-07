@@ -143,7 +143,7 @@ def land_raw(cat, release, version=DEFAULT_VERSION, url=None):
                       delim=',', quote='"', escape='"')
     """).to_arrow_table()
 
-    n = _write(cat, "raw.bugsigdb_full_dump", arrow, EqualTo("bugsigdb_version", version))
+    n = _write(cat, "raw.bugsigdb__full_dump", arrow, EqualTo("bugsigdb_version", version))
     _manifest(cat, release, version, url, n)
     return n
 

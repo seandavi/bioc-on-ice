@@ -111,7 +111,7 @@ TABLES = {
                 "by design: unlike Iceberg snapshot summaries it does not expire.",
         properties={},
     ),
-    "raw.ncbi_gene2ensembl": TableDef(
+    "raw.ncbi__gene2ensembl": TableDef(
         schema=Schema(
             NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(2, "gene_id", StringType(), doc="NCBI Entrez GeneID."),
@@ -132,7 +132,7 @@ TABLES = {
                     "bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.ensembl_gene_id.prefix": "ensembl"},
     ),
-    "raw.ncbi_gene_info": TableDef(
+    "raw.ncbi__gene_info": TableDef(
         schema=Schema(
             NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(2, "gene_id", StringType(), required=True, doc="NCBI Entrez GeneID."),
@@ -188,7 +188,7 @@ TABLES = {
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene"},
     ),
-    "raw.ncbi_gene_history": TableDef(
+    "raw.ncbi__gene_history": TableDef(
         schema=Schema(
             NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(2, "gene_id", StringType(),
@@ -214,7 +214,7 @@ TABLES = {
                     "bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.discontinued_gene_id.prefix": "ncbigene"},
     ),
-    "raw.bugsigdb_full_dump": TableDef(
+    "raw.bugsigdb__full_dump": TableDef(
         schema=Schema(
             NestedField(1, "bsdb_id", StringType(), required=True,
                         doc="BugSigDB signature id, e.g. 'bsdb:83/1/1'. Compound: "
@@ -330,7 +330,7 @@ TABLES = {
                     "bioc.column.ncbi_taxonomy_ids.prefix": "ncbitaxon",
                     "bioc.license": "CC-BY-4.0"},
     ),
-    "raw.ensembl_gtf": TableDef(
+    "raw.ensembl__gtf": TableDef(
         schema=Schema(
             NestedField(1, "seqname", StringType(), doc="GTF column 1, the sequence name."),
             NestedField(2, "source", StringType(), doc="GTF column 2, the annotation source."),
@@ -403,11 +403,11 @@ TABLES = {
         business_key=("gene_id", "taxon_id"),
         comment="Genes as Ensembl defines them. One row per gene per organism. Join to "
                 "annotation.transcript on gene_id. Descriptions and cytogenetic bands are not "
-                "here: they come from NCBI, keyed by Entrez id, in annotation.ncbi_gene.",
+                "here: they come from NCBI, keyed by Entrez id, in annotation.ncbi__gene.",
         properties={"bioc.column.gene_id.prefix": "ensembl",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
-    "annotation.ncbi_gene": TableDef(
+    "annotation.ncbi__gene": TableDef(
         schema=Schema(
             NestedField(1, "gene_id", StringType(), required=True,
                         doc="NCBI Entrez GeneID, e.g. 7157. The central key of OrgDb, which is "
@@ -536,7 +536,7 @@ TABLES = {
                 "can change, so it is only ever asserted or withdrawn, never updated.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
-    "raw.ncbi_gene2pubmed": TableDef(
+    "raw.ncbi__gene2pubmed": TableDef(
         schema=Schema(
             NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(2, "gene_id", StringType(), required=True, doc="NCBI Entrez GeneID."),
@@ -553,7 +553,7 @@ TABLES = {
                     "bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.pubmed_id.prefix": "pubmed"},
     ),
-    "annotation.gene_pubmed": TableDef(
+    "annotation.ncbi__gene_pubmed": TableDef(
         schema=Schema(
             NestedField(1, "gene_id", StringType(), required=True,
                         doc="NCBI Entrez GeneID, e.g. 7157. Part of the merge key."),

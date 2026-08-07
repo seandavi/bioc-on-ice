@@ -18,78 +18,29 @@ ancestor terms needs the GO DAG, which is its own source and its own issue —
 computing it here would bake one ontology snapshot invisibly into every row.
 """
 
-from datetime import datetime, timezone
-
 import duckdb
-import pyarrow as pa
-from pyiceberg.expressions import And, EqualTo
+from pyiceberg.expressions import EqualTo
 
-from . import merge, schemas
-from .ensembl import _write
-from .ncbi import BATCH, DATA
+from . import merge
+from .ncbi import DATA, _land, _manifest
 
-# DuckDB column spec in file order, auto_detect off, same contract as
-# ncbi.COLUMNS: a column NCBI inserts or reorders fails loudly instead of
-# quietly shifting every value one to the left. Not registered in ncbi.COLUMNS,
-# because ncbi.land_raw lands everything in that dict and gene2go ingests on
-# its own schedule under its own manifest row.
+URL = f"{DATA}gene2go.gz"
+
+# DuckDB column spec in file order, same contract as ncbi.COLUMNS: auto_detect
+# off, names from the spec rather than the header. Not registered in
+# ncbi.COLUMNS, because ncbi.land_raw lands everything in that dict and
+# gene2go ingests on its own schedule under its own manifest row.
 COLUMNS = (
-    "{'tax_id':'INTEGER','gene_id':'VARCHAR','go_id':'VARCHAR','evidence':'VARCHAR',"
+    "{'taxon_id':'INTEGER','gene_id':'VARCHAR','go_id':'VARCHAR','evidence':'VARCHAR',"
     "'qualifier':'VARCHAR','go_term':'VARCHAR','pubmed':'VARCHAR','category':'VARCHAR'}"
 )
 
 
 def land_raw(cat, release, url=None):
-    """Phase 1: stream gene2go verbatim and whole into raw.ncbi__gene2go.
-
-    Replace-with-the-first-batch then append, exactly as ncbi._land: the file
-    does not fit in memory as one Arrow table.
-
-    ponytail: a crash between batches leaves the table partly landed; re-running
-    repairs it, same exposure and same upgrade path as ncbi._land.
-    """
-    identifier = "raw.ncbi__gene2go"
-    table = schemas.create(cat, identifier)
-    arrow_schema = table.schema().as_arrow()
-    con = duckdb.connect()
-    reader = con.sql(f"""
-        SELECT * RENAME (tax_id AS taxon_id), '{release}' AS landed_in
-        FROM read_csv('{url or f"{DATA}gene2go.gz"}', sep='\t', header=true,
-                      auto_detect=false, columns={COLUMNS}, nullstr='-')
-    """).to_arrow_reader(BATCH)
-
-    n = 0
-    for batch in reader:
-        # Casting to the declared schema is the check: a null gene or GO id
-        # fails here rather than landing quietly.
-        arrow = pa.Table.from_batches([batch]).cast(arrow_schema)
-        if n:
-            table.append(arrow)
-        else:
-            table.overwrite(arrow)
-        n += arrow.num_rows
-    if not n:
-        # Otherwise a bad URL silently leaves the previous landing in place and
-        # reports success.
-        raise SystemExit(f"{identifier}: {url or 'gene2go'} yielded no rows")
-    _manifest(cat, release, n)
+    """Phase 1: stream gene2go verbatim and whole into raw.ncbi__gene2go."""
+    n = _land(cat, release, "raw.ncbi__gene2go", url or URL, COLUMNS)
+    _manifest(cat, release, "ncbi_gene2go", URL, n)
     return n
-
-
-def _manifest(cat, release, rows):
-    """Record what this release was built from — ADR-0007."""
-    now = datetime.now(timezone.utc)
-    con = duckdb.connect()
-    arrow = con.sql(f"""
-        SELECT '{release}' AS release, 'ncbi_gene2go' AS source,
-               '{now.date()}' AS source_version,
-               'retrieval_date' AS version_method,
-               '{now.isoformat(timespec="seconds")}' AS retrieved_at,
-               '{DATA}gene2go.gz' AS url, NULL::VARCHAR AS checksum,
-               {rows}::BIGINT AS row_count
-    """).to_arrow_table()
-    _write(cat, "provenance.release", arrow,
-           And(EqualTo("release", release), EqualTo("source", "ncbi_gene2go")))
 
 
 def transform(cat, release, taxon):

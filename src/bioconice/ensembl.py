@@ -1,6 +1,6 @@
 """Ensembl GTF -> Iceberg, in two phases.
 
-`land_raw` writes the GTF verbatim into `raw.ensembl_gtf`. `transform` reads it
+`land_raw` writes the GTF verbatim into `raw.ensembl__gtf`. `transform` reads it
 back out and derives the annotation tables from it. Keeping the two apart means
 that changing how we *interpret* a GTF is a re-run of transform rather than a
 re-download, and that the attributes nobody has needed yet are already here when
@@ -65,7 +65,7 @@ def _write(cat, identifier, arrow, overwrite_filter):
 
 
 def land_raw(cat, release, species, ensembl_release, url=None, info=None):
-    """Phase 1: the GTF, verbatim, into raw.ensembl_gtf."""
+    """Phase 1: the GTF, verbatim, into raw.ensembl__gtf."""
     info = info or species_info(ensembl_release, species)
     con = duckdb.connect()
     arrow = con.sql(f"""
@@ -76,7 +76,7 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
         FROM read_csv('{url or gtf_url(ensembl_release, species)}', sep='\t', header=false,
                       comment='#', auto_detect=false, columns={GTF_COLUMNS})
     """).to_arrow_table()
-    n = _write(cat, "raw.ensembl_gtf", arrow,
+    n = _write(cat, "raw.ensembl__gtf", arrow,
                And(EqualTo("taxon_id", info["taxon_id"]),
                    EqualTo("ensembl_release", str(ensembl_release))))
     _manifest(cat, release, ensembl_release, url or gtf_url(ensembl_release, species), n)
@@ -116,7 +116,7 @@ def _scope(identifier, taxon):
 def transform(cat, release, info, ensembl_release):
     """Phase 2: derive the annotation tables from landed raw rows."""
     taxon = info["taxon_id"]
-    raw = cat.load_table("raw.ensembl_gtf").scan(
+    raw = cat.load_table("raw.ensembl__gtf").scan(
         row_filter=And(EqualTo("taxon_id", taxon),
                        EqualTo("ensembl_release", str(ensembl_release)))).to_arrow()
 
@@ -187,4 +187,4 @@ def transform(cat, release, info, ensembl_release):
 
 def ingest(cat, release, species, ensembl_release):
     info, n = land_raw(cat, release, species, ensembl_release)
-    return {"raw.ensembl_gtf": n, **transform(cat, release, info, ensembl_release)}
+    return {"raw.ensembl__gtf": n, **transform(cat, release, info, ensembl_release)}

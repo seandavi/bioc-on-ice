@@ -79,8 +79,8 @@ def maps(cat):
 
 
 def test_raw_is_verbatim_whole_and_gzipped(cat, g2a):
-    counts = ncbi_accession.land_raw(cat, REL, url=g2a)
-    assert counts["raw.ncbi__gene2accession"] == 5
+    n = ncbi_accession.land_raw(cat, REL, url=g2a)
+    assert n == 5
 
     raw = rows(cat, "raw.ncbi__gene2accession")
     # whole: mouse lands even though only human is ever derived here
