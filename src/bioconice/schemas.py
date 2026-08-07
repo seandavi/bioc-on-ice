@@ -741,10 +741,20 @@ TABLES = {
 }
 
 
+# Namespaces this process has already ensured, per catalog. pyiceberg's
+# create_namespace_if_not_exists POSTs first and catches the 409, so calling
+# it on every merge spends a doomed write request each time — R2 Data Catalog
+# rate-limits catalog-wide writes, and namespace churn was a steady drain on
+# that budget ("429: too many write requests for this catalog").
+_ensured_namespaces = set()
+
+
 def create(cat, identifier):
     """Create the table if absent, with its declared schema, comment and properties."""
     ns = identifier.split(".")[0]
-    cat.create_namespace_if_not_exists(ns, properties={"comment": NAMESPACES[ns]})
+    if (id(cat), ns) not in _ensured_namespaces:
+        cat.create_namespace_if_not_exists(ns, properties={"comment": NAMESPACES[ns]})
+        _ensured_namespaces.add((id(cat), ns))
     d = TABLES[identifier]
     # An empty PartitionSpec() is Iceberg's unpartitioned spec, so this is
     # uniform whether or not the table declares partition_by.
