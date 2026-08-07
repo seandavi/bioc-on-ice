@@ -1,6 +1,6 @@
 import argparse
 
-from . import bugsigdb, catalog, ensembl, ncbi
+from . import bugsigdb, catalog, ensembl, ncbi, ncbi_go
 from . import ncbi_accession, ncbi_pubmed
 
 
@@ -37,6 +37,11 @@ def main():
     npm.add_argument("--taxa", default="9606,10090",
                      help="taxa to DERIVE annotation for; raw is always landed whole")
 
+    gg = sub.add_parser("ingest-gene2go", help="land NCBI gene2go whole, then derive GO annotations")
+    gg.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
+    gg.add_argument("--taxa", default="9606,10090",
+                    help="taxa to DERIVE annotation for; raw is always landed whole")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -68,6 +73,8 @@ def main():
     elif args.cmd == "ingest-ncbi-accession":
         counts = ncbi_accession.ingest(cat, args.release,
                                        [int(t) for t in args.taxa.split(",")])
+    elif args.cmd == "ingest-gene2go":
+        counts = ncbi_go.ingest(cat, args.release, [int(t) for t in args.taxa.split(",")])
         for name, c in counts.items():
             print(f"{name:40} {c['written']:>10,} written  {c['unchanged']:>10,} unchanged"
                   if isinstance(c, dict) else f"{name:40} {c:>10,} rows")

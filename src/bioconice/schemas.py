@@ -635,6 +635,80 @@ TABLES = {
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene"},
     ),
+    "raw.ncbi__gene2go": TableDef(
+        schema=Schema(
+            NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(2, "gene_id", StringType(), required=True, doc="NCBI Entrez GeneID."),
+            NestedField(3, "go_id", StringType(), required=True,
+                        doc="GO term id, e.g. GO:0000122. Already CURIE-prefixed by NCBI."),
+            NestedField(4, "evidence", StringType(),
+                        doc="GO evidence code, e.g. IEA, IDA, TAS. NULL (NCBI's '-') where "
+                            "none is recorded."),
+            NestedField(5, "qualifier", StringType(),
+                        doc="GO relation qualifier, e.g. involved_in, located_in, enables; "
+                            "'NOT' prefixes a negated annotation. Pipe-separated where several "
+                            "apply, kept as published. NULL (NCBI's '-') where none."),
+            NestedField(6, "go_term", StringType(),
+                        doc="The GO term's name at retrieval time, e.g. 'nucleus'. A "
+                            "convenience denormalised by NCBI — the ontology, not this file, "
+                            "is the authority for names."),
+            NestedField(7, "pubmed", StringType(),
+                        doc="PubMed ids supporting the annotation, pipe-separated in one "
+                            "string as NCBI publishes them. NULL (NCBI's '-') where uncited."),
+            NestedField(8, "category", StringType(),
+                        doc="GO aspect: Function, Process or Component. NCBI's spelling of "
+                            "the three GO namespaces."),
+            NestedField(9, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="NCBI gene2go landed verbatim and whole: every organism NCBI annotates, not "
+                "only the ones we derive annotation for. NCBI's '-' placeholder is read as "
+                "NULL; pipe-separated fields are kept as published, unsplit. Regenerated "
+                "nightly upstream, so the retrieval date is the version.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.column.pubmed.prefix": "pubmed"},
+    ),
+    "annotation.ncbi__gene_go": TableDef(
+        schema=Schema(
+            NestedField(1, "gene_id", StringType(), required=True,
+                        doc="NCBI Entrez GeneID, e.g. 7157. OrgDb's ENTREZID; reach an "
+                            "Ensembl gene through annotation.identifier_mapping."),
+            NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(3, "go_id", StringType(), required=True,
+                        doc="GO term id, e.g. GO:0000122. DIRECT annotation only — ancestor "
+                            "terms (OrgDb's GOALL) need the GO DAG and are not here."),
+            NestedField(4, "evidence", StringType(), required=True,
+                        doc="GO evidence code, e.g. IEA, IDA, TAS. OrgDb's EVIDENCE. Part of "
+                            "the merge key — the same term asserted under two codes is two "
+                            "annotations. Empty string where NCBI published '-', never NULL: "
+                            "a NULL key never joins to itself and would churn on every merge."),
+            NestedField(5, "qualifier", StringType(), required=True,
+                        doc="GO relation qualifier, e.g. involved_in, located_in; 'NOT' "
+                            "prefixes a negated annotation — dropping it would invert the "
+                            "claim, which is why this is part of the merge key. Pipe-separated "
+                            "where several apply. Empty string where NCBI published '-', "
+                            "never NULL, for the same join reason as evidence."),
+            NestedField(6, "go_term", StringType(),
+                        doc="The GO term's name as NCBI carried it at retrieval, e.g. "
+                            "'nucleus'. Denormalised convenience; the ontology is the "
+                            "authority."),
+            NestedField(7, "category", StringType(),
+                        doc="GO aspect: Function, Process or Component. OrgDb's ONTOLOGY "
+                            "column, under NCBI's spelling rather than BP/CC/MF."),
+            NestedField(8, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(9, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("gene_id", "taxon_id", "go_id", "evidence", "qualifier"),
+        comment="Direct GO annotations per Entrez gene, from NCBI gene2go: OrgDb's GO table. "
+                "One row per (gene, term, evidence code, qualifier) per organism. Supporting "
+                "PMIDs are not carried — they live unsplit in raw.ncbi__gene2go. The GOALL "
+                "closure over ancestor terms is deliberately absent: it depends on a GO DAG "
+                "snapshot, which is its own source.",
+        properties={"bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.go_id.prefix": "go"},
+    ),
 }
 
 
