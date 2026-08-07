@@ -119,12 +119,95 @@ TABLES = {
             NestedField(8, "landed_in", StringType(), required=True,
                         doc="The biocOnIce release whose ingest landed these rows."),
         ),
-        comment="NCBI gene2ensembl landed verbatim, filtered to the taxa we ingest. NCBI's "
-                "'-' placeholder is read as NULL. Regenerated nightly upstream, so it has no "
-                "release: the retrieval date is the version, per NLM's own citation form.",
+        comment="NCBI gene2ensembl landed verbatim and whole: every organism NCBI knows, not "
+                "only the ones we derive annotation for. NCBI's '-' placeholder is read as NULL. "
+                "Regenerated nightly upstream, so it has no release: the retrieval date is the "
+                "version, per NLM's own citation form.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.ensembl_gene_id.prefix": "ensembl"},
+    ),
+    "raw.ncbi_gene_info": TableDef(
+        schema=Schema(
+            NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(2, "gene_id", StringType(), required=True, doc="NCBI Entrez GeneID."),
+            NestedField(3, "symbol", StringType(),
+                        doc="Default symbol. The nomenclature authority's symbol where there is "
+                            "one, otherwise NCBI's own; symbol_authority says which."),
+            NestedField(4, "locus_tag", StringType(),
+                        doc="Submitter-assigned locus tag, e.g. b0001. Mostly prokaryotic."),
+            NestedField(5, "synonyms", StringType(),
+                        doc="Alternate symbols, pipe-separated in one string as NCBI publishes "
+                            "them. Split at '|' to get ALIAS rows."),
+            NestedField(6, "dbxrefs", StringType(),
+                        doc="Cross-references, pipe-separated 'Authority:id' pairs, e.g. "
+                            "'MIM:191170|HGNC:HGNC:11998|Ensembl:ENSG00000141510'. Split at the "
+                            "FIRST colon only: HGNC's own ids embed one."),
+            NestedField(7, "chromosome", StringType(),
+                        doc="Chromosome as NCBI names it, e.g. 17. May be a pipe-separated list "
+                            "for genes placed on more than one, or 'Un' for unplaced."),
+            NestedField(8, "map_location", StringType(),
+                        doc="Cytogenetic band, e.g. 17p13.1. Not a coordinate; for coordinates "
+                            "use annotation.exon."),
+            NestedField(9, "description", StringType(),
+                        doc="Descriptive gene name, e.g. 'tumor protein p53'. This is the "
+                            "column OrgDb serves as GENENAME."),
+            NestedField(10, "type_of_gene", StringType(),
+                        doc="NCBI gene type, e.g. protein-coding, ncRNA, pseudo. NCBI's "
+                            "vocabulary, hyphenated — not Ensembl's biotype vocabulary."),
+            NestedField(11, "symbol_authority", StringType(),
+                        doc="Symbol as assigned by the nomenclature authority (HGNC, MGI), NULL "
+                            "where none has named the gene."),
+            NestedField(12, "full_name_authority", StringType(),
+                        doc="Full name from the nomenclature authority, NULL where none."),
+            NestedField(13, "nomenclature_status", StringType(),
+                        doc="'O' official, 'I' interim, NULL where the gene is unnamed."),
+            NestedField(14, "other_designations", StringType(),
+                        doc="Further names, pipe-separated. Free text, not symbols: not treated "
+                            "as ALIAS."),
+            NestedField(15, "modification_date", StringType(),
+                        doc="Date this Gene record last changed, YYYYMMDD. Per-record, so it is "
+                            "not a version for the file as a whole."),
+            NestedField(16, "feature_type", StringType(),
+                        doc="Feature type for records that are not genes, e.g. 'biological "
+                            "region'. NULL for ordinary genes."),
+            NestedField(17, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="NCBI gene_info landed verbatim and whole — 71.5M records across 53,800 taxa, not "
+                "only the ones we derive annotation for, since a third species should not cost a "
+                "re-fetch. NCBI's "
+                "'-' placeholder is read as NULL. Pipe-separated fields are kept as published, "
+                "unsplit: splitting is interpretation and belongs in transform. Regenerated "
+                "nightly upstream, so the retrieval date is the version.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.gene_id.prefix": "ncbigene"},
+    ),
+    "raw.ncbi_gene_history": TableDef(
+        schema=Schema(
+            NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(2, "gene_id", StringType(),
+                        doc="Entrez GeneID that discontinued_gene_id was merged INTO. NULL "
+                            "(NCBI's '-') means the id was retired outright with no successor, "
+                            "which is the majority of this table."),
+            NestedField(3, "discontinued_gene_id", StringType(), required=True,
+                        doc="The Entrez GeneID that no longer exists. This is what a stale "
+                            "identifier in an old analysis looks up as."),
+            NestedField(4, "discontinued_symbol", StringType(),
+                        doc="Symbol the discontinued id carried when it was withdrawn."),
+            NestedField(5, "discontinue_date", StringType(),
+                        doc="Date of withdrawal, YYYYMMDD. NCBI's own clock, not a biocOnIce release."),
+            NestedField(6, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="NCBI gene_history landed verbatim and whole: the tombstone list for every "
+                "Entrez GeneID ever withdrawn. Landed but NOT YET INTERPRETED — nothing derives "
+                "from it, because whether supersession ('merged into') is modelled as a table, a "
+                "typed retirement reason, or not at all is still open (issue #15, item 4). It is "
+                "here so that question can be settled against real data rather than guessed at.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.column.discontinued_gene_id.prefix": "ncbigene"},
     ),
     "raw.ensembl_gtf": TableDef(
         schema=Schema(
@@ -197,8 +280,52 @@ TABLES = {
             NestedField(8, "valid_to", StringType(), doc=VALID_TO),
         ),
         business_key=("gene_id", "taxon_id"),
-        comment="Genes. One row per gene per organism. Join to annotation.transcript on gene_id.",
+        comment="Genes as Ensembl defines them. One row per gene per organism. Join to "
+                "annotation.transcript on gene_id. Descriptions and cytogenetic bands are not "
+                "here: they come from NCBI, keyed by Entrez id, in annotation.ncbi_gene.",
         properties={"bioc.column.gene_id.prefix": "ensembl",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon"},
+    ),
+    "annotation.ncbi_gene": TableDef(
+        schema=Schema(
+            NestedField(1, "gene_id", StringType(), required=True,
+                        doc="NCBI Entrez GeneID, e.g. 7157. The central key of OrgDb, which is "
+                            "why this table exists keyed on it rather than on an Ensembl id."),
+            NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(3, "symbol", StringType(),
+                        doc="NCBI's default symbol, e.g. TP53. May disagree with the symbol "
+                            "Ensembl carries in annotation.gene; neither is corrected to match "
+                            "the other."),
+            NestedField(4, "description", StringType(),
+                        doc="Descriptive gene name, e.g. 'tumor protein p53'. This is OrgDb's "
+                            "GENENAME."),
+            NestedField(5, "gene_type", StringType(),
+                        doc="NCBI gene type, e.g. protein-coding, ncRNA, pseudo. OrgDb's "
+                            "GENETYPE. NCBI's hyphenated vocabulary, deliberately not mapped "
+                            "onto Ensembl's biotype names in annotation.gene.gene_type."),
+            NestedField(6, "chromosome", StringType(),
+                        doc="Chromosome as NCBI names it. Pipe-separated where NCBI places the "
+                            "gene on more than one, kept as published."),
+            NestedField(7, "map_location", StringType(),
+                        doc="Cytogenetic band, e.g. 17p13.1. OrgDb's MAP. Not a coordinate."),
+            NestedField(8, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(9, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("gene_id", "taxon_id"),
+        comment="Genes as NCBI Gene defines them, keyed by Entrez GeneID. Separate from "
+                "annotation.gene rather than extra columns on it, because gene_info is keyed by "
+                "Entrez id and the Entrez-to-Ensembl mapping is many-to-many in both directions: "
+                "writing a description onto an Ensembl-keyed row would mean silently picking one "
+                "of several Entrez records for the genes where they disagree. Reach it from an "
+                "Ensembl gene through annotation.identifier_mapping (ENSEMBL <-> ENTREZ), which "
+                "keeps the fan-out visible instead of resolving it at write time. Synonyms and "
+                "dbXrefs from the same source land in annotation.identifier_mapping. Note that "
+                "'gene' here is NCBI's sense of the word: most rows are gene_type "
+                "'biological-region' — regulatory features, 128,261 of human's 193,809 records "
+                "against 20,595 protein-coding. They are kept rather than filtered, because "
+                "gene_type distinguishes them and OrgDb's ENTREZID key space includes them; "
+                "filter on gene_type if you want genes in the narrower sense.",
+        properties={"bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
     "annotation.transcript": TableDef(

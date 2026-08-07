@@ -14,9 +14,10 @@ def main():
     ing.add_argument("--transform-only", action="store_true",
                      help="re-derive from already-landed raw rows, without re-downloading")
 
-    nc = sub.add_parser("ingest-ncbi", help="load NCBI gene2ensembl cross-references")
+    nc = sub.add_parser("ingest-ncbi", help="land the NCBI Gene dumps whole, then derive")
     nc.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
-    nc.add_argument("--taxa", default="9606,10090")
+    nc.add_argument("--taxa", default="9606,10090",
+                    help="taxa to DERIVE annotation for; raw is always landed whole")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()

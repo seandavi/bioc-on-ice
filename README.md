@@ -22,9 +22,31 @@ Ensembl 116 for human and mouse is live on Cloudflare R2:
 | `annotation.exon` | 5,087,789 | 3,763,037 |
 | `annotation.identifier_mapping` | 43,458 | 77,797 |
 
-Ingest takes under a minute per species. Not yet: the merge that makes
-`first_seen` meaningful, provenance rows, sequence lengths, the icegate
-deployment, and everything in Milestone 2.
+Ingest takes under a minute per species.
+
+NCBI Gene adds the attributes a GTF cannot carry — descriptions, aliases,
+cytogenetic bands, Entrez cross-references. Its raw tables are landed **whole**,
+every organism NCBI knows, because raw is an audit trail and a resource in its
+own right rather than a function of what we currently derive:
+
+| Table | Rows |
+| --- | --- |
+| `raw.ncbi_gene_info` | 71,471,729 |
+| `raw.ncbi_gene_history` | 27,079,420 |
+| `raw.ncbi_gene2ensembl` | 17,859,274 |
+
+| Derived (per species) | Human | Mouse |
+| --- | --- | --- |
+| `annotation.ncbi_gene` | 193,809 | 112,257 |
+| `annotation.identifier_mapping` (NCBI-asserted) | 455,272 | 391,608 |
+
+Landing all three dumps and deriving both species takes 2m56s end to end and
+peaks at 2.5 GB of memory — the files are streamed in record batches rather than
+built as one Arrow table. **Verified against a local warehouse, not yet pushed
+to R2**, so the live catalog is a release behind on the NCBI tables.
+
+Not yet: provenance rows, sequence lengths, the icegate deployment, and
+everything in Milestone 2.
 
 ## Query it
 
@@ -57,7 +79,12 @@ coordinate order reverses the transcript.
 ```sh
 uv run bioconice ingest-ensembl homo_sapiens --release 2026.08 --ensembl-release 116
 uv run bioconice ingest-ensembl homo_sapiens --release 2026.08 --transform-only
+uv run bioconice ingest-ncbi --release 2026.08 --taxa 9606,10090
 ```
+
+`--taxa` says which species to *derive* annotation for; the NCBI dumps are
+always landed whole, so adding a species later is a `transform` and needs no
+re-download.
 
 `--release` is the biocOnIce release; `--ensembl-release` is the upstream
 version. With no `BIOCONICE_URI` set this writes a local sqlite warehouse in
