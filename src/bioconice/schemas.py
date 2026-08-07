@@ -574,6 +574,67 @@ TABLES = {
                     "bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.pubmed_id.prefix": "pubmed"},
     ),
+    "raw.ncbi__gene2accession": TableDef(
+        schema=Schema(
+            NestedField(1, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(2, "gene_id", StringType(), required=True,
+                        doc="NCBI Entrez GeneID. Upstream column 'GeneID'."),
+            NestedField(3, "status", StringType(),
+                        doc="RefSeq status: REVIEWED, VALIDATED, PROVISIONAL, PREDICTED, "
+                            "INFERRED, MODEL, or the literal string 'NA'. NULL (NCBI's "
+                            "'-') marks a GenBank/INSDC submission, not a RefSeq record."),
+            NestedField(4, "rna_nucleotide_accession_version", StringType(),
+                        doc="RNA accession.version, e.g. NM_000546.6, version kept as "
+                            "published. Upstream column 'RNA_nucleotide_accession.version'; "
+                            "upstream's dots become underscores here because a dot is not "
+                            "a valid column name."),
+            NestedField(5, "rna_nucleotide_gi", StringType(),
+                        doc="GI number of the RNA record. Upstream column 'RNA_nucleotide_gi'."),
+            NestedField(6, "protein_accession_version", StringType(),
+                        doc="Protein accession.version, e.g. NP_000537.3. Upstream column "
+                            "'protein_accession.version'."),
+            NestedField(7, "protein_gi", StringType(),
+                        doc="GI number of the protein record. Upstream column 'protein_gi'."),
+            NestedField(8, "genomic_nucleotide_accession_version", StringType(),
+                        doc="Genomic accession.version the gene is placed on — RefSeq "
+                            "(NC_/NT_/NW_) or GenBank, distinguished by the underscore "
+                            "only RefSeq accessions carry. Upstream column "
+                            "'genomic_nucleotide_accession.version'."),
+            NestedField(9, "genomic_nucleotide_gi", StringType(),
+                        doc="GI number of the genomic record. Upstream column "
+                            "'genomic_nucleotide_gi'."),
+            NestedField(10, "start_position_on_the_genomic_accession", StringType(),
+                        doc="Start of the gene on the genomic accession, 0-based as NCBI "
+                            "publishes this file. String, unparsed, per the raw contract."),
+            NestedField(11, "end_position_on_the_genomic_accession", StringType(),
+                        doc="End of the gene on the genomic accession. String, unparsed."),
+            NestedField(12, "orientation", StringType(),
+                        doc="'+', '-', or '?' where the orientation is not known."),
+            NestedField(13, "assembly", StringType(),
+                        doc="Assembly the genomic accession belongs to, e.g. 'Reference "
+                            "GRCh38.p14 Primary Assembly'."),
+            NestedField(14, "mature_peptide_accession_version", StringType(),
+                        doc="Mature peptide accession.version, rarely present. Upstream "
+                            "column 'mature_peptide_accession.version'."),
+            NestedField(15, "mature_peptide_gi", StringType(),
+                        doc="GI number of the mature peptide record. Upstream column "
+                            "'mature_peptide_gi'."),
+            NestedField(16, "symbol", StringType(),
+                        doc="Default symbol at the time of the dump. Upstream column "
+                            "'Symbol'. gene_info's symbol is authoritative; this one is "
+                            "a convenience copy."),
+            NestedField(17, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="NCBI gene2accession landed verbatim and whole: every organism and every "
+                "accession status, a superset of gene2refseq and by far the largest raw "
+                "table here (~1e9 rows upstream), so it lands streamed in batches. NCBI's "
+                "'-' placeholder is read as NULL. Positions are strings, unparsed: raw is "
+                "landed uninterpreted. Regenerated nightly upstream, so the retrieval "
+                "date is the version.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.gene_id.prefix": "ncbigene"},
+    ),
 }
 
 
