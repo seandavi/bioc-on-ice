@@ -39,15 +39,16 @@ own right rather than a function of what we currently derive:
 | `raw.ncbi_gene_history` | 27,079,420 |
 | `raw.ncbi_gene2ensembl` | 17,859,274 |
 
-| Derived (per species) | Human | Mouse |
-| --- | --- | --- |
-| `annotation.ncbi_gene` | 193,809 | 112,257 |
-| `annotation.identifier_mapping` (NCBI-asserted) | 455,272 | 391,608 |
+| Derived (all 51,796 taxa) | Rows |
+| --- | --- |
+| `annotation.ncbi__gene` | 72,153,077 |
+| `annotation.identifier_mapping` (NCBI-asserted) | 121,856,131 |
 
-Landing all three dumps and deriving both species takes 2m56s into a local
-warehouse and 9m52s into R2, peaking at 2.7 GB of memory — the files are streamed
-in record batches rather than built as one Arrow table, so ingest does not need a
-large machine.
+Landing all three dumps takes 2m23s into a local warehouse (9m52s into R2),
+peaking at 2.7 GB — the files are streamed in record batches rather than built
+as one Arrow table. Deriving every taxon is a single merge per table: 24 s,
+but it holds the whole scope in memory and peaked at 129 GB. A one-species
+refresh (`--taxa 9606`) stays small.
 
 Both sources coexist in `annotation.identifier_mapping` without retiring each
 other: 121,255 Ensembl-asserted rows and 846,880 NCBI-asserted rows, live

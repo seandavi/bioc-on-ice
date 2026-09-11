@@ -178,7 +178,14 @@ def _where(taxon):
 
 
 def _derive(transform, cat, release, taxa):
-    """Run `transform` once per requested taxon, or once for all of them."""
+    """Run `transform` once per requested taxon, or once for all of them.
+
+    ponytail: the all-taxa merge holds the whole scope in memory. Measured on
+    gene_info + gene2ensembl (72M genes, 122M mappings, 51,796 taxa): 24 s and
+    a 129 GB peak on the 502 GB ingest host. gene2accession is 4x the raw rows
+    and has not been run whole; if it does not fit, scope by
+    In("taxon_id", chunk) over the dump's distinct taxa instead of AlwaysTrue.
+    """
     out = {}
     for taxon in taxa or [None]:
         for k, v in transform(cat, release, taxon).items():
