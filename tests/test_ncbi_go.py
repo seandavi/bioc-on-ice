@@ -85,6 +85,27 @@ def test_rerun_is_idempotent_not_churn(cat):
     assert {r["valid_from"] for r in live} == {REL}
 
 
+def test_all_taxa_is_one_merge_and_coexists_with_per_taxon(cat):
+    """No taxa named: every taxon in the dump derives in a single merge.
+
+    A later single-taxon run is a subset of that scope, so it must refresh its
+    own species without retiring the other — the two scopes never flip-flop.
+    """
+    _, counts = load(cat, taxa=(None,))
+    assert set(counts) == {"annotation.ncbi__gene_go"}
+    assert counts["annotation.ncbi__gene_go"]["written"] == 7
+    assert {r["taxon_id"] for r in rows(cat, "annotation.ncbi__gene_go")} == {9606, 10090}
+
+    _, counts = load(cat, release="2026.09", taxa=(9606,))
+    assert counts["annotation.ncbi__gene_go"]["written"] == 0
+    live = rows(cat, "annotation.ncbi__gene_go", row_filter="valid_to IS NULL")
+    assert sum(r["taxon_id"] == 10090 for r in live) == 2
+
+    _, counts = load(cat, release="2026.10", taxa=(None,))
+    assert counts["annotation.ncbi__gene_go"]["written"] == 0
+    assert counts["annotation.ncbi__gene_go"]["unchanged"] == 7
+
+
 def test_manifest_uses_retrieval_date(cat):
     load(cat)
     m = next(r for r in rows(cat, "provenance.release") if r["source"] == "ncbi_gene2go")

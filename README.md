@@ -113,12 +113,15 @@ coordinate order reverses the transcript.
 ```sh
 uv run bioconice ingest-ensembl homo_sapiens --release 2026.08 --ensembl-release 116
 uv run bioconice ingest-ensembl homo_sapiens --release 2026.08 --transform-only
-uv run bioconice ingest-ncbi --release 2026.08 --taxa 9606,10090
+uv run bioconice ingest-ncbi --release 2026.08                    # every taxon in the dump
+uv run bioconice ingest-ncbi --release 2026.08 --taxa 9606,10090  # just these
 ```
 
-`--taxa` says which species to *derive* annotation for; the NCBI dumps are
-always landed whole, so adding a species later is a `transform` and needs no
-re-download.
+The NCBI dumps are always landed whole and, by default, *derived* whole too:
+one merge per table covering every taxon NCBI Gene carries. `--taxa` narrows
+the derivation to named species — a cheap refresh of one organism. A
+single-taxon scope is contained in the all-taxa one, so the two can alternate
+without either retiring the other's rows.
 
 `--release` is the biocOnIce release; `--ensembl-release` is the upstream
 version. With no `BIOCONICE_URI` set this writes a local sqlite warehouse in

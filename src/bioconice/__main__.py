@@ -27,7 +27,8 @@ def main():
                     help="BugSigDBExports release tag, e.g. v1.3.1. Tags are immutable; "
                          "the devel branch re-exports hourly and is not")
 
-    # The NCBI ingests share a CLI shape: land whole, then derive per taxon.
+    # The NCBI ingests share a CLI shape: land whole, then derive — every taxon
+    # in the dump by default, or only the ones named.
     ncbi_cmds = {
         "ingest-ncbi": (ncbi, "land the NCBI Gene dumps whole, then derive"),
         "ingest-ncbi-accession": (ncbi_accession, "land NCBI gene2accession whole, then derive"),
@@ -37,8 +38,8 @@ def main():
     for cmd, (_, help_text) in ncbi_cmds.items():
         c = sub.add_parser(cmd, help=help_text)
         c.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
-        c.add_argument("--taxa", default="9606,10090",
-                       help="taxa to DERIVE annotation for; raw is always landed whole")
+        c.add_argument("--taxa", help="comma-separated taxa to DERIVE annotation for "
+                       "(default: every taxon in the dump); raw is always landed whole")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
@@ -56,7 +57,8 @@ def main():
         print(f"{'raw.bugsigdb__full_dump':40} {n:>10,} rows  ({args.version})")
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
-        _print(module.ingest(cat, args.release, [int(t) for t in args.taxa.split(",")]))
+        taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
+        _print(module.ingest(cat, args.release, taxa))
     else:
         for ns in cat.list_namespaces():
             for t in cat.list_tables(ns):
