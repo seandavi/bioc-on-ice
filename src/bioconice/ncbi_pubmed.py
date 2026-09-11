@@ -13,10 +13,9 @@ forces identifier_mapping's scope to name the source does not arise here.
 """
 
 import duckdb
-from pyiceberg.expressions import EqualTo
 
 from . import merge
-from .ncbi import DATA, _land, _manifest
+from .ncbi import DATA, _derive, _land, _manifest, _where
 
 URL = f"{DATA}gene2pubmed.gz"
 
@@ -32,28 +31,23 @@ def land_raw(cat, release, url=None):
     return n
 
 
-def transform(cat, release, taxon):
-    """Phase 2: the gene-to-publication links for one species.
+def transform(cat, release, taxon=None):
+    """Phase 2: the gene-to-publication links, for one species or (default) all.
 
-    The dump arrives sorted by tax_id upstream, so this filter prunes nearly
-    every Parquet row group on min/max stats without the table being partitioned.
+    The dump arrives sorted by tax_id upstream, so a single-taxon filter prunes
+    nearly every Parquet row group on min/max stats without partitioning.
     """
     con = duckdb.connect()
     con.register("g2p", cat.load_table("raw.ncbi__gene2pubmed").scan(
-        row_filter=EqualTo("taxon_id", taxon)).to_arrow())
-    links = con.sql(f"""
-        SELECT DISTINCT gene_id, {taxon}::INTEGER AS taxon_id, pubmed_id FROM g2p
-    """).to_arrow_table()
+        row_filter=_where(taxon)).to_arrow())
+    links = con.sql("SELECT DISTINCT gene_id, taxon_id, pubmed_id FROM g2p").to_arrow_table()
 
     # Single writer to this table, so a taxon-only scope suffices: no other
     # ingest can retire these rows on alternating runs.
     return {"annotation.ncbi__gene_pubmed": merge.merge(
-        cat, "annotation.ncbi__gene_pubmed", links, release, EqualTo("taxon_id", taxon))}
+        cat, "annotation.ncbi__gene_pubmed", links, release, _where(taxon))}
 
 
-def ingest(cat, release, taxa, url=None):
-    out = {"raw.ncbi__gene2pubmed": land_raw(cat, release, url)}
-    for taxon in taxa:
-        for k, v in transform(cat, release, taxon).items():
-            out[f"{k} [{taxon}]"] = v
-    return out
+def ingest(cat, release, taxa=None, url=None):
+    return {"raw.ncbi__gene2pubmed": land_raw(cat, release, url),
+            **_derive(transform, cat, release, taxa)}

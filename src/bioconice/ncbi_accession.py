@@ -28,7 +28,7 @@ import duckdb
 from pyiceberg.expressions import And, EqualTo
 
 from . import merge
-from .ncbi import DATA, _land, _manifest
+from .ncbi import DATA, _derive, _land, _manifest, _where
 
 URL = f"{DATA}gene2accession.gz"
 
@@ -54,8 +54,8 @@ def land_raw(cat, release, url=None):
     return n
 
 
-def transform(cat, release, taxon):
-    """Phase 2: ENTREZ <-> accession cross-references for one species.
+def transform(cat, release, taxon=None):
+    """Phase 2: ENTREZ <-> accession cross-references, one species or (default) all.
 
     RefSeq accessions are the underscored forms (NM_/NR_/XM_/XR_ RNA,
     NP_/XP_/YP_ protein) and GenBank/INSDC accessions never contain an
@@ -65,28 +65,27 @@ def transform(cat, release, taxon):
     genomic accessions (NC_/NT_/NW_): a REFSEQ_GENOMIC namespace can be
     derived later from the same raw rows.
 
-    Like the other dumps, the file arrives sorted by tax_id upstream, so the
-    taxon filter prunes nearly every Parquet row group on min/max stats.
+    Like the other dumps, the file arrives sorted by tax_id upstream, so a
+    single-taxon filter prunes nearly every Parquet row group on min/max stats.
     """
     con = duckdb.connect()
     con.register("acc", cat.load_table("raw.ncbi__gene2accession").scan(
-        row_filter=EqualTo("taxon_id", taxon)).to_arrow())
+        row_filter=_where(taxon)).to_arrow())
 
-    mapping = con.sql(f"""
+    mapping = con.sql("""
         SELECT DISTINCT source_namespace, source_id, target_namespace, target_id,
-               {taxon}::INTEGER AS taxon_id, 'NCBI_ACCESSION' AS source,
-               NULL::DOUBLE AS confidence
+               taxon_id, 'NCBI_ACCESSION' AS source, NULL::DOUBLE AS confidence
         FROM (
             SELECT 'ENTREZ' AS source_namespace, gene_id AS source_id,
                    'REFSEQ_RNA' AS target_namespace,
-                   rna_nucleotide_accession_version AS target_id
+                   rna_nucleotide_accession_version AS target_id, taxon_id
             FROM acc WHERE contains(rna_nucleotide_accession_version, '_')
           UNION ALL
-            SELECT 'ENTREZ', gene_id, 'REFSEQ_PROTEIN', protein_accession_version
+            SELECT 'ENTREZ', gene_id, 'REFSEQ_PROTEIN', protein_accession_version, taxon_id
             FROM acc WHERE contains(protein_accession_version, '_')
           UNION ALL
             SELECT 'ENTREZ', gene_id, 'GENBANK_GENOMIC',
-                   genomic_nucleotide_accession_version
+                   genomic_nucleotide_accession_version, taxon_id
             FROM acc WHERE NOT contains(genomic_nucleotide_accession_version, '_')
         )
         WHERE source_id IS NOT NULL AND target_id IS NOT NULL
@@ -97,12 +96,9 @@ def transform(cat, release, taxon):
     # call into that scope would retire those rows on every run (ADR-0004).
     return {"annotation.identifier_mapping": merge.merge(
         cat, "annotation.identifier_mapping", mapping, release,
-        And(EqualTo("taxon_id", taxon), EqualTo("source", "NCBI_ACCESSION")))}
+        And(_where(taxon), EqualTo("source", "NCBI_ACCESSION")))}
 
 
-def ingest(cat, release, taxa):
-    out = {"raw.ncbi__gene2accession": land_raw(cat, release)}
-    for taxon in taxa:
-        for k, v in transform(cat, release, taxon).items():
-            out[f"{k} [{taxon}]"] = v
-    return out
+def ingest(cat, release, taxa=None):
+    return {"raw.ncbi__gene2accession": land_raw(cat, release),
+            **_derive(transform, cat, release, taxa)}

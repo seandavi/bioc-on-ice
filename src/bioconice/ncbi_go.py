@@ -19,10 +19,9 @@ computing it here would bake one ontology snapshot invisibly into every row.
 """
 
 import duckdb
-from pyiceberg.expressions import EqualTo
 
 from . import merge
-from .ncbi import DATA, _land, _manifest
+from .ncbi import DATA, _derive, _land, _manifest, _where
 
 URL = f"{DATA}gene2go.gz"
 
@@ -43,15 +42,15 @@ def land_raw(cat, release, url=None):
     return n
 
 
-def transform(cat, release, taxon):
-    """Phase 2: direct GO annotations for one species.
+def transform(cat, release, taxon=None):
+    """Phase 2: direct GO annotations, for one species or (default) all.
 
-    gene2go arrives sorted by tax_id upstream, so the filter prunes on Parquet
-    row-group min/max stats without the table being partitioned.
+    gene2go arrives sorted by tax_id upstream, so a single-taxon filter prunes
+    on Parquet row-group min/max stats without the table being partitioned.
     """
     con = duckdb.connect()
     con.register("gene2go", cat.load_table("raw.ncbi__gene2go").scan(
-        row_filter=EqualTo("taxon_id", taxon)).to_arrow())
+        row_filter=_where(taxon)).to_arrow())
 
     # evidence and qualifier are part of the business key, and a NULL key never
     # joins to itself, which would make the same row retire and reappear on
@@ -59,8 +58,8 @@ def transform(cat, release, taxon):
     # on the columns. PubMed is dropped, not exploded: it is an attribute of
     # the citation, still whole in raw for whoever needs it. DISTINCT because
     # rows identical but for PubMed collapse once it is gone.
-    go = con.sql(f"""
-        SELECT DISTINCT gene_id, {taxon}::INTEGER AS taxon_id, go_id,
+    go = con.sql("""
+        SELECT DISTINCT gene_id, taxon_id, go_id,
                COALESCE(evidence, '') AS evidence,
                COALESCE(qualifier, '') AS qualifier,
                go_term, category
@@ -70,12 +69,9 @@ def transform(cat, release, taxon):
     # gene_go has a single writer — this module — so the merge scope is the
     # taxon alone; no source column in the key, unlike identifier_mapping.
     return {"annotation.ncbi__gene_go": merge.merge(
-        cat, "annotation.ncbi__gene_go", go, release, EqualTo("taxon_id", taxon))}
+        cat, "annotation.ncbi__gene_go", go, release, _where(taxon))}
 
 
-def ingest(cat, release, taxa):
-    out = {"raw.ncbi__gene2go": land_raw(cat, release)}
-    for taxon in taxa:
-        for k, v in transform(cat, release, taxon).items():
-            out[f"{k} [{taxon}]"] = v
-    return out
+def ingest(cat, release, taxa=None):
+    return {"raw.ncbi__gene2go": land_raw(cat, release),
+            **_derive(transform, cat, release, taxa)}

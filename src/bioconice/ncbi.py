@@ -7,12 +7,16 @@ The version recorded in `provenance.release` is therefore the retrieval date,
 with `version_method = 'retrieval_date'` saying plainly how we know it — never
 a fabricated release number.
 
-Raw is landed **whole** — every organism NCBI knows, not the two species we
-currently derive annotation for. An earlier version filtered `tax_id` on the way
-in to avoid downloading rows nothing read; that made `raw` a function of what we
-happen to derive, so a third species would have cost a re-fetch. The files do
-not fit in memory as one Arrow table (gene_info is 71.5M rows), so landing
-streams them in record batches. Per-species scoping lives in `transform`.
+Raw is landed **whole** — every organism NCBI knows. An earlier version
+filtered `tax_id` on the way in to avoid downloading rows nothing read; that
+made `raw` a function of what we happen to derive, so a third species would
+have cost a re-fetch. The files do not fit in memory as one Arrow table
+(gene_info is 71.5M rows), so landing streams them in record batches.
+
+Derivation is scoped in `transform`: one taxon, or — the default — every taxon
+the dump carries, in a single merge per table. Per-taxon runs remain for a
+cheap refresh of one species; both scopes are contained in the same complete
+upstream state, so alternating them cannot retire each other's rows.
 
 It is also the **second writer** to `annotation.identifier_mapping`, which
 Ensembl already writes. That is why its merge scope names the source: with a
@@ -32,7 +36,7 @@ from datetime import datetime, timezone
 import duckdb
 import pyarrow as pa
 from pyiceberg.exceptions import RESTError
-from pyiceberg.expressions import And, EqualTo
+from pyiceberg.expressions import AlwaysTrue, And, EqualTo
 
 from . import merge, schemas
 from .ensembl import _write
@@ -168,16 +172,38 @@ def land_raw(cat, release, urls=None):
     return counts
 
 
-def transform(cat, release, taxon):
-    """Phase 2: NCBI's view of a gene, and its cross-references, for one species.
+def _where(taxon):
+    """Scope of one derivation: a single taxon, or every taxon the dump carries."""
+    return EqualTo("taxon_id", taxon) if taxon else AlwaysTrue()
 
-    Both dumps arrive sorted by tax_id upstream, so this filter prunes nearly
+
+def _derive(transform, cat, release, taxa):
+    """Run `transform` once per requested taxon, or once for all of them.
+
+    ponytail: the all-taxa merge holds the whole scope in memory. Measured on
+    gene_info + gene2ensembl (72M genes, 122M mappings, 51,796 taxa): 24 s and
+    a 129 GB peak on the 502 GB ingest host. gene2accession is 4x the raw rows
+    and has not been run whole; if it does not fit, scope by
+    In("taxon_id", chunk) over the dump's distinct taxa instead of AlwaysTrue.
+    """
+    out = {}
+    for taxon in taxa or [None]:
+        for k, v in transform(cat, release, taxon).items():
+            out[f"{k} [{taxon}]" if taxon else k] = v
+    return out
+
+
+def transform(cat, release, taxon=None):
+    """Phase 2: NCBI's view of a gene, and its cross-references.
+
+    For one species when `taxon` is given, else for all of them. Both dumps
+    arrive sorted by tax_id upstream, so a single-taxon filter prunes nearly
     every Parquet row group on min/max stats without the table being partitioned.
     """
     con = duckdb.connect()
     for name in ("gene2ensembl", "gene_info"):
         con.register(name, cat.load_table(f"raw.ncbi__{name}").scan(
-            row_filter=EqualTo("taxon_id", taxon)).to_arrow())
+            row_filter=_where(taxon)).to_arrow())
 
     # NEWENTRY is NCBI's placeholder for GeneRIF submissions against a gene that
     # is not in Gene: one row per taxon, and not a gene. Everything else stays,
@@ -187,25 +213,25 @@ def transform(cat, release, taxon):
         SELECT * FROM gene_info WHERE symbol IS DISTINCT FROM 'NEWENTRY'
     """)
 
-    gene = con.sql(f"""
-        SELECT gene_id, {taxon}::INTEGER AS taxon_id, symbol, description,
+    gene = con.sql("""
+        SELECT gene_id, taxon_id, symbol, description,
                type_of_gene AS gene_type, chromosome, map_location
         FROM info
     """).to_arrow_table()
 
-    mapping = con.sql(f"""
+    mapping = con.sql("""
         SELECT DISTINCT source_namespace, source_id, target_namespace, target_id,
-               {taxon}::INTEGER AS taxon_id, 'NCBI' AS source, NULL::DOUBLE AS confidence
+               taxon_id, 'NCBI' AS source, NULL::DOUBLE AS confidence
         FROM (
             SELECT 'ENSEMBL' AS source_namespace, ensembl_gene_id AS source_id,
-                   'ENTREZ' AS target_namespace, gene_id AS target_id
+                   'ENTREZ' AS target_namespace, gene_id AS target_id, taxon_id
             FROM gene2ensembl
             WHERE ensembl_gene_id IS NOT NULL AND gene_id IS NOT NULL
           UNION ALL
-            SELECT 'ENTREZ', gene_id, 'SYMBOL', symbol FROM info WHERE symbol IS NOT NULL
+            SELECT 'ENTREZ', gene_id, 'SYMBOL', symbol, taxon_id FROM info WHERE symbol IS NOT NULL
           UNION ALL
-            SELECT 'ENTREZ', gene_id, 'ALIAS', trim(alias)
-            FROM (SELECT gene_id, unnest(str_split(synonyms, '|')) AS alias
+            SELECT 'ENTREZ', gene_id, 'ALIAS', trim(alias), taxon_id
+            FROM (SELECT gene_id, taxon_id, unnest(str_split(synonyms, '|')) AS alias
                   FROM info WHERE synonyms IS NOT NULL)
             WHERE trim(alias) <> ''
           UNION ALL
@@ -215,10 +241,10 @@ def transform(cat, release, taxon):
             -- MIM is renamed OMIM: it is NCBI's abbreviation for that authority,
             -- and one authority under two namespace names would be the real bug.
             SELECT 'ENTREZ', gene_id,
-                   CASE WHEN ns = 'MIM' THEN 'OMIM' ELSE ns END, id
-            FROM (SELECT gene_id, upper(split_part(x, ':', 1)) AS ns,
+                   CASE WHEN ns = 'MIM' THEN 'OMIM' ELSE ns END, id, taxon_id
+            FROM (SELECT gene_id, taxon_id, upper(split_part(x, ':', 1)) AS ns,
                          substr(x, strpos(x, ':') + 1) AS id
-                  FROM (SELECT gene_id, unnest(str_split(dbxrefs, '|')) AS x
+                  FROM (SELECT gene_id, taxon_id, unnest(str_split(dbxrefs, '|')) AS x
                         FROM info WHERE dbxrefs IS NOT NULL)
                   -- no colon means no authority; without this the whole string
                   -- would become both the namespace and the identifier
@@ -231,16 +257,12 @@ def transform(cat, release, taxon):
     # one call: two merges into this same scope would retire each other's rows.
     return {
         "annotation.ncbi__gene": merge.merge(
-            cat, "annotation.ncbi__gene", gene, release, EqualTo("taxon_id", taxon)),
+            cat, "annotation.ncbi__gene", gene, release, _where(taxon)),
         "annotation.identifier_mapping": merge.merge(
             cat, "annotation.identifier_mapping", mapping, release,
-            And(EqualTo("taxon_id", taxon), EqualTo("source", "NCBI"))),
+            And(_where(taxon), EqualTo("source", "NCBI"))),
     }
 
 
-def ingest(cat, release, taxa):
-    out = dict(land_raw(cat, release))
-    for taxon in taxa:
-        for k, v in transform(cat, release, taxon).items():
-            out[f"{k} [{taxon}]"] = v
-    return out
+def ingest(cat, release, taxa=None):
+    return {**land_raw(cat, release), **_derive(transform, cat, release, taxa)}

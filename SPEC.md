@@ -849,7 +849,8 @@ not to the record types we happen to read. A filter at land time makes `raw` a
 function of what we derive, so adding a species or a column later costs a
 re-fetch, and it quietly breaks the layer's other purpose: raw is a resource in
 its own right, useful to somebody whose question is not ours. Scoping belongs in
-transform, which is per-species by design.
+transform, which is scoped by design: to one species, or to every species the
+source carries.
 
 A source release that is immutable — an Ensembl release, an archived ClinVar
 month — makes raw idempotent under re-ingest without any merge machinery:
