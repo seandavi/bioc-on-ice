@@ -44,11 +44,18 @@ own right rather than a function of what we currently derive:
 | `annotation.ncbi__gene` | 72,153,077 |
 | `annotation.identifier_mapping` (NCBI-asserted) | 121,856,131 |
 
-Landing all three dumps takes 2m23s into a local warehouse (9m52s into R2),
-peaking at 2.7 GB — the files are streamed in record batches rather than built
-as one Arrow table. Deriving every taxon is a single merge per table: 24 s,
-but it holds the whole scope in memory and peaked at 129 GB. A one-species
-refresh (`--taxa 9606`) stays small.
+Landing streams the files in record batches, so it needs little memory.
+Deriving every taxon is a single merge per table that holds the whole scope in
+memory. Measured into R2 on 2026-09-12 (land + derive, per command):
+
+| Command | Derived rows | Time | Peak memory |
+| --- | --- | --- | --- |
+| `ingest-ncbi` | 72.2M genes, 121.9M mappings | 6m40s | 131 GB |
+| `ingest-gene2go` | 124.7M | 4m34s | 110 GB |
+| `ingest-ncbi-pubmed` | 82.9M | 1m44s | 35 GB |
+| `ingest-ncbi-accession` | 330.9M mappings | 13m37s | 320 GB |
+
+A one-species refresh (`--taxa 9606`) stays small.
 
 Both sources coexist in `annotation.identifier_mapping` without retiring each
 other: 121,255 Ensembl-asserted rows and 846,880 NCBI-asserted rows, live
