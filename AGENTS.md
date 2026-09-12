@@ -32,7 +32,15 @@ routing, credential vending) — that boundary is deliberate.
   PyIceberg does the writing; argparse does the CLI.
 - Non-trivial logic lands with a test, and tests stay offline: fixtures over
   network calls (`tests/tiny.gtf`). Before pushing: `uv run pytest`.
-- Ingest must stay idempotent and per-species — overwrite filtered on
-  `taxon_id`, never blind append.
+- Ingest must stay idempotent and scoped — overwrite filtered on the merge
+  scope (`taxon_id`, or every taxon plus the writer's `source`), never blind
+  append.
+- **PyIceberg is the only writer to the lake.** Never `DELETE`/`UPDATE`/`MERGE`
+  a live table through DuckDB or any other engine, even to test. A DuckDB
+  write on 2026-08-11 left position-delete files and manifest entries with
+  null sequence numbers in `annotation.identifier_mapping`; PyIceberg then
+  refused every overwrite (`Only entries with status ADDED can have null
+  sequence number`) until the table was rebuilt. The pre-repair copy is
+  `annotation.identifier_mapping__pre_repair`, safe to drop.
 - Report honestly: if something wasn't verified against real data, say so.
   Row counts in docs come from an actual run.
