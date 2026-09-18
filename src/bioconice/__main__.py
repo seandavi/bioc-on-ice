@@ -18,6 +18,7 @@ from . import ncbi_pubmed
 from . import obo
 from . import pubtator3
 from . import wikipathways
+from . import gwas_catalog
 
 
 def _print(counts):
@@ -119,6 +120,13 @@ def main():
     eq.add_argument("--eqtl-release", help="eQTL Catalogue release to land, the N of "
                     f"dataset_metadata_rN.tsv (default: {eqtlcatalogue.RELEASE})")
 
+    gw = sub.add_parser("ingest-gwas-catalog",
+                        help="land the GWAS Catalog associations and studies whole, then derive")
+    gw.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    gw.add_argument("--url", help="a Catalog release directory (…/releases/2026/09/15/, citable: its "
+                    "date becomes the version) or a local copy holding both files; default is "
+                    "the newest dated directory")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -154,6 +162,8 @@ def main():
         _print(wikipathways.ingest(cat, args.release, args.url))
     elif args.cmd == "ingest-eqtlcatalogue":
         _print(eqtlcatalogue.ingest(cat, args.release, args.url, args.eqtl_release))
+    elif args.cmd == "ingest-gwas-catalog":
+        _print(gwas_catalog.ingest(cat, args.release, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
