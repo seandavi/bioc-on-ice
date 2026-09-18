@@ -1,6 +1,7 @@
 import argparse
 
 from . import bedbase
+from . import biogrid
 from . import bugsigdb
 from . import catalog
 from . import cellosaurus
@@ -11,6 +12,7 @@ from . import eqtlcatalogue
 from . import gwas_catalog
 from . import hgnc
 from . import icite
+from . import intact
 from . import mane
 from . import ncbi
 from . import ncbi_accession
@@ -144,6 +146,18 @@ def main():
     rc.add_argument("--url", help="an already-downloaded id_mapping.tsv.gz or a mirror, instead of "
                     "EBI's releases/NN.0/; needs --rnacentral-release to say which release it is")
 
+    bg = sub.add_parser("ingest-biogrid", help="land the BioGRID ALL tab3 release whole, then derive")
+    bg.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    bg.add_argument("--biogrid-release", help="BioGRID release, e.g. 5.0.261 (default: newest in Release-Archive)")
+    bg.add_argument("--url", help="a BIOGRID-ALL-x.y.zzz.tab3.zip elsewhere (file:// for a local "
+                    "copy); its name states the version")
+
+    ia = sub.add_parser("ingest-intact", help="land IntAct's MITAB 2.7 export whole, then derive")
+    ia.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    ia.add_argument("--intact-release", help="IntAct dated release, e.g. 2026-01-09 (default: newest on the FTP)")
+    ia.add_argument("--url", help="an intact.zip elsewhere (file:// for a local copy) under a "
+                    "<YYYY-MM-DD>/psimitab/ path; the dated directory states the version")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -186,6 +200,10 @@ def main():
     elif args.cmd == "ingest-rnacentral":
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
         _print(rnacentral.ingest(cat, args.release, taxa, args.rnacentral_release, args.url))
+    elif args.cmd == "ingest-biogrid":
+        _print(biogrid.ingest(cat, args.release, args.biogrid_release, args.url))
+    elif args.cmd == "ingest-intact":
+        _print(intact.ingest(cat, args.release, args.intact_release, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
