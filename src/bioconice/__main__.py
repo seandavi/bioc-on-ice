@@ -1,6 +1,6 @@
 import argparse
 
-from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, ncbi, ncbi_go, obo
+from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, mane, ncbi, ncbi_go, obo
 from . import ncbi_accession, ncbi_orthologs, ncbi_pubmed
 
 
@@ -74,6 +74,11 @@ def main():
                     "date becomes the version) or a local copy; default is the rolling file, "
                     "versioned by retrieval date")
 
+    mn = sub.add_parser("ingest-mane", help="land the MANE summary whole, then derive")
+    mn.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    mn.add_argument("--url", help="a specific release's MANE.GRCh38.vX.Y.summary.txt.gz, or a local "
+                    "copy; the version is read from the file name (default: the newest release)")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -99,6 +104,8 @@ def main():
         _print(bedbase.ingest(cat, args.release, args.limit))
     elif args.cmd == "ingest-hgnc":
         _print(hgnc.ingest(cat, args.release, args.url))
+    elif args.cmd == "ingest-mane":
+        _print(mane.ingest(cat, args.release, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
