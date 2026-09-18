@@ -312,3 +312,33 @@ def test_live_scripted_session():
         " JOIN gene_papers g ON c.cited_pmid = g.pubmed_id WHERE c.valid_to IS NULL"
     )
     assert citers["rows"][0][0] == 1_085_204
+
+
+def test_tool_calls_are_logged_as_json(caplog):
+    import json, logging
+    from bioconice import mcp as m
+
+    @m._logged
+    def fake_tool(x: int = 1):
+        return [1, 2, 3]
+
+    with caplog.at_level(logging.INFO, logger="bioconice.mcp"):
+        assert fake_tool(x=5) == [1, 2, 3]
+    rec = json.loads(caplog.records[-1].getMessage())
+    assert rec["tool"] == "fake_tool" and rec["args"] == {"x": "5"} and rec["rows"] == 3 and rec["ok"] is True
+
+    @m._logged
+    def failing():
+        raise ValueError("boom")
+
+    with caplog.at_level(logging.INFO, logger="bioconice.mcp"), pytest.raises(ValueError):
+        failing()
+    assert json.loads(caplog.records[-1].getMessage())["error"].startswith("ValueError")
+
+
+def test_liveness_never_touches_the_lake():
+    from starlette.testclient import TestClient
+    from bioconice import mcp as m
+    client = TestClient(m.mcp.streamable_http_app())
+    r = client.get("/health/live")
+    assert r.status_code == 200 and r.json() == {"status": "ok"}
