@@ -7,6 +7,7 @@ from . import cellosaurus
 from . import cellxgene
 from . import ensembl
 from . import eqtlcatalogue
+from . import gwas_catalog
 from . import hgnc
 from . import icite
 from . import mane
@@ -18,7 +19,6 @@ from . import ncbi_pubmed
 from . import obo
 from . import pubtator3
 from . import wikipathways
-from . import gwas_catalog
 
 
 def _print(counts):
