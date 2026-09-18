@@ -1,6 +1,6 @@
 import argparse
 
-from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, icite, ncbi, ncbi_go, obo
+from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, ncbi, ncbi_go, obo
 from . import ncbi_accession, ncbi_pubmed
 
 
@@ -66,6 +66,12 @@ def main():
                          "the full 663k bed / 22k bedset listings); a bounded run never "
                          "retires records outside what it fetched")
 
+    hg = sub.add_parser("ingest-hgnc", help="land the HGNC complete set whole, then derive")
+    hg.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    hg.add_argument("--url", help="a dated archive (hgnc_complete_set_YYYY-MM-DD.txt, citable: its "
+                    "date becomes the version) or a local copy; default is the rolling file, "
+                    "versioned by retrieval date")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -89,6 +95,8 @@ def main():
         _print(obo.ingest(cat, args.release, args.ontology, args.url))
     elif args.cmd == "ingest-bedbase":
         _print(bedbase.ingest(cat, args.release, args.limit))
+    elif args.cmd == "ingest-hgnc":
+        _print(hgnc.ingest(cat, args.release, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
