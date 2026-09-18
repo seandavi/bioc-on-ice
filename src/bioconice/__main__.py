@@ -4,6 +4,8 @@ from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, mane,
 from . import ncbi_accession, ncbi_orthologs, ncbi_pubmed
 from . import pubtator3
 from . import cellosaurus
+from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, ncbi, ncbi_go, obo
+from . import ncbi_accession, ncbi_orthologs, ncbi_pubmed, wikipathways
 
 
 def _print(counts):
@@ -91,6 +93,11 @@ def main():
     cs.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
     cs.add_argument("--url", help="a local or alternate cellosaurus.txt; default is the current "
                     "release on the Expasy FTP site. The version is read from the file either way")
+    wp = sub.add_parser("ingest-wikipathways",
+                        help="land every species GMT of one WikiPathways release, then derive")
+    wp.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    wp.add_argument("--url", help="a dated archive directory (e.g. https://data.wikipathways.org/"
+                    "20260810/gmt/) or a local directory of .gmt files; default is current/gmt/")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
@@ -123,6 +130,8 @@ def main():
         _print(mane.ingest(cat, args.release, args.url))
     elif args.cmd == "ingest-cellosaurus":
         _print(cellosaurus.ingest(cat, args.release, args.url))
+    elif args.cmd == "ingest-wikipathways":
+        _print(wikipathways.ingest(cat, args.release, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
