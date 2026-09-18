@@ -20,7 +20,7 @@ Two derived tables, because the columns change at two different rates:
                                  Type 2 like every other annotation table;
                                  these rarely change, so history stays small.
   annotation.icite__citation     keyed by (citing_pmid, cited_pmid) — the graph
-                                 itself, exploded from cited_by, merged in 16
+                                 itself, exploded from references, merged in 16
                                  shards of cited_pmid so ~930M edges never sit in
                                  memory at once.
   annotation.icite__metrics      keyed by (pmid, snapshot) — how it is *cited*
@@ -227,23 +227,25 @@ SHARDS = 16
 def transform_citations(cat, release, snapshot):
     """Phase 2b: the citation graph, one merge per shard of cited_pmid.
 
-    cited_by is the citing PMIDs of each paper, space-separated, ~930M edges in
-    all — the same graph as the Open Citation Collection file (their sum equals
-    every citation_count). Exploded once into DuckDB, then merged SHARDS times
-    with `cited_pmid % SHARDS` as the scope, so each merge holds ~1/16 of the
-    graph; the shard is a partition column, so the scope scan prunes to it.
+    `references` is the PMIDs each paper cites, space-separated. Exploded, the
+    lists are exactly the NIH Open Citation Collection: 928,458,585 edges in
+    the 2026-08 snapshot on both sides. (`cited_by` is the same graph from the
+    other end but 68,932 edges short — the ones whose cited paper has no iCite
+    record — so it is not used.) Exploded once into DuckDB, then merged SHARDS
+    times with `cited_pmid % SHARDS` as the scope, so each merge holds ~1/16 of
+    the graph; the shard is a partition column, so the scope scan prunes to it.
     """
     con = duckdb.connect()
     con.register("raw", cat.load_table("raw.icite__metadata").scan(
         row_filter=EqualTo("snapshot", snapshot),
-        selected_fields=("pmid", "cited_by")).to_arrow())
+        selected_fields=("pmid", "references")).to_arrow())
     con.execute(f"""
         CREATE TABLE edges AS
-        SELECT DISTINCT citing_pmid, pmid AS cited_pmid,
-               (pmid::BIGINT % {SHARDS})::INTEGER AS shard
-        FROM (SELECT pmid, unnest(str_split(cited_by, ' ')) AS citing_pmid
-              FROM raw WHERE cited_by IS NOT NULL AND cited_by <> '')
-        WHERE citing_pmid <> ''
+        SELECT DISTINCT pmid AS citing_pmid, cited_pmid,
+               (cited_pmid::BIGINT % {SHARDS})::INTEGER AS shard
+        FROM (SELECT pmid, unnest(str_split("references", ' ')) AS cited_pmid
+              FROM raw WHERE "references" IS NOT NULL AND "references" <> '')
+        WHERE cited_pmid <> ''
     """)
     con.unregister("raw")
     out = {}

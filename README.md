@@ -128,7 +128,7 @@ is cited as of one snapshot, keyed by `(pmid, snapshot)`, so every month's RCR
 and citation counts are kept without opening 40M version rows. Both join to
 `annotation.ncbi__gene_pubmed` on `pmid`. `annotation.icite__citation` is the
 graph itself, ~930M `(citing_pmid, cited_pmid)` edges exploded from the
-`cited_by` lists and merged in 16 shards of `cited_pmid`; "who cites X" is
+`references` lists (exactly the Open Citation Collection) and merged in 16 shards of `cited_pmid`; "who cites X" is
 `WHERE cited_pmid = X AND valid_to IS NULL`.
 
 ```sh

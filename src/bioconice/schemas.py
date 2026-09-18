@@ -1341,8 +1341,8 @@ TABLES = {
         business_key=("citing_pmid", "cited_pmid"),
         partition_by=("shard",),
         comment="The PubMed citation graph as iCite publishes it: one row per (citing, cited) "
-                "pair, from the NIH Open Citation Collection via the cited_by lists in "
-                "raw.icite__metadata. ~930M edges. An edge has no attributes, so it is only ever "
+                "pair: the NIH Open Citation Collection exactly, via the references lists in "
+                "raw.icite__metadata (928,458,585 edges in the 2026-08 snapshot, equal to the OCC file). An edge has no attributes, so it is only ever "
                 "asserted or withdrawn: valid_from is the release it appeared in, valid_to the "
                 "release it vanished. 'Who cites X' is WHERE cited_pmid = X AND valid_to IS NULL. "
                 "Source: NIH iCite / NIH-OCC, CC BY 4.0.",

@@ -67,7 +67,7 @@ def test_citation_graph_is_exploded_and_sharded(cat):
                for r in rows(cat, "annotation.icite__citation"))
     written = sum(c["written"] for k, c in counts.items() if k.startswith("annotation.icite__citation"))
     assert written == 3
-    # a citing paper need not itself be a record: 3000000 cites, and is not cited
+    # a cited paper need not have citers of its own: 3000000 cites and is not cited
     assert {r["cited_pmid"] for r in rows(cat, "annotation.icite__citation")} == {"1000000", "2000000"}
 
 
@@ -91,9 +91,12 @@ def test_next_snapshot_keeps_old_metrics_and_versions_only_changed_papers(cat, t
     assert sorted((r["pmid"], r["snapshot"], r["citation_count"]) for r in met
                   if r["pmid"] == "1000000") == [("1000000", "2026-08", 120), ("1000000", "2026-09", 130)]
     assert all(r["valid_to"] is None for r in met)
-    # edges: the same three, none rewritten (3000000 still appears as a citer)
+    # edges: 3000000's record is gone, so the two edges it asserted are retired;
+    # 2000000 -> 1000000 carries forward untouched
     cit = [c for k, c in counts.items() if k.startswith("annotation.icite__citation")]
-    assert sum(c["written"] for c in cit) == 0 and sum(c["unchanged"] for c in cit) == 3
+    assert sum(c.get("retired", 0) for c in cit) == 2 and sum(c["unchanged"] for c in cit) == 1
+    live = rows(cat, "annotation.icite__citation", row_filter="valid_to IS NULL")
+    assert {(r["citing_pmid"], r["cited_pmid"]) for r in live} == {("2000000", "1000000")}
     # raw holds the latest snapshot only
     assert {r["snapshot"] for r in rows(cat, "raw.icite__metadata")} == {"2026-09"}
 
