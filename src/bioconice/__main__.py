@@ -6,6 +6,7 @@ from . import bugsigdb
 from . import catalog
 from . import cellosaurus
 from . import cellxgene
+from . import complexportal
 from . import encode
 from . import ensembl
 from . import eqtlcatalogue
@@ -131,6 +132,12 @@ def main():
                     "date becomes the version) or a local copy holding both files; default is "
                     "the newest dated directory")
 
+    cp = sub.add_parser("ingest-complexportal", help="land every Complex Portal complextab file, then derive")
+    cp.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    cp.add_argument("--complexportal-release", help="dated release, e.g. 2026-01-09 (default: newest on the FTP)")
+    cp.add_argument("--url", help="a <YYYY-MM-DD>/complextab/ directory elsewhere, or a local copy "
+                    "laid out the same way; the dated directory states the version")
+
     en = sub.add_parser("ingest-encode",
                         help="land the ENCODE portal's experiment and file inventory whole, then derive")
     en.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
@@ -204,6 +211,8 @@ def main():
         _print(biogrid.ingest(cat, args.release, args.biogrid_release, args.url))
     elif args.cmd == "ingest-intact":
         _print(intact.ingest(cat, args.release, args.intact_release, args.url))
+    elif args.cmd == "ingest-complexportal":
+        _print(complexportal.ingest(cat, args.release, args.complexportal_release, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
