@@ -1325,6 +1325,7 @@ TABLES = {
                 "leaves for a follow-up, to land as a resource_relationship-style membership "
                 "table when it does.",
         properties={},
+    ),
     "annotation.icite__citation": TableDef(
         schema=Schema(
             NestedField(1, "citing_pmid", StringType(), required=True,
