@@ -109,18 +109,29 @@ def land_raw(cat, release, name, url=None):
     """
     url = url or REGISTRY[name][0]
     con = duckdb.connect()
+    # The graph is read as one JSON value and walked with JSON paths, not as an
+    # inferred struct: struct inference makes `meta` a *key*, and a file whose
+    # edges (go-basic) or nodes (mmusdv) carry no meta at all then has no such
+    # key and the query fails to bind. A JSON path on a missing member is NULL.
+    # The arrays and the version are pulled out of the 70 MB document once, in a
+    # materialised CTE; extracting them per unnested row re-parses the whole
+    # document each time and turned GO into a ten-minute query.
     arrow = con.sql(f"""
-        WITH g AS (SELECT graphs[1] AS graph
-                   FROM read_json('{url}', maximum_object_size={MAX_OBJECT_SIZE}))
-        SELECT 'node' AS kind, n.id AS id, n.lbl AS lbl,
+        WITH g AS MATERIALIZED (
+            SELECT json_extract(graphs, '$[0].nodes')::JSON[] AS nodes,
+                   json_extract(graphs, '$[0].edges')::JSON[] AS edges,
+                   graphs->>'$[0].meta.version' AS version
+            FROM read_json('{url}', columns={{'graphs': 'JSON'}},
+                           maximum_object_size={MAX_OBJECT_SIZE}))
+        SELECT 'node' AS kind, n->>'id' AS id, n->>'lbl' AS lbl,
                NULL::VARCHAR AS sub, NULL::VARCHAR AS pred, NULL::VARCHAR AS obj,
-               to_json(n.meta) AS meta, graph.meta.version AS release_version,
+               (n->'meta')::VARCHAR AS meta, version AS release_version,
                '{release}' AS landed_in
-        FROM g, unnest(graph.nodes) AS t(n)
+        FROM g, unnest(g.nodes) AS t(n)
       UNION ALL
-        SELECT 'edge', NULL, NULL, e.sub, e.pred, e.obj, to_json(e.meta), graph.meta.version,
-               '{release}'
-        FROM g, unnest(graph.edges) AS t(e)
+        SELECT 'edge', NULL, NULL, e->>'sub', e->>'pred', e->>'obj', (e->'meta')::VARCHAR,
+               version, '{release}'
+        FROM g, unnest(g.edges) AS t(e)
     """).to_arrow_table()
     if not arrow.num_rows:
         raise SystemExit(f"obo {name}: {url} yielded no nodes or edges")
