@@ -1380,6 +1380,78 @@ TABLES = {
         properties={"bioc.column.citing_pmid.prefix": "pubmed",
                     "bioc.column.cited_pmid.prefix": "pubmed"},
     ),
+    **{f"raw.pubtator3__{kind}": TableDef(
+        schema=Schema(
+            NestedField(1, "pmid", StringType(), required=True,
+                        doc="PubMed id, as text as upstream prints it."),
+            NestedField(2, "type", StringType(), required=True,
+                        doc=f"Entity type. '{kind.capitalize()}' on every row of this file."),
+            NestedField(3, "concept_id", StringType(),
+                        doc="Normalised identifier, verbatim: an NCBI Gene id, 'MESH:D…', an NCBI "
+                            "Taxonomy id, an rs id or a structured 'tmVar:…;HGVS:…' string. "
+                            "';'-joined where one mention resolves to several ids. A literal '-' "
+                            "is upstream's own value for 'recognised but not normalised' (10.7M "
+                            "chemical rows) and is kept as text, not read as NULL."),
+            NestedField(4, "mentions", StringType(),
+                        doc="The surface strings found in the paper for this concept, '|'-joined, "
+                            "as the tagger saw them (case variants, stray punctuation and quotes "
+                            "included). NULL where upstream leaves it empty: rows asserted by a "
+                            "curated resource with no text hit."),
+            NestedField(5, "resource", StringType(),
+                        doc="Who asserts the row, '|'-joined in no stable order: 'PubTator3' for a "
+                            "text-mined hit, otherwise the curated source it was taken from (MESH, "
+                            "gene2pubmed, generifs_basic, CTD, BioGRID, ClinVar, dbSNP, RGD, …)."),
+            NestedField(6, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment=f"PubTator3's {kind}2pubtator3.gz landed verbatim and whole: one row per (PMID, "
+                f"concept) the dump carries, five headerless tab-separated columns. Holds the "
+                f"LATEST dump only — upstream regenerates the file in place about monthly and "
+                f"archives none. Query annotation.pubtator3__mention instead; read this for the "
+                f"mention strings, which are deliberately not derived. NCBI public domain "
+                f"(US Government Work, per the directory README); cite Wei et al. 2024, PubTator 3.0.",
+        properties={"bioc.column.pmid.prefix": "pubmed", "bioc.license": "public-domain"},
+    ) for kind in ("gene", "disease", "chemical", "species", "mutation")},
+    "annotation.pubtator3__mention": TableDef(
+        schema=Schema(
+            NestedField(1, "pmid", StringType(), required=True,
+                        doc="PubMed id of the paper; joins to annotation.icite__publication.pmid "
+                            "and both ends of annotation.icite__citation. Part of the merge key."),
+            NestedField(2, "concept_type", StringType(), required=True,
+                        doc="'Gene', 'Disease', 'Chemical', 'Species' or 'Mutation', as upstream "
+                            "spells it. In the key because id spaces overlap: '9606' is a taxon "
+                            "under Species and a gene under Gene. Part of the merge key."),
+            NestedField(3, "concept_id", StringType(), required=True,
+                        doc="One identifier per row. Gene: NCBI Gene id (joins to "
+                            "annotation.ncbi__gene.gene_id). Species: NCBI Taxonomy id. Disease and "
+                            "Chemical: 'MESH:D…'/'MESH:C…' (a few OMIM). Mutation: an rs id, or "
+                            "tmVar's structured string kept whole — its 'VariantGroup:n' part "
+                            "numbers variants within one paper and is not an identifier. Upstream's "
+                            "';'-joined multi-id values are split, except under Mutation where ';' "
+                            "is part of the id. Part of the merge key."),
+            NestedField(4, "resource", StringType(), required=True,
+                        doc="Who asserts the link, one per row: 'PubTator3' for a text-mined hit, "
+                            "otherwise a curated source (MESH, gene2pubmed, generifs_basic, CTD, "
+                            "BioGRID, ClinVar, dbSNP, …). Filter resource <> 'PubTator3' for curated "
+                            "links only. Part of the merge key."),
+            NestedField(5, "shard", IntegerType(), required=True,
+                        doc="pmid modulo 16: the unit this table is merged and partitioned in, so "
+                            "~460M rows never sit in one merge. Implementation detail, safe to ignore."),
+            NestedField(6, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(7, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("pmid", "concept_type", "concept_id", "resource"),
+        partition_by=("shard",),
+        comment="Which genes, diseases, chemicals, species and variants each PubMed paper mentions, "
+                "per PubTator3 (NCBI's text mining over all of PubMed and PMC open access) and the "
+                "curated sources it folds in: one row per (paper, concept, asserting resource). "
+                "Machine annotation — expect false positives, far broader than ncbi__gene_pubmed. "
+                "No attributes, so a row is only ever asserted or withdrawn. Not derived: rows "
+                "PubTator3 could not normalise (concept id '-'), and the mention strings, which "
+                "churn between dumps; both stay in raw.pubtator3__*. 'Papers about TP53' is WHERE "
+                "concept_type = 'Gene' AND concept_id = '7157' AND valid_to IS NULL. NCBI public domain.",
+        properties={"bioc.column.pmid.prefix": "pubmed", "bioc.license": "public-domain"},
+    ),
     "resource.resource_relationship": TableDef(
         schema=Schema(
             NestedField(1, "resource_id", StringType(), required=True,
