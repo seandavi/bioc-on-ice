@@ -2714,6 +2714,78 @@ TABLES = {
                 f"whole-row duplicates are collapsed here and kept in raw. Human, GRCh38. {GWAS_LICENCE}",
         properties={"bioc.license": _GWAS_PROPERTIES["bioc.license"]},
     ),
+    "raw.rnacentral__id_mapping": TableDef(
+        schema=Schema(
+            NestedField(1, "urs", StringType(), required=True,
+                        doc="RNAcentral unique RNA sequence id, e.g. URS0000626831: one per distinct "
+                            "sequence, shared by every organism the sequence occurs in. The "
+                            "species-specific id RNAcentral annotates is urs || '_' || taxon_id. "
+                            "File column 1; the file has no header, so the names are ours."),
+            NestedField(2, "database", StringType(), required=True,
+                        doc="The member ('Expert') database asserting the cross-reference, "
+                            "upper-case as published: ENA, RFAM, ENSEMBL, ENSEMBL_GENCODE, REFSEQ, "
+                            "MIRBASE, HGNC, … (56 values in release 27). File column 2."),
+            NestedField(3, "external_id", StringType(),
+                        doc="The sequence's identifier in `database`, exactly as published, e.g. "
+                            "MI0008195, HGNC:35391, ENST00000408549 (ENSEMBL ids are transcripts), "
+                            "NR_031728 (RefSeq, unversioned), or ENA's accession:range:feature "
+                            "composite 'GU786683.1:1..200:rRNA'. File column 3."),
+            NestedField(4, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(5, "rna_type", StringType(),
+                        doc="RNAcentral's RNA type for this sequence in this organism, in the INSDC "
+                            "vocabulary: tRNA, rRNA, lncRNA, pre_miRNA, miRNA, snoRNA, … One value "
+                            "per (urs, taxon_id) in release 27. File column 5."),
+            NestedField(6, "gene_name", StringType(),
+                        doc="What the member database calls the gene, where it says: a symbol "
+                            "(MIR1827), an Ensembl gene id (ENSG00000221476.2), a locus tag, or for "
+                            "Rfam a sequence range. A label of this cross-reference, not of the "
+                            "RNA. NULL where the file's cell is empty (86% of rows); the literal "
+                            "string 'null' on two ENA rows is upstream's and is kept. File column 6."),
+            NestedField(7, "rnacentral_release", StringType(), required=True,
+                        doc="RNAcentral release these rows were read from, e.g. '27'."),
+            NestedField(8, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="RNAcentral's id_mapping.tsv.gz landed verbatim and whole: one row per "
+                "cross-reference from an RNAcentral sequence to a member database's record, every "
+                "organism and every database (264M rows in release 27, 86% of them ENA), so it "
+                "lands streamed in batches. Sorted by urs upstream, not by taxon. Holds the LATEST "
+                "release only, a deliberate narrowing of the raw layer's per-version rule: older "
+                "releases stay immutable under RNAcentral's releases/NN.0/. Licence CC0 from "
+                "RNAcentral release 20 (https://rnacentral.org/license). Caveat: some member "
+                "databases (GeneCards, MalaCards) are commercially licensed upstream, so CC0 here "
+                "rests on RNAcentral's blanket assertion; this file holds identifiers, taxon, RNA "
+                "type and gene name only, and its readme carries no carve-out.",
+        properties={"bioc.column.urs.prefix": "rnacentral",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.license": "CC0-1.0"},
+    ),
+    "annotation.rnacentral__rna": TableDef(
+        schema=Schema(
+            NestedField(1, "urs_taxid", StringType(), required=True,
+                        doc="RNAcentral species-specific sequence id, e.g. URS0000626831_9606: the "
+                            "sequence id, an underscore, the taxon. RNAcentral's unit of annotation, "
+                            "and the source_id of this RNA's rows in annotation.identifier_mapping "
+                            "(source_namespace = 'RNACENTRAL'). Part of the merge key."),
+            NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
+            NestedField(3, "rna_type", StringType(),
+                        doc="RNAcentral's RNA type, in the INSDC vocabulary: tRNA, rRNA, lncRNA, "
+                            "pre_miRNA, miRNA, snoRNA, snRNA, piRNA, circRNA, … ('other' and "
+                            "'misc_RNA' are upstream's catch-alls)."),
+            NestedField(4, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(5, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("urs_taxid", "taxon_id"),
+        comment="One row per non-coding RNA sequence per organism, as RNAcentral types it: the "
+                "ncRNA coverage OrgDb lacks. Reach Ensembl transcripts, RefSeq, miRBase, Rfam, "
+                "HGNC, MGI, GtRNAdb and the other member databases through "
+                "annotation.identifier_mapping (source = 'RNACENTRAL'). Gene names stay in "
+                "raw.rnacentral__id_mapping: they label a cross-reference, not the RNA. Licence "
+                "CC0, resting on RNAcentral's blanket assertion (see the raw table's comment).",
+        properties={"bioc.column.urs_taxid.prefix": "rnacentral",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.license": "CC0-1.0"},
+    ),
 }
 
 

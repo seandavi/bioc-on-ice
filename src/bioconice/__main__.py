@@ -19,6 +19,7 @@ from . import ncbi_orthologs
 from . import ncbi_pubmed
 from . import obo
 from . import pubtator3
+from . import rnacentral
 from . import wikipathways
 
 
@@ -133,6 +134,15 @@ def main():
     en.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
     en.add_argument("--experiments", help="an already-downloaded Experiment report.tsv; skips that download")
     en.add_argument("--files", help="an already-downloaded File report.tsv; skips that download")
+    rc = sub.add_parser("ingest-rnacentral",
+                        help="land RNAcentral's id mapping whole, then derive ncRNA cross-references")
+    rc.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    rc.add_argument("--taxa", help="comma-separated taxa to DERIVE annotation for (default: every "
+                    "taxon in the file, in taxon-range shards); raw is always landed whole")
+    rc.add_argument("--rnacentral-release", help="RNAcentral release number, e.g. 27 "
+                    "(default: whatever current_release is)")
+    rc.add_argument("--url", help="an already-downloaded id_mapping.tsv.gz or a mirror, instead of "
+                    "EBI's releases/NN.0/; needs --rnacentral-release to say which release it is")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
@@ -173,6 +183,9 @@ def main():
         _print(gwas_catalog.ingest(cat, args.release, args.url))
     elif args.cmd == "ingest-encode":
         _print(encode.ingest(cat, args.release, args.experiments, args.files))
+    elif args.cmd == "ingest-rnacentral":
+        taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
+        _print(rnacentral.ingest(cat, args.release, taxa, args.rnacentral_release, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
