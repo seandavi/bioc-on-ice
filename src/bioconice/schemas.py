@@ -1638,6 +1638,116 @@ TABLES = {
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.ortholog_taxon_id.prefix": "ncbitaxon"},
     ),
+    "raw.ncbi__mane_summary": TableDef(
+        schema=Schema(
+            NestedField(1, "ncbi_geneid", StringType(), required=True,
+                        doc="Upstream '#NCBI_GeneID': the Entrez GeneID with MANE's own prefix, "
+                            "e.g. 'GeneID:7157', verbatim."),
+            NestedField(2, "ensembl_gene", StringType(), required=True,
+                        doc="Upstream 'Ensembl_Gene': versioned Ensembl gene id, e.g. ENSG00000141510.21."),
+            NestedField(3, "hgnc_id", StringType(),
+                        doc="Upstream 'HGNC_ID', e.g. 'HGNC:11998'. NULL (an empty cell) for the "
+                            "few genes HGNC has not named."),
+            NestedField(4, "symbol", StringType(),
+                        doc="Gene symbol: HGNC's where there is one, else NCBI's."),
+            NestedField(5, "name", StringType(), doc="Gene name, e.g. 'tumor protein p53'."),
+            NestedField(6, "refseq_nuc", StringType(), required=True,
+                        doc="Upstream 'RefSeq_nuc': versioned RefSeq transcript, e.g. NM_000546.6. "
+                            "NR_ for the non-coding transcripts MANE includes."),
+            NestedField(7, "refseq_prot", StringType(),
+                        doc="Upstream 'RefSeq_prot': versioned RefSeq protein, e.g. NP_000537.3. "
+                            "NULL on a non-coding (NR_) row."),
+            NestedField(8, "ensembl_nuc", StringType(), required=True,
+                        doc="Upstream 'Ensembl_nuc': versioned Ensembl transcript, e.g. ENST00000269305.9."),
+            NestedField(9, "ensembl_prot", StringType(),
+                        doc="Upstream 'Ensembl_prot': versioned Ensembl protein, e.g. "
+                            "ENSP00000269305.4. NULL on a non-coding row."),
+            NestedField(10, "mane_status", StringType(), required=True,
+                        doc="Upstream 'MANE_status': 'MANE Select' or 'MANE Plus Clinical'."),
+            NestedField(11, "grch38_chr", StringType(),
+                        doc="Upstream 'GRCh38_chr': RefSeq accession of the GRCh38 sequence, e.g. "
+                            "NC_000017.11. Not a chromosome name."),
+            NestedField(12, "chr_start", StringType(),
+                        doc="Transcript start on grch38_chr, 1-based, as published (unparsed string)."),
+            NestedField(13, "chr_end", StringType(),
+                        doc="Transcript end on grch38_chr, inclusive, as published (unparsed string)."),
+            NestedField(14, "chr_strand", StringType(),
+                        doc="'+' or '-'. The '-' is the minus strand, never a missing marker: this "
+                            "file is read with the empty cell as NULL, unlike the NCBI Gene dumps."),
+            NestedField(15, "mane_version", StringType(), required=True,
+                        doc="MANE release, from the file name, e.g. '1.5'. Raw is replaced per value "
+                            "of this column, so several releases can coexist."),
+            NestedField(16, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="The MANE summary file (Matched Annotation from NCBI and EMBL-EBI) landed verbatim "
+                "and whole, one row per matched RefSeq/Ensembl transcript pair, human GRCh38 only. "
+                "Every column is the unparsed string; an empty cell is NULL. Query "
+                "annotation.mane__transcript instead. A joint NCBI / EMBL-EBI product, published "
+                "on NCBI's FTP site without a licence file; NCBI places no restrictions on use or "
+                "distribution of its molecular data.",
+        properties={"bioc.column.hgnc_id.prefix": "hgnc"},
+    ),
+    "annotation.mane__transcript": TableDef(
+        schema=Schema(
+            NestedField(1, "ensembl_transcript_id", StringType(), required=True,
+                        doc="Ensembl stable transcript id without version, e.g. ENST00000269305. "
+                            "The key, and the join to annotation.transcript.transcript_id "
+                            "(source = 'ENSEMBL')."),
+            NestedField(2, "taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id. Always 9606: MANE is a human product."),
+            NestedField(3, "ensembl_transcript_version", StringType(),
+                        doc="Version of the Ensembl transcript MANE matched, e.g. 9. The match is "
+                            "exact to the version: if annotation.transcript.version differs, the "
+                            "two are from different Ensembl releases."),
+            NestedField(4, "refseq_rna", StringType(), required=True,
+                        doc="The matched RefSeq transcript WITH its version, e.g. NM_000546.6 — the "
+                            "form the REFSEQ_RNA namespace of annotation.identifier_mapping uses. "
+                            "NR_ for a non-coding transcript."),
+            NestedField(5, "mane_status", StringType(), required=True,
+                        doc="'MANE Select': the one representative transcript of its gene. 'MANE "
+                            "Plus Clinical': an extra transcript needed to report known pathogenic "
+                            "variants that Select misses; a gene may have more than one. Filter on "
+                            "this before assuming one row per gene."),
+            NestedField(6, "gene_id", StringType(), required=True,
+                        doc="NCBI Entrez GeneID, e.g. 7157, without MANE's 'GeneID:' prefix. Joins "
+                            "annotation.ncbi__gene."),
+            NestedField(7, "ensembl_gene_id", StringType(), required=True,
+                        doc="Ensembl stable gene id without version, e.g. ENSG00000141510. Joins "
+                            "annotation.gene (source = 'ENSEMBL')."),
+            NestedField(8, "hgnc_id", StringType(),
+                        doc="HGNC id with its prefix, e.g. 'HGNC:11998'. NULL where HGNC has not "
+                            "named the gene."),
+            NestedField(9, "symbol", StringType(), doc="Gene symbol as MANE carried it, e.g. TP53."),
+            NestedField(10, "refseq_protein", StringType(),
+                        doc="The matched RefSeq protein with its version, e.g. NP_000537.3. NULL "
+                            "for a non-coding transcript."),
+            NestedField(11, "ensembl_protein_id", StringType(),
+                        doc="Ensembl stable protein id without version, e.g. ENSP00000269305. NULL "
+                            "for a non-coding transcript."),
+            NestedField(12, "ensembl_protein_version", StringType(),
+                        doc="Version of the matched Ensembl protein, e.g. 4."),
+            NestedField(13, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(14, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("ensembl_transcript_id",),
+        comment="MANE transcripts: for each human gene, the transcript RefSeq and Ensembl annotate "
+                "identically (MANE Select), plus the MANE Plus Clinical extras. One row per matched "
+                "pair, carrying both providers' transcript, protein and gene ids — the bridge "
+                "between RefSeq- and Ensembl-based annotation. RefSeq accessions are versioned and "
+                "Ensembl ids are split into id and version, each the way the rest of the catalog "
+                "writes them. The same pairs are in annotation.identifier_mapping as REFSEQ_RNA -> "
+                "ENSEMBL_TRANSCRIPT under source = 'MANE'. Gene name and GRCh38 coordinates stay "
+                "in raw.ncbi__mane_summary.",
+        properties={"bioc.column.ensembl_transcript_id.prefix": "ensembl",
+                    "bioc.column.ensembl_gene_id.prefix": "ensembl",
+                    "bioc.column.ensembl_protein_id.prefix": "ensembl",
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.column.hgnc_id.prefix": "hgnc",
+                    "bioc.column.refseq_rna.prefix": "refseq",
+                    "bioc.column.refseq_protein.prefix": "refseq",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon"},
+    ),
 }
 
 
