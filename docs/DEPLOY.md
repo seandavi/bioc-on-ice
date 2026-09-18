@@ -23,6 +23,21 @@ Deploy credentials, both in Secret Manager project `cdsci-infra`:
 `bioconice-icegate-key-seandavi` (and `-ro`), whose SHA-256 digests are the
 `api_keys` in `icegate.yaml`.
 
+## The Worker family
+
+| Worker | URL | Config | Deploy |
+| --- | --- | --- | --- |
+| `icegate-bioconice` | https://icegate-bioconice.seandavi.workers.dev | this repo's `icegate.yaml` + the icegate checkout | `scripts/deploy-icegate.sh` |
+| `bioconice-explorer` | https://bioconice-explorer.seandavi.workers.dev | `explorer/wrangler.jsonc` (static assets only, no script) | `cd explorer && npx wrangler@4 deploy` with the same two credentials |
+
+The explorer reads the catalog anonymously through icegate, so it has no secrets. Its
+DuckDB-WASM query tab stays off by default until the `bioconice` R2 bucket gets a CORS
+policy allowing browser reads (explorer/README.md). First deployed 2026-09-18.
+
+The MCP server is **not** a Worker: it runs on onclappc02 as a docker compose service
+behind Traefik (`mcp/README.md`), the platform's pattern for services that need a real
+engine.
+
 ## Deploy
 
 ```sh
