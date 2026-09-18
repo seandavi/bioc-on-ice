@@ -73,6 +73,5 @@ names are NCBI's, keyed by assembly accession (Ensembl's GRCh38 is
    RefSeq-native work (#44).
 
 **UNVERIFIED**: Ensembl Genomes (plants, fungi, metazoa, bacteria) live on a
-different FTP; whether `dna_index/` exists there was not checked. The 7b143ed
-cross-imports (Metazoa/Fungi species served from the main FTP) were inside the
-359 checked.
+different FTP; whether `dna_index/` exists there was not checked. Only the
+directories under `release-116/fasta/` on the main FTP were walked.
