@@ -111,6 +111,7 @@ NAMESPACES = {
     "ontology": "Terms and relationships from external OBO ontologies (CL, UBERON, MONDO, EFO, "
                 "HsapDv, MmusDv, GO): cell types, anatomy, disease, experimental factors, "
                 "developmental stage.",
+    "clinical": "Curated links between human genetic variation and traits or disease.",
 }
 
 # (short name, licence) for every OBO ontology this catalog lands, kept here rather than
@@ -186,6 +187,138 @@ def _ncbi_gene_pairs(comment, relationship):
                     "bioc.column.other_taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.other_gene_id.prefix": "ncbigene"},
+    )
+
+
+GWAS_LICENCE = ("NHGRI-EBI GWAS Catalog, release <gwas_catalog_release>, under EMBL-EBI Terms of "
+                "Use (https://www.ebi.ac.uk/about/terms-of-use/): no additional restrictions on "
+                "use or redistribution, attribution expected. Not a formal open licence.")
+_GWAS_PROPERTIES = {"bioc.column.pubmed_id.prefix": "pubmed",
+                    "bioc.license": "LicenseRef-EMBL-EBI-Terms-of-Use"}
+_NA_NR = "'NA' and 'NR' are the curators' \"not applicable\" and \"not reported\", kept as published."
+
+# Column docs for the two GWAS Catalog downloads, in each file's column order — the
+# raw tables are declared from these. Both files repeat the study-level columns.
+_GWAS_ASSOCIATION = {
+    "date_added_to_catalog": "Date the study was published in the Catalog, YYYY-MM-DD.",
+    "pubmed_id": "PubMed id of the publication ('PUBMEDID' / 'PUBMED ID' upstream).",
+    "first_author": "First author of the publication, e.g. 'Schoeler T'.",
+    "date": "Publication date, YYYY-MM-DD (online date where there is one).",
+    "journal": "Journal, abbreviated, e.g. 'Am J Hum Genet'.",
+    "link": "PubMed URL of the publication, without a scheme: 'www.ncbi.nlm.nih.gov/pubmed/<id>'.",
+    "study": "Title of the publication. One publication is usually many studies (one per "
+             "trait analysed), so this repeats across study accessions.",
+    "disease_trait": "The disease or trait examined, as the curator worded it from the paper. "
+                     "Free text; the ontology form is mapped_trait_uri.",
+    "initial_sample_size": "Sample size and ancestry of the discovery stage, as prose, e.g. "
+                           "'43,509 European ancestry individuals'.",
+    "replication_sample_size": "Sample size and ancestry of the replication stage, as prose. " + _NA_NR,
+    "region": "Cytogenetic region of the variant, e.g. 17q21.31. NULL where the Catalog could "
+              "not map the variant.",
+    "chr_id": "Chromosome of the variant, GRCh38. One value per SNP on a multi-SNP row, joined "
+              "the way snps is (';' or ' x '). NULL where unmapped.",
+    "chr_pos": "1-based GRCh38 position of the variant. Text: a multi-SNP row carries one "
+               "position per SNP, e.g. '31157072 x 31272944'. NULL where unmapped.",
+    "reported_genes": "Gene(s) the authors reported for the association, ', '-separated. 'NR' "
+                      "is not reported; 'intergenic' (either case) is the authors' word. NULL "
+                      "on 926,711 of 1,192,604 rows at 2026-09-15.",
+    "mapped_gene": "Gene symbol(s) the Catalog's Ensembl mapping gives the variant: the genes "
+                   "it overlaps, ', '-separated, or 'UPSTREAM - DOWNSTREAM' for an intergenic "
+                   "one. On a multi-SNP row each SNP's entry is joined by ';' or ' x ', so this "
+                   "is not safely splittable on any one separator (symbols contain '-').",
+    "upstream_gene_id": "Ensembl gene id of the nearest upstream gene, for an intergenic variant.",
+    "downstream_gene_id": "Ensembl gene id of the nearest downstream gene, for an intergenic variant.",
+    "snp_gene_ids": "Ensembl gene id(s) of the genes the variant lies within, ', '-separated.",
+    "upstream_gene_distance": "Distance to the nearest upstream gene, in base pairs.",
+    "downstream_gene_distance": "Distance to the nearest downstream gene, in base pairs.",
+    "strongest_snp_risk_allele": "The variant and its risk or effect allele, 'rs2328895-C'; '?' "
+                                 "where the allele was not reported. Multi-SNP rows list every "
+                                 "SNP, joined as in snps.",
+    "snps": "The variant: an rsID on most rows, otherwise whatever the paper gave "
+            "('chr19:5831829'; 201,351 rows at 2026-09-15). NOT one SNP per row: a haplotype "
+            "lists its SNPs joined by '; ' (1,956 rows) or ', ' (127), and a SNP x SNP "
+            "interaction joins two with ' x ' (3,288).",
+    "merged": "'1' if dbSNP has merged this rsID into another, else '0'.",
+    "snp_id_current": "The current rsID, digits only, no 'rs'. Differs from snps where merged "
+                      "is 1. Text: a few carry a stray trailing character upstream. NULL on "
+                      "multi-SNP and unmapped rows.",
+    "context": "Most severe Ensembl VEP consequence of the variant, e.g. intron_variant.",
+    "intergenic": "'1' if the variant lies between genes, '0' if within one.",
+    "risk_allele_frequency": "Reported frequency of the risk allele in controls. Text because "
+                             "it is not always a number: 'NR' on half the rows, ranges "
+                             "('0.46-0.52'), annotations ('0.77 (EA)').",
+    "p_value": "Reported p-value, as printed, e.g. '1E-8'. Text on purpose, in the derived "
+               "table too: 6,275 rows at 2026-09-15 are below the smallest double ('1E-396') "
+               "and would read as 0. Use pvalue_mlog for arithmetic.",
+    "pvalue_mlog": "-log10 of the p-value.",
+    "p_value_text": "What the p-value is conditional on, in parentheses as published: "
+                    "'(women)', '(dominant)', '(conditioned on rs123)'. This is what "
+                    "separates most repeats of one SNP within one study.",
+    "or_beta": "Reported odds ratio or beta coefficient ('OR or BETA' upstream) — which one "
+               "is not flagged; a unit in ci_95_text means a beta. Before 2021 the Catalog "
+               "inverted every OR < 1, with its allele, so older ORs are all > 1.",
+    "ci_95_text": "Reported 95% confidence interval ('95% CI (TEXT)' upstream), with the unit "
+                  "and direction for a beta: '[0.015-0.034] unit decrease'. " + _NA_NR,
+    "platform": "Genotyping platform manufacturer and the number of SNPs passing QC "
+                "('PLATFORM [SNPS PASSING QC]' upstream), e.g. 'Affymetrix [509492]'.",
+    "cnv": "Whether the study is of copy number variation. 'N' on every row at 2026-09-15.",
+    "mapped_trait": "Label(s) of the ontology term(s) the Catalog mapped the trait to, "
+                    "', '-separated — and labels contain commas, so split mapped_trait_uri, "
+                    "not this.",
+    "mapped_trait_uri": "IRI(s) of the mapped ontology term(s), ', '-separated, verbatim: EFO's "
+                        "own (http://www.ebi.ac.uk/efo/EFO_0007789) and the terms EFO imports "
+                        "from MONDO, OBA, HP, GO, Orphanet and others. On an association row "
+                        "this is the association's mapping, which can differ from its study's.",
+    "study_accession": "GWAS Catalog study accession, e.g. GCST012020. One per (publication, "
+                       "trait analysed); the join between the two files.",
+    "genotyping_technology": "e.g. 'Genome-wide genotyping array', 'Genome-wide sequencing'; "
+                             "several are ', '-separated.",
+}
+_S = _GWAS_ASSOCIATION
+_GWAS_STUDY = {
+    **{c: _S[c] for c in ("date_added_to_catalog", "pubmed_id", "first_author", "date", "journal",
+                          "link", "study", "disease_trait", "initial_sample_size",
+                          "replication_sample_size", "platform")},
+    "association_count": "Number of rows this study has in the associations file. 0 for two "
+                         "thirds of studies: most are summary-statistics depositions with no "
+                         "curated top associations.",
+    **{c: _S[c] for c in ("mapped_trait", "mapped_trait_uri", "study_accession",
+                          "genotyping_technology")},
+    "submission_date": "Declared by the file; empty on every row at 2026-09-15.",
+    "statistical_model": "Declared by the file; empty on every row at 2026-09-15.",
+    "background_trait": "Declared by the file; empty on every row at 2026-09-15.",
+    "mapped_background_trait": "Label(s) of the ontology term(s) for a trait shared by every "
+                               "participant (e.g. a GWAS of nephropathy within diabetics), "
+                               "', '-separated. NULL for most studies.",
+    "mapped_background_trait_uri": "IRI(s) of the background trait term(s), ', '-separated, verbatim.",
+    "cohort": "Named cohort(s) the samples came from, '|'-separated, e.g. 'UKB|CHARGE'. " + _NA_NR,
+    "full_summary_statistics": "'yes' if the Catalog hosts full summary statistics for the study.",
+    "summary_stats_location": "URL of the study's summary statistics directory on the EBI "
+                              "FTP site; 'NA' where there are none. Those files are not landed.",
+    "gxe": "'yes' if the study analyses a gene-by-environment interaction.",
+}
+del _S
+
+
+def _gwas_raw(docs, what):
+    """raw.gwas_catalog__*: every upstream column as text, in file order, plus the two we add."""
+    return TableDef(
+        schema=Schema(
+            *[NestedField(i, name, StringType(), required=name == "study_accession", doc=doc)
+              for i, (name, doc) in enumerate(docs.items(), 1)],
+            NestedField(len(docs) + 1, "gwas_catalog_release", StringType(), required=True,
+                        doc="The Catalog release these rows came from, YYYY-MM-DD: the dated "
+                            "directory under releases/ (the retrieval date if landed from "
+                            "anywhere else). Raw is replaced wholesale per value of this "
+                            "column, so more than one release can coexist."),
+            NestedField(len(docs) + 2, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment=f"{what} Verbatim and whole: every column as text under a snake_cased name "
+                f"(the column docs give upstream spellings that differ), no row dropped — "
+                f"whole-row duplicates included — and nothing split. The file has no quoting, "
+                f"so a '\"' is data. An empty cell is read as NULL. {GWAS_LICENCE}",
+        properties=_GWAS_PROPERTIES,
     )
 
 
@@ -2177,6 +2310,167 @@ TABLES = {
                 "Kerimov et al. Nat Genet 2021.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.license": "CC-BY-4.0"},
+    ),
+    "raw.gwas_catalog__associations": _gwas_raw(
+        _GWAS_ASSOCIATION,
+        "The GWAS Catalog's ontology-annotated full associations download "
+        "(gwas-catalog-associations_ontology-annotated-full.zip): one row per curated "
+        "variant-trait association, with its study's columns repeated on each."),
+    "raw.gwas_catalog__studies": _gwas_raw(
+        _GWAS_STUDY,
+        "The GWAS Catalog's studies download (gwas-catalog-download-studies-v1.0.3.1.txt): one "
+        "row per study accession, including the two thirds with no curated association."),
+    "clinical.gwas_catalog__study": TableDef(
+        schema=Schema(
+            NestedField(1, "study_accession", StringType(), required=True,
+                        doc=_GWAS_STUDY["study_accession"]),
+            NestedField(2, "pubmed_id", StringType(), doc="PubMed id of the publication."),
+            NestedField(3, "first_author", StringType(), doc=_GWAS_STUDY["first_author"]),
+            NestedField(4, "publication_date", StringType(), doc=_GWAS_STUDY["date"]),
+            NestedField(5, "journal", StringType(), doc=_GWAS_STUDY["journal"]),
+            NestedField(6, "link", StringType(), doc=_GWAS_STUDY["link"]),
+            NestedField(7, "study_title", StringType(), doc=_GWAS_STUDY["study"]),
+            NestedField(8, "date_added_to_catalog", StringType(),
+                        doc=_GWAS_STUDY["date_added_to_catalog"]),
+            NestedField(9, "disease_trait", StringType(),
+                        doc="The disease or trait examined, as the curator worded it from the "
+                            "paper. Free text; the ontology form is mapped_trait_ids."),
+            NestedField(10, "initial_sample_size", StringType(),
+                        doc=_GWAS_STUDY["initial_sample_size"]),
+            NestedField(11, "replication_sample_size", StringType(),
+                        doc=_GWAS_STUDY["replication_sample_size"]),
+            NestedField(12, "platform", StringType(), doc=_GWAS_STUDY["platform"]),
+            NestedField(13, "genotyping_technology", StringType(),
+                        doc=_GWAS_STUDY["genotyping_technology"]),
+            NestedField(14, "cohort", StringType(), doc=_GWAS_STUDY["cohort"]),
+            NestedField(15, "association_count", IntegerType(),
+                        doc="Number of curated associations the Catalog holds for this study, by "
+                            "its own count. 0 for two thirds of studies: most are summary-"
+                            "statistics depositions with no curated top associations. It counts "
+                            "the associations file's whole-row duplicates, so for 39 studies at "
+                            "2026-09-15 it exceeds their rows in clinical.gwas_catalog__association."),
+            NestedField(16, "mapped_trait", StringType(),
+                        doc="Label(s) of the mapped ontology term(s), ', '-separated as "
+                            "published. For reading; labels contain commas, so join on "
+                            "mapped_trait_ids."),
+            NestedField(17, "mapped_trait_ids",
+                        ListType(element_id=117, element_type=StringType(), element_required=False),
+                        doc="CURIEs of the ontology term(s) the Catalog mapped the trait to, "
+                            "sorted: EFO:0007789, MONDO:0005148, OBA:…, HP:…. Normalised from the "
+                            "IRIs in raw exactly as ontology.term.term_id is, and every one is a "
+                            "term EFO defines or imports, so unnest and join ontology.term on "
+                            "ontology = 'efo'. An id that is not PREFIX_digits "
+                            "(…/OBA_VT0001253, …/NCIT_C95746; 62 distinct at 2026-09-15) stays "
+                            "the full IRI, because that is how ontology.term carries it. NULL "
+                            "where the Catalog mapped nothing."),
+            NestedField(18, "mapped_background_trait", StringType(),
+                        doc=_GWAS_STUDY["mapped_background_trait"]),
+            NestedField(19, "mapped_background_trait_ids",
+                        ListType(element_id=119, element_type=StringType(), element_required=False),
+                        doc="CURIEs of the background trait term(s), sorted; same form and join "
+                            "as mapped_trait_ids. NULL for most studies."),
+            NestedField(20, "full_summary_statistics", BooleanType(),
+                        doc="True if the Catalog hosts full summary statistics for the study."),
+            NestedField(21, "summary_stats_location", StringType(),
+                        doc=_GWAS_STUDY["summary_stats_location"]),
+            NestedField(22, "gxe", BooleanType(),
+                        doc="True if the study analyses a gene-by-environment interaction."),
+            NestedField(23, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(24, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("study_accession",),
+        comment="GWAS Catalog studies, keyed by study accession (GCST…): one per publication and "
+                "trait analysed, with the publication, the trait as reported and as mapped to "
+                "EFO, sample descriptions, and where the summary statistics are. Includes "
+                "studies with no curated association. Three columns the file declares but never "
+                "fills stay in raw.gwas_catalog__studies; ancestry breakdowns are a separate "
+                f"upstream file, not landed. {GWAS_LICENCE}",
+        properties=_GWAS_PROPERTIES,
+    ),
+    "clinical.gwas_catalog__association": TableDef(
+        schema=Schema(
+            NestedField(1, "association_key", StringType(), required=True,
+                        doc="md5 of the nine curated columns — study_accession, snps, "
+                            "strongest_snp_risk_allele, p_value, p_value_text, or_beta, "
+                            "ci_95_text, risk_allele_frequency, reported_genes — joined by "
+                            "U+001F with NULL as empty. The download publishes no association "
+                            "id and no smaller set of columns is unique (one study reports one "
+                            "SNP under several models or strata), so an association is "
+                            "identified by what was curated from the paper. A curation fix to "
+                            "any of the nine therefore reads as one association retired and "
+                            "another opened; a change to the Catalog's mapping columns is a new "
+                            "version under the same key. Not an upstream identifier."),
+            NestedField(2, "study_accession", StringType(), required=True,
+                        doc="GWAS Catalog study accession; joins clinical.gwas_catalog__study, "
+                            "which holds the publication, reported trait and sample columns."),
+            NestedField(3, "snps", StringType(), doc=_GWAS_ASSOCIATION["snps"]),
+            NestedField(4, "snp_ids",
+                        ListType(element_id=104, element_type=StringType(), element_required=False),
+                        doc="The individual variants in snps, split on its three separators, "
+                            "distinct and sorted: one element on an ordinary row, several for a "
+                            "haplotype or interaction. For list_contains(snp_ids, 'rs7903146'); "
+                            "which separator joined them is only in snps."),
+            NestedField(5, "strongest_snp_risk_allele", StringType(),
+                        doc=_GWAS_ASSOCIATION["strongest_snp_risk_allele"]),
+            NestedField(6, "p_value", StringType(), doc=_GWAS_ASSOCIATION["p_value"]),
+            NestedField(7, "pvalue_mlog", DoubleType(), doc=_GWAS_ASSOCIATION["pvalue_mlog"]),
+            NestedField(8, "p_value_text", StringType(), doc=_GWAS_ASSOCIATION["p_value_text"]),
+            NestedField(9, "or_beta", DoubleType(), doc=_GWAS_ASSOCIATION["or_beta"]),
+            NestedField(10, "ci_95_text", StringType(), doc=_GWAS_ASSOCIATION["ci_95_text"]),
+            NestedField(11, "risk_allele_frequency", StringType(),
+                        doc=_GWAS_ASSOCIATION["risk_allele_frequency"]),
+            NestedField(12, "reported_genes", StringType(),
+                        doc=_GWAS_ASSOCIATION["reported_genes"]),
+            NestedField(13, "region", StringType(), doc=_GWAS_ASSOCIATION["region"]),
+            NestedField(14, "chr_id", StringType(), doc=_GWAS_ASSOCIATION["chr_id"]),
+            NestedField(15, "chr_pos", StringType(), doc=_GWAS_ASSOCIATION["chr_pos"]),
+            NestedField(16, "context", StringType(), doc=_GWAS_ASSOCIATION["context"]),
+            NestedField(17, "intergenic", BooleanType(),
+                        doc="True if the variant lies between genes. NULL where unmapped."),
+            NestedField(18, "mapped_gene", StringType(), doc=_GWAS_ASSOCIATION["mapped_gene"]),
+            NestedField(19, "snp_gene_ids",
+                        ListType(element_id=119, element_type=StringType(), element_required=False),
+                        doc="Ensembl gene ids of the genes the variant lies within, in published "
+                            "order; joins annotation.gene. NULL for an intergenic variant — see "
+                            "upstream_gene_id / downstream_gene_id."),
+            NestedField(20, "upstream_gene_id", StringType(),
+                        doc=_GWAS_ASSOCIATION["upstream_gene_id"]),
+            NestedField(21, "upstream_gene_distance", IntegerType(),
+                        doc=_GWAS_ASSOCIATION["upstream_gene_distance"]),
+            NestedField(22, "downstream_gene_id", StringType(),
+                        doc=_GWAS_ASSOCIATION["downstream_gene_id"]),
+            NestedField(23, "downstream_gene_distance", IntegerType(),
+                        doc=_GWAS_ASSOCIATION["downstream_gene_distance"]),
+            NestedField(24, "merged", BooleanType(),
+                        doc="True if dbSNP has merged this rsID into another; snp_id_current is "
+                            "then the survivor."),
+            NestedField(25, "snp_id_current", StringType(),
+                        doc=_GWAS_ASSOCIATION["snp_id_current"]),
+            NestedField(26, "mapped_trait", StringType(),
+                        doc="Label(s) of the mapped ontology term(s), ', '-separated as "
+                            "published. For reading; labels contain commas, so join on "
+                            "mapped_trait_ids."),
+            NestedField(27, "mapped_trait_ids",
+                        ListType(element_id=127, element_type=StringType(), element_required=False),
+                        doc="CURIEs of the ontology term(s) the Catalog mapped this association's "
+                            "trait to, sorted; same form and join as "
+                            "clinical.gwas_catalog__study.mapped_trait_ids, and usually but not "
+                            "always the same terms as the study's (196 studies differ at "
+                            "2026-09-15). NULL on the few rows the Catalog left unmapped."),
+            NestedField(28, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(29, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("association_key",),
+        comment="Curated variant-trait associations from the GWAS Catalog (p < 1e-5 in the "
+                "source paper), one row per association. A row is NOT one SNP: haplotype and "
+                "SNP x SNP interaction rows name several in snps / snp_ids, and their position "
+                "and gene columns are joined the same way. One study can report one SNP several "
+                "times (per sex, model or conditional analysis, see p_value_text), so count "
+                "rows, not (study, SNP) pairs. Traits are lists of EFO-form CURIEs: unnest "
+                "mapped_trait_ids and join ontology.term on ontology = 'efo'. Study-level "
+                "columns are in clinical.gwas_catalog__study, on study_accession. The file's "
+                f"whole-row duplicates are collapsed here and kept in raw. Human, GRCh38. {GWAS_LICENCE}",
+        properties={"bioc.license": _GWAS_PROPERTIES["bioc.license"]},
     ),
 }
 
