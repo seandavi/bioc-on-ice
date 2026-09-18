@@ -1958,6 +1958,102 @@ TABLES = {
         properties={"bioc.column.accession.prefix": "cellosaurus",
                     "bioc.license": "CC-BY-4.0"},
     ),
+    "raw.wikipathways__gmt": TableDef(
+        schema=Schema(
+            NestedField(1, "file_name", StringType(), required=True,
+                        doc="The species GMT file this line came from, e.g. "
+                            "'wikipathways-20260910-gmt-Homo_sapiens.gmt'. Every species file of "
+                            "the release is landed."),
+            NestedField(2, "line_number", IntegerType(), required=True,
+                        doc="1-based line number within file_name. With file_name it identifies a "
+                            "row within one wikipathways_version, though raw declares no key."),
+            NestedField(3, "name", StringType(),
+                        doc="GMT field 1, the set name, unparsed. WikiPathways packs four "
+                            "'%'-separated fields into it: pathway name, 'WikiPathways_<release "
+                            "date>', WP id, species — e.g. 'Glutathione metabolism%"
+                            "WikiPathways_20260910%WP100%Homo sapiens'."),
+            NestedField(4, "description", StringType(),
+                        doc="GMT field 2, the set description. WikiPathways puts the pathway's "
+                            "URL here, e.g. https://www.wikipathways.org/instance/WP100."),
+            NestedField(5, "genes", StringType(),
+                        doc="GMT fields 3 onward, verbatim: the rest of the line, still "
+                            "tab-separated, in file order and with the file's repeats (a gene "
+                            "drawn twice in a pathway is listed twice). Entrez GeneIDs. Split "
+                            "with str_split(genes, chr(9)). NULL for a set with no genes."),
+            NestedField(6, "species", StringType(),
+                        doc="The species token of file_name, as spelled there, e.g. "
+                            "'Homo_sapiens'."),
+            NestedField(7, "wikipathways_version", StringType(), required=True,
+                        doc="WikiPathways release these rows came from: the date in the file "
+                            "names, in WikiPathways' own form, e.g. '20260910'. Raw holds every "
+                            "landed version; filter on this to get one."),
+            NestedField(8, "landed_in", StringType(), required=True,
+                        doc="biocOnIce release that fetched these rows."),
+        ),
+        comment="WikiPathways' monthly GMT gene-set export (data.wikipathways.org/current/gmt/), "
+                "every species file, one row per GMT line. GMT is ragged — name, description, "
+                "then one field per gene — so the gene fields are kept as one verbatim "
+                "tab-joined string and the packed set name is left unparsed; "
+                "annotation.wikipathways__* is the interpreted form. Licence CC0 "
+                "(wikipathways.org/terms.html).",
+        properties={"bioc.license": "CC0-1.0"},
+    ),
+    "annotation.wikipathways__pathway": TableDef(
+        schema=Schema(
+            NestedField(1, "pathway_id", StringType(), required=True,
+                        doc="WikiPathways id, e.g. WP100. Unique across species: a pathway "
+                            "belongs to one organism, and its homologue in another has its own "
+                            "id."),
+            NestedField(2, "taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id of the pathway's species, e.g. 9606. Species-level, "
+                            "as WikiPathways names it — NCBI Gene files yeast genes under strain "
+                            "S288C (559292), not 4932."),
+            NestedField(3, "name", StringType(), doc="Pathway title, e.g. 'Glutathione metabolism'."),
+            NestedField(4, "species", StringType(),
+                        doc="Species name as WikiPathways spells it, e.g. 'Homo sapiens', "
+                            "'Canis familiaris'. taxon_id is the joinable form."),
+            NestedField(5, "url", StringType(),
+                        doc="The pathway's page, e.g. https://www.wikipathways.org/instance/WP100 "
+                            "— the GMT description field."),
+            NestedField(6, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(7, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("pathway_id",),
+        comment="One row per WikiPathways pathway, every species, from the monthly GMT export. "
+                "Only what the GMT carries: ontology tags, authors and last-modified dates live "
+                "in the GPML export, which is not landed. Genes are in "
+                "annotation.wikipathways__gene_pathway. Licence CC0.",
+        properties={"bioc.column.pathway_id.prefix": "wikipathways",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.license": "CC0-1.0"},
+    ),
+    "annotation.wikipathways__gene_pathway": TableDef(
+        schema=Schema(
+            NestedField(1, "pathway_id", StringType(), required=True,
+                        doc="WikiPathways id, e.g. WP100; joins to "
+                            "annotation.wikipathways__pathway. Part of the merge key."),
+            NestedField(2, "taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id of the pathway's species (species-level; see "
+                            "annotation.wikipathways__pathway.taxon_id). Determined by "
+                            "pathway_id, carried so a species filter needs no join."),
+            NestedField(3, "gene_id", StringType(), required=True,
+                        doc="NCBI Entrez GeneID of a member gene, e.g. 2687; joins to "
+                            "annotation.ncbi__gene.gene_id — on gene_id alone, which is unique "
+                            "across taxa. Part of the merge key."),
+            NestedField(4, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(5, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("pathway_id", "gene_id"),
+        comment="Gene-set membership: one row per (pathway, Entrez gene), every species, from "
+                "WikiPathways' monthly GMT export. A set, so a gene the GMT line repeats appears "
+                "once. Membership has no attributes beyond the species, so a row is only ever "
+                "asserted or withdrawn. (pathway_id, taxon_id, gene_id) is the shape any other "
+                "gene-set source should take so that they union. Licence CC0.",
+        properties={"bioc.column.pathway_id.prefix": "wikipathways",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.license": "CC0-1.0"},
+    ),
 }
 
 
