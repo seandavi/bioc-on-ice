@@ -34,9 +34,38 @@ go insert-only and compute `valid_to` as a `LEAD()` window in a view, which
 is where Data Vault has moved.
 """
 
+import time
+
 import duckdb
+from pyiceberg.exceptions import CommitFailedException, RESTError
 
 from . import schemas
+
+
+def overwrite(cat, identifier, table, arrow, overwrite_filter):
+    """One filtered overwrite, riding out the two transient commit failures.
+
+    Two production loads commit to the same R2 Data Catalog at once — every
+    ingest writes its manifest row to provenance.release, and the catalog
+    rate-limits writes catalog-wide — so a commit can fail for reasons that
+    have nothing to do with the data: a 429, or another writer's snapshot
+    landing first (CommitFailedException). Both are safe to retry because the
+    overwrite is a filtered replace of the scope: on a conflict the table is
+    reloaded so the retry commits against the new current snapshot.
+    """
+    for attempt in range(8):
+        try:
+            table.overwrite(arrow, overwrite_filter=overwrite_filter)
+            return
+        except CommitFailedException:
+            time.sleep(2 ** attempt)
+            table = cat.load_table(identifier)
+        except RESTError as err:
+            if "429" not in str(err) and "TooManyRequests" not in type(err).__name__:
+                raise
+            time.sleep(65)
+            table = cat.load_table(identifier)
+    raise RuntimeError(f"{identifier}: commit still failing after {attempt + 1} retries")
 
 VALIDITY = ("valid_from", "valid_to")
 
@@ -139,7 +168,7 @@ def merge(cat, identifier, incoming, release, scope):
     stats = dict(con.sql("SELECT _state, count(*) FROM merged GROUP BY 1").fetchall())
     cols = ", ".join(f'"{f.name}"' for f in schema.fields)
     final = con.sql(f"SELECT {cols} FROM merged").to_arrow_table()
-    table.overwrite(final.cast(table.schema().as_arrow()), overwrite_filter=scope)
+    overwrite(cat, identifier, table, final.cast(table.schema().as_arrow()), scope)
 
     return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "superseded", "retired")),
             "unchanged": stats.get("unchanged", 0),

@@ -87,7 +87,7 @@ def _write(cat, identifier, arrow, overwrite_filter):
     table = schemas.create(cat, identifier)
     # Casting to the declared schema is the check: a column we failed to produce,
     # or a null in an identifier field, fails here rather than landing quietly.
-    table.overwrite(arrow.cast(table.schema().as_arrow()), overwrite_filter=overwrite_filter)
+    merge.overwrite(cat, identifier, table, arrow.cast(table.schema().as_arrow()), overwrite_filter)
     return arrow.num_rows
 
 

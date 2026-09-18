@@ -1,69 +1,104 @@
 {
-  "graphs": [
+ "graphs": [
+  {
+   "id": "http://purl.obolibrary.org/obo/cl.owl",
+   "meta": {
+    "version": "http://purl.obolibrary.org/obo/cl/releases/2024-01-01/cl.json"
+   },
+   "nodes": [
     {
-      "id": "http://purl.obolibrary.org/obo/cl.owl",
-      "meta": {
-        "version": "http://purl.obolibrary.org/obo/cl/releases/2024-01-01/cl.json"
+     "id": "http://purl.obolibrary.org/obo/CL_0000000",
+     "lbl": "cell",
+     "type": "CLASS",
+     "meta": {
+      "definition": {
+       "val": "A material entity of anatomical origin (part of or deriving from an organism) that has as its boundary the plasma membrane."
+      }
+     }
+    },
+    {
+     "id": "http://purl.obolibrary.org/obo/CL_0000542",
+     "lbl": "lymphocyte",
+     "type": "CLASS",
+     "meta": {
+      "definition": {
+       "val": "A white blood cell."
       },
-      "nodes": [
-        {
-          "id": "http://purl.obolibrary.org/obo/CL_0000000",
-          "lbl": "cell",
-          "type": "CLASS",
-          "meta": {
-            "definition": {"val": "A material entity of anatomical origin (part of or deriving from an organism) that has as its boundary the plasma membrane."}
-          }
-        },
-        {
-          "id": "http://purl.obolibrary.org/obo/CL_0000542",
-          "lbl": "lymphocyte",
-          "type": "CLASS",
-          "meta": {
-            "definition": {"val": "A white blood cell."},
-            "basicPropertyValues": [
-              {"pred": "http://www.geneontology.org/formats/oboInOwl#hasOBONamespace", "val": "cell"}
-            ]
-          }
-        },
-        {
-          "id": "http://purl.obolibrary.org/obo/CL_0000084",
-          "lbl": "T cell",
-          "type": "CLASS",
-          "meta": {
-            "definition": {"val": "A type of lymphocyte whose defining characteristic is the expression of a T cell receptor complex."},
-            "synonyms": [
-              {"pred": "hasExactSynonym", "val": "T lymphocyte"},
-              {"pred": "hasExactSynonym", "val": "T-cell"}
-            ]
-          }
-        },
-        {
-          "id": "http://purl.obolibrary.org/obo/CL_0000624",
-          "lbl": "CD4-positive, alpha-beta T cell",
-          "type": "CLASS",
-          "meta": {
-            "definition": {"val": "A mature alpha-beta T cell that expresses an alpha-beta T cell receptor and the CD4 coreceptor."}
-          }
-        },
-        {
-          "id": "http://purl.obolibrary.org/obo/CL_9999999",
-          "lbl": "obsolete fake cell type",
-          "type": "CLASS",
-          "meta": {
-            "deprecated": true,
-            "basicPropertyValues": [
-              {"pred": "http://purl.obolibrary.org/obo/IAO_0100001", "val": "http://purl.obolibrary.org/obo/CL_0000000"}
-            ]
-          }
-        }
-      ],
-      "edges": [
-        {"sub": "http://purl.obolibrary.org/obo/CL_0000624", "pred": "is_a", "obj": "http://purl.obolibrary.org/obo/CL_0000084",
-         "meta": {"basicPropertyValues": [{"pred": "http://www.geneontology.org/formats/oboInOwl#is_inferred", "val": "true"}]}},
-        {"sub": "http://purl.obolibrary.org/obo/CL_0000084", "pred": "is_a", "obj": "http://purl.obolibrary.org/obo/CL_0000542"},
-        {"sub": "http://purl.obolibrary.org/obo/CL_0000542", "pred": "is_a", "obj": "http://purl.obolibrary.org/obo/CL_0000000"},
-        {"sub": "http://purl.obolibrary.org/obo/CL_0000624", "pred": "http://purl.obolibrary.org/obo/BFO_0000050", "obj": "http://purl.obolibrary.org/obo/CL_0000542"}
+      "basicPropertyValues": [
+       {
+        "pred": "http://www.geneontology.org/formats/oboInOwl#hasOBONamespace",
+        "val": "cell"
+       }
       ]
+     }
+    },
+    {
+     "id": "http://purl.obolibrary.org/obo/CL_0000084",
+     "lbl": "T cell",
+     "type": "CLASS",
+     "meta": {
+      "definition": {
+       "val": "A type of lymphocyte whose defining characteristic is the expression of a T cell receptor complex."
+      },
+      "synonyms": [
+       {
+        "pred": "hasExactSynonym",
+        "val": "T lymphocyte"
+       },
+       {
+        "pred": "hasExactSynonym",
+        "val": "T-cell"
+       }
+      ]
+     }
+    },
+    {
+     "id": "http://purl.obolibrary.org/obo/CL_0000624",
+     "lbl": "CD4-positive, alpha-beta T cell",
+     "type": "CLASS",
+     "meta": {
+      "definition": {
+       "val": "A mature alpha-beta T cell that expresses an alpha-beta T cell receptor and the CD4 coreceptor."
+      }
+     }
+    },
+    {
+     "id": "http://purl.obolibrary.org/obo/CL_9999999",
+     "lbl": "obsolete fake cell type",
+     "type": "CLASS",
+     "meta": {
+      "deprecated": true,
+      "basicPropertyValues": [
+       {
+        "pred": "http://purl.obolibrary.org/obo/IAO_0100001",
+        "val": "http://purl.obolibrary.org/obo/CL_0000000"
+       }
+      ]
+     }
     }
-  ]
+   ],
+   "edges": [
+    {
+     "sub": "http://purl.obolibrary.org/obo/CL_0000624",
+     "pred": "is_a",
+     "obj": "http://purl.obolibrary.org/obo/CL_0000084"
+    },
+    {
+     "sub": "http://purl.obolibrary.org/obo/CL_0000084",
+     "pred": "is_a",
+     "obj": "http://purl.obolibrary.org/obo/CL_0000542"
+    },
+    {
+     "sub": "http://purl.obolibrary.org/obo/CL_0000542",
+     "pred": "is_a",
+     "obj": "http://purl.obolibrary.org/obo/CL_0000000"
+    },
+    {
+     "sub": "http://purl.obolibrary.org/obo/CL_0000624",
+     "pred": "http://purl.obolibrary.org/obo/BFO_0000050",
+     "obj": "http://purl.obolibrary.org/obo/CL_0000542"
+    }
+   ]
+  }
+ ]
 }
