@@ -1,0 +1,55 @@
+{
+  "count": 6,
+  "limit": 3,
+  "offset": 0,
+  "results": [
+    {
+      "id": "gse34610",
+      "name": "gse34610",
+      "md5sum": "a3c4e54ed4f2e9b0ae22ec8b528fec55",
+      "submission_date": "2025-06-05T12:03:43.962219Z",
+      "last_update_date": "2025-06-05T12:03:43.962225Z",
+      "statistics": null,
+      "distributions": null,
+      "plots": null,
+      "description": "Data from [GEO GSE34610](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE34610)\nmodENCODE_White Lab: genome-wide ChIP data of Hnf4 from E16-24 on Illumina Genome Analyzer.",
+      "summary": null,
+      "bed_ids": null,
+      "bedfile_count": 1,
+      "author": "Kevin, P., White",
+      "source": "gse34610"
+    },
+    {
+      "id": "gse29202",
+      "name": "gse29202",
+      "md5sum": "fb7c3639700261cee93e2194c2ef4584",
+      "submission_date": "2025-06-05T12:39:37.351725Z",
+      "last_update_date": "2025-06-05T12:39:37.351730Z",
+      "statistics": null,
+      "distributions": null,
+      "plots": null,
+      "description": "Data from [GEO GSE29202](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE29202)\nGenome-wide IMPDH profiling in Drosophila larvae and S2 cells by ChIP-chip.",
+      "summary": null,
+      "bed_ids": null,
+      "bedfile_count": 7,
+      "author": "Yuri, Moshkin",
+      "source": "gse29202"
+    },
+    {
+      "id": "gse170350",
+      "name": "gse170350",
+      "md5sum": "69b0eac8d841dda9b9a3b18c4ada7aef",
+      "submission_date": "2025-06-05T08:25:27.744237Z",
+      "last_update_date": "2025-06-05T08:25:27.744245Z",
+      "statistics": null,
+      "distributions": null,
+      "plots": null,
+      "description": "Data from [GEO GSE170350](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE170350)\nDNase-seq from T-cell (ENCSR863LZT)",
+      "summary": null,
+      "bed_ids": null,
+      "bedfile_count": 3,
+      "author": "ENCODE, DCC",
+      "source": "gse170350"
+    }
+  ]
+}

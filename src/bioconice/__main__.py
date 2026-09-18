@@ -1,6 +1,6 @@
 import argparse
 
-from . import bugsigdb, catalog, cellxgene, ensembl, icite, ncbi, ncbi_go, obo
+from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, icite, ncbi, ncbi_go, obo
 from . import ncbi_accession, ncbi_pubmed
 
 
@@ -58,6 +58,14 @@ def main():
     ob.add_argument("--url", help="an already-downloaded OBO Graphs JSON file or alternate URL; "
                     "skips the registry URL (how offline tests stay offline)")
 
+    bb = sub.add_parser("ingest-bedbase",
+                        help="land BEDbase's bed/bedset listings, then derive resource entries")
+    bb.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    bb.add_argument("--limit", type=int,
+                    help="bound the crawl to about this many records per endpoint (default: "
+                         "the full 663k bed / 22k bedset listings); a bounded run never "
+                         "retires records outside what it fetched")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -79,6 +87,8 @@ def main():
                                 census_release=args.census_release))
     elif args.cmd == "ingest-obo":
         _print(obo.ingest(cat, args.release, args.ontology, args.url))
+    elif args.cmd == "ingest-bedbase":
+        _print(bedbase.ingest(cat, args.release, args.limit))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None

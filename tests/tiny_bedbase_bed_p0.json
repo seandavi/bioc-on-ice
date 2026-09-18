@@ -1,0 +1,126 @@
+{
+  "count": 6,
+  "limit": 3,
+  "offset": 0,
+  "results": [
+    {
+      "name": "Plasma B cells - Tonsil 90",
+      "genome_alias": "hg19",
+      "genome_digest": "GOIHeGSorDrbznRxihs5rIb6vTiTKaw7",
+      "bed_compliance": "bed6+4",
+      "data_format": "encode_narrowpeak_rs",
+      "compliant_columns": 6,
+      "non_compliant_columns": 4,
+      "header": null,
+      "id": "0000120fe8c5334bb0ce759dfcf06c3b",
+      "description": "",
+      "submission_date": "2025-05-22T12:02:50.145308Z",
+      "last_update_date": "2026-02-07T22:26:30.861635Z",
+      "is_universe": false,
+      "license_id": "DUO:0000042",
+      "annotation": {
+        "organism": "Homo sapiens",
+        "species_id": "9606",
+        "genotype": "",
+        "phenotype": "",
+        "description": "",
+        "cell_type": "tonsillar plasma B cell",
+        "cell_line": "",
+        "tissue": "",
+        "library_source": "genomic",
+        "assay": "ATAC-seq",
+        "antibody": "",
+        "target": "",
+        "treatment": "No additional treatments were applied after primary cell isolation",
+        "global_sample_id": [
+          "geo:gsm4837486"
+        ],
+        "global_experiment_id": [
+          "geo:gse159673",
+          "geo:gse159675"
+        ],
+        "original_file_name": "GSM4837486_Plasma_B2_T1.ATACseq.narrowPeak.gz"
+      },
+      "processed": true
+    },
+    {
+      "name": "Young_Daughter 3y3A",
+      "genome_alias": "mm10",
+      "genome_digest": "wsDErYxgCXiPnb2FWZ4sXtx3B0YyruRu",
+      "bed_compliance": "bed5+5",
+      "data_format": "bed_like_rs",
+      "compliant_columns": 5,
+      "non_compliant_columns": 5,
+      "header": "chr\tstart\tend\tlength\tabs_summit\tpileup\t-log10(pvalue)\tfold_enrichment\t-log10(qvalue)\tname",
+      "id": "0000e6a889395d78ab9bf667326d8cff",
+      "description": "",
+      "submission_date": "2025-06-03T04:17:33.869778Z",
+      "last_update_date": "2026-02-07T22:26:30.861635Z",
+      "is_universe": false,
+      "license_id": "DUO:0000042",
+      "annotation": {
+        "organism": "Mus musculus",
+        "species_id": "10090",
+        "genotype": "",
+        "phenotype": "",
+        "description": "",
+        "cell_type": "",
+        "cell_line": "",
+        "tissue": "Long-term Hematopoietic stem cells (LT-HSC)",
+        "library_source": "genomic",
+        "assay": "ATAC-seq",
+        "antibody": "",
+        "target": "",
+        "treatment": "",
+        "global_sample_id": [
+          "geo:gsm3258890"
+        ],
+        "global_experiment_id": [
+          "geo:gse116712",
+          "geo:gse116707"
+        ],
+        "original_file_name": "GSM3258890_3y3A_peaks.bed.gz"
+      },
+      "processed": true
+    },
+    {
+      "name": "hivnl43_all_iso_bed",
+      "genome_alias": "undefined",
+      "genome_digest": null,
+      "bed_compliance": "bed12+0",
+      "data_format": "ucsc_bed",
+      "compliant_columns": 12,
+      "non_compliant_columns": 0,
+      "header": null,
+      "id": "002f0837c40e1d93a9b2aae16d2ad5c6",
+      "description": "The translational landscape of HIV-1 infected cells reveals key gene regulatory principles",
+      "submission_date": "2026-02-06T05:11:49.805824Z",
+      "last_update_date": "2026-02-07T22:26:30.861635Z",
+      "is_universe": false,
+      "license_id": "DUO:0000042",
+      "annotation": {
+        "organism": "Homo sapiens, Human immunodeficiency virus 1",
+        "species_id": "9606, 11676",
+        "genotype": "",
+        "phenotype": "",
+        "description": "",
+        "cell_type": "",
+        "cell_line": "",
+        "tissue": "",
+        "library_source": "",
+        "assay": "",
+        "antibody": "",
+        "target": "",
+        "treatment": "",
+        "global_sample_id": [
+          ""
+        ],
+        "global_experiment_id": [
+          "geo:gse244468"
+        ],
+        "original_file_name": "GSE244468_HIVNL43_all_iso.bed.gz"
+      },
+      "processed": false
+    }
+  ]
+}
