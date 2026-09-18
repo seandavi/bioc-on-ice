@@ -32,7 +32,7 @@ name instead of a numeric id, exactly as OBO flat format would print them
 Deliberately NOT using ncbi._land: that helper does an unconditional full-table replace,
 which is right for a source with no retained history (NCBI's nightly dumps, iCite's
 latest-snapshot-only raw) but wrong here — an ontology release is immutable and raw must
-accumulate versions, exactly like raw.ensembl__gtf. So landing uses ensembl._write with an
+accumulate versions, exactly like raw.ensembl__gtf. So landing uses merge.write with an
 overwrite_filter scoped to this landing's own release_version, the same pattern the GTF
 lander uses for (taxon_id, ensembl_release).
 """
@@ -41,8 +41,6 @@ import duckdb
 from pyiceberg.expressions import EqualTo
 
 from . import merge
-from .ensembl import _write
-from .ncbi import _manifest
 
 # name -> (OBO Graphs JSON release URL, licence). "latest" GitHub/PURL redirects, so a
 # re-ingest naturally picks up a new release; --url overrides for tests and pinned reruns.
@@ -140,8 +138,8 @@ def land_raw(cat, release, name, url=None):
     if not version:
         raise SystemExit(f"obo {name}: {url} carries no graphs[0].meta.version")
 
-    n = _write(cat, f"raw.obo__{name}", arrow, EqualTo("release_version", version))
-    _manifest(cat, release, f"obo_{name}", url, n, version=version, method="release_number")
+    n = merge.write(cat, f"raw.obo__{name}", arrow, EqualTo("release_version", version))
+    merge.manifest(cat, release, f"obo_{name}", url, n, version=version, method="release_number")
     return version, n
 
 

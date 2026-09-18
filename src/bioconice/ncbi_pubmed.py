@@ -15,7 +15,7 @@ forces identifier_mapping's scope to name the source does not arise here.
 import duckdb
 
 from . import merge
-from .ncbi import DATA, _derive, _land, _manifest, _where, tsv
+from .ncbi import DATA, _derive, _land, _where, tsv
 
 URL = f"{DATA}gene2pubmed.gz"
 
@@ -27,7 +27,7 @@ COLUMNS = "{'taxon_id':'INTEGER','gene_id':'VARCHAR','pubmed_id':'VARCHAR'}"
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2pubmed verbatim and whole into raw.ncbi__gene2pubmed."""
     n = _land(cat, release, "raw.ncbi__gene2pubmed", tsv(url or URL, COLUMNS))
-    _manifest(cat, release, "ncbi_gene2pubmed", URL, n)
+    merge.manifest(cat, release, "ncbi_gene2pubmed", URL, n)
     return n
 
 

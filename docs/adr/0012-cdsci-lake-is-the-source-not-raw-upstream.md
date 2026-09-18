@@ -52,12 +52,12 @@ con = lake_connect(read_only=True)
 arrow = con.sql("SELECT ... FROM lake.<schema>.<table>").arrow()
 
 # write: bioc-on-ice's own existing primitive, unchanged
-from bioconice import catalog
+from bioconice import catalog, merge
 cat = catalog()
-_write(cat, "raw.<source>__<table>", arrow, overwrite_filter)
+merge.write(cat, "raw.<source>__<table>", arrow, overwrite_filter)
 ```
 
-The lander keeps its existing shape (`land_raw` + `_manifest`, ADR-0002,
+The lander keeps its existing shape (`land_raw` + `merge.manifest`, ADR-0002,
 ADR-0007) — only where the bytes come from changes.
 
 ## Consequences
@@ -69,7 +69,7 @@ ADR-0007) — only where the bytes come from changes.
   contract as any other.
 - `bugsigdb.py` is the first concrete candidate, once cdsci-lake's `bugsigdb`
   source lands: swap `land_raw`'s `read_csv(url, ...)` for a `lake_connect()`
-  read of `lake.bugsigdb.*`, keep everything downstream (`_write`,
-  `_manifest`) as-is.
+  read of `lake.bugsigdb.*`, keep everything downstream (`merge.write`,
+  `merge.manifest`) as-is.
 - This ADR exists so the default gets decided once, here, rather than
   re-litigated per source as each migration comes up.

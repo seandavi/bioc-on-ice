@@ -20,12 +20,11 @@ docstring for why a scope that fails to name its writer flip-flops.
 
 import re
 import urllib.request
-from datetime import datetime, timezone
 
 import duckdb
 from pyiceberg.expressions import And, EqualTo
 
-from . import merge, schemas
+from . import merge
 
 FTP = "https://ftp.ensembl.org/pub/release-{release}"
 
@@ -83,14 +82,6 @@ def gtf_url(ensembl_release, species):
     return listing + _pick_gtf(names, ensembl_release, species)
 
 
-def _write(cat, identifier, arrow, overwrite_filter):
-    table = schemas.create(cat, identifier)
-    # Casting to the declared schema is the check: a column we failed to produce,
-    # or a null in an identifier field, fails here rather than landing quietly.
-    merge.overwrite(cat, identifier, table, arrow.cast(table.schema().as_arrow()), overwrite_filter)
-    return arrow.num_rows
-
-
 def land_raw(cat, release, species, ensembl_release, url=None, info=None):
     """Phase 1: the GTF, verbatim, into raw.ensembl__gtf."""
     info = info or species_info(ensembl_release, species)
@@ -103,27 +94,12 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
         FROM read_csv('{url or gtf_url(ensembl_release, species)}', sep='\t', header=false,
                       comment='#', auto_detect=false, columns={GTF_COLUMNS})
     """).to_arrow_table()
-    n = _write(cat, "raw.ensembl__gtf", arrow,
-               And(EqualTo("taxon_id", info["taxon_id"]),
-                   EqualTo("ensembl_release", str(ensembl_release))))
-    _manifest(cat, release, ensembl_release, url or gtf_url(ensembl_release, species), n)
+    n = merge.write(cat, "raw.ensembl__gtf", arrow,
+                    And(EqualTo("taxon_id", info["taxon_id"]),
+                        EqualTo("ensembl_release", str(ensembl_release))))
+    merge.manifest(cat, release, "ensembl", url or gtf_url(ensembl_release, species), n,
+                   version=ensembl_release, method="release_number")
     return info, n
-
-
-def _manifest(cat, release, ensembl_release, url, rows):
-    """Record what this release was built from — ADR-0007."""
-    con = duckdb.connect()
-    arrow = con.sql(f"""
-        SELECT '{release}' AS release, 'ensembl' AS source,
-               '{ensembl_release}' AS source_version,
-               'release_number' AS version_method,
-               '{datetime.now(timezone.utc).isoformat(timespec="seconds")}' AS retrieved_at,
-               '{url}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
-    """).to_arrow_table()
-    # A manifest row states what a completed ingest used; it is not versioned,
-    # so it is replaced wholesale for its (release, source) rather than merged.
-    _write(cat, "provenance.release", arrow,
-           And(EqualTo("release", release), EqualTo("source", "ensembl")))
 
 
 # Every derived table is multi-writer: a merge must only be able to retire rows
