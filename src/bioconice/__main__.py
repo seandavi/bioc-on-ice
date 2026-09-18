@@ -1,11 +1,22 @@
 import argparse
 
-from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, mane, ncbi, ncbi_go, obo
-from . import ncbi_accession, ncbi_orthologs, ncbi_pubmed
-from . import pubtator3
+from . import bedbase
+from . import bugsigdb
+from . import catalog
 from . import cellosaurus
-from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, ncbi, ncbi_go, obo
-from . import ncbi_accession, ncbi_orthologs, ncbi_pubmed, wikipathways
+from . import cellxgene
+from . import ensembl
+from . import hgnc
+from . import icite
+from . import mane
+from . import ncbi
+from . import ncbi_accession
+from . import ncbi_go
+from . import ncbi_orthologs
+from . import ncbi_pubmed
+from . import obo
+from . import pubtator3
+from . import wikipathways
 
 
 def _print(counts):
