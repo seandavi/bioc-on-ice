@@ -96,7 +96,58 @@ NAMESPACES = {
     "annotation": "Gene, transcript and exon structure, and identifier cross-references.",
     "resource": "Universal catalog entries for large or external data (matrices, images, "
                 "assemblies-as-files) that biocOnIce references by URI rather than ingests.",
+    "ontology": "Terms and relationships from external OBO ontologies (CL, UBERON, MONDO, EFO, "
+                "HsapDv, MmusDv, GO): cell types, anatomy, disease, experimental factors, "
+                "developmental stage.",
 }
+
+# (short name, licence) for every OBO ontology this catalog lands, kept here rather than
+# imported from obo.py (which needs schemas.TableDef) to avoid a circular import. obo.REGISTRY
+# is the same list plus each ontology's release URL; test_obo.py asserts the two stay in sync.
+_OBO_ONTOLOGIES = (
+    ("cl", "CC-BY-4.0"), ("uberon", "CC-BY-3.0"), ("mondo", "CC-BY-4.0"),
+    ("efo", "Apache-2.0"), ("hsapdv", "CC-BY-4.0"), ("mmusdv", "CC-BY-4.0"), ("go", "CC-BY-4.0"),
+)
+
+
+def _obo_raw(name, licence):
+    """raw.obo__<name>: one row per node, one row per edge, of that ontology's OBO Graphs JSON."""
+    return TableDef(
+        schema=Schema(
+            NestedField(1, "kind", StringType(), required=True,
+                        doc="'node' or 'edge': which half of the OBO Graphs JSON this row came from."),
+            NestedField(2, "id", StringType(), doc="Node IRI. NULL on an edge row."),
+            NestedField(3, "lbl", StringType(),
+                        doc="Node label (rdfs:label). NULL on an edge row, and on the node rows "
+                            "the file itself leaves unlabeled (imported classes mostly)."),
+            NestedField(4, "sub", StringType(), doc="Edge subject IRI. NULL on a node row."),
+            NestedField(5, "pred", StringType(),
+                        doc="Edge predicate: 'is_a' verbatim (the only relation OBO Graphs JSON "
+                            "ever states unqualified), otherwise the relation's own IRI. NULL on "
+                            "a node row."),
+            NestedField(6, "obj", StringType(), doc="Edge object IRI. NULL on a node row."),
+            NestedField(7, "meta", StringType(),
+                        doc="The node's or edge's 'meta' object — definition, synonyms, xrefs, "
+                            "basicPropertyValues, deprecated flag — serialized back to JSON text "
+                            "verbatim. Kept whole and unparsed, like the GTF attribute column: "
+                            "interpreting it is a transform concern. NULL where the file carries "
+                            "no meta for that node or edge."),
+            NestedField(8, "release_version", StringType(), required=True,
+                        doc="This ontology's own version, read from graphs[0].meta.version in the "
+                            "file (a version IRI or a date, whichever the ontology publishes). Raw "
+                            "is replaced wholesale per value of this column, so more than one "
+                            "release can coexist, the same as raw.ensembl__gtf per ensembl_release."),
+            NestedField(9, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment=f"{name.upper()} landed verbatim from its OBO Graphs JSON release: one row per "
+                f"node and one row per edge, the WHOLE file — every imported class or property "
+                f"from another ontology included, not filtered to the {name.upper()} namespace. "
+                f"Filtering at land time would make raw a function of what ontology.term happens "
+                f"to derive today (ADR-0002); ontology.term's node count matches this table's "
+                f"node-row count exactly for that reason. Licence {licence}.",
+        properties={"bioc.license": licence},
+    )
 
 TABLES = {
     "provenance.release": TableDef(
@@ -979,6 +1030,76 @@ TABLES = {
                 "DuckDB-readable form.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.license": "CC-BY-4.0"},
+    ),
+    **{f"raw.obo__{name}": _obo_raw(name, licence) for name, licence in _OBO_ONTOLOGIES},
+    "ontology.term": TableDef(
+        schema=Schema(
+            NestedField(1, "ontology", StringType(), required=True,
+                        doc="Short ontology name: cl, uberon, mondo, efo, hsapdv, mmusdv, go. Part "
+                            "of the merge key, so one ontology's re-ingest never retires another's "
+                            "terms."),
+            NestedField(2, "term_id", StringType(), required=True,
+                        doc="CURIE, e.g. CL:0000624. Converted from the node's IRI where it follows "
+                            "the OBO PURL convention (.../<PREFIX>_<NUMBER>); kept as the full IRI "
+                            "verbatim otherwise, which happens for terms imported from a namespace "
+                            "that does not follow that convention."),
+            NestedField(3, "name", StringType(),
+                        doc="rdfs:label. NULL for the handful of imported nodes the file itself "
+                            "leaves unlabeled."),
+            NestedField(4, "definition", StringType(),
+                        doc="Textual definition (IAO:0000115), where the ontology gives one."),
+            NestedField(5, "namespace", StringType(),
+                        doc="OBO namespace/aspect (oboInOwl:hasOBONamespace) — this is GO's "
+                            "biological_process / molecular_function / cellular_component. NULL "
+                            "where the file does not tag it, which most CL/UBERON/MONDO terms do "
+                            "not."),
+            NestedField(6, "synonyms", StringType(),
+                        doc="Every oboInOwl synonym (exact, narrow, broad and related alike — the "
+                            "distinction between them is not kept), '|'-joined into one string. "
+                            "NULL where the term has none."),
+            NestedField(7, "obsolete", BooleanType(), required=True,
+                        doc="True if the ontology marks this term deprecated. Obsolete terms are "
+                            "kept, never dropped — see replaced_by."),
+            NestedField(8, "replaced_by", StringType(),
+                        doc="CURIE of the successor term (IAO:0100001 'term replaced by'), where "
+                            "the ontology names exactly one. NULL for a current term, or for an "
+                            "obsolete term the ontology leaves without a single successor — some "
+                            "only list 'consider' candidates, which are not a replacement and are "
+                            "not carried here."),
+            NestedField(9, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(10, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("ontology", "term_id"),
+        partition_by=("ontology",),
+        comment="Ontology terms, stacked across ontologies: one current row per (ontology, "
+                "term_id), Type 2 on any attribute change. Includes every node the release file "
+                "carries, imported classes included — see raw.obo__<ontology>.",
+    ),
+    "ontology.relationship": TableDef(
+        schema=Schema(
+            NestedField(1, "ontology", StringType(), required=True,
+                        doc="Short ontology name, same vocabulary as ontology.term.ontology. Part "
+                            "of the merge key."),
+            NestedField(2, "subject_id", StringType(), required=True,
+                        doc="CURIE of the subject term, same normalisation as ontology.term.term_id."),
+            NestedField(3, "predicate", StringType(), required=True,
+                        doc="'is_a' verbatim; a short name for the handful of BFO/RO relations "
+                            "common to every OBO ontology (part_of, has_part, develops_from, "
+                            "regulates, negatively_regulates, positively_regulates); the relation's "
+                            "own CURIE for anything else. Nothing is invented: an unmapped relation "
+                            "is exactly the CURIE the file states, never guessed at."),
+            NestedField(4, "object_id", StringType(), required=True,
+                        doc="CURIE of the object term, same normalisation as ontology.term.term_id."),
+            NestedField(5, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(6, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("ontology", "subject_id", "predicate", "object_id"),
+        partition_by=("ontology",),
+        comment="Edges between ontology terms: one row per (ontology, subject_id, predicate, "
+                "object_id). The is_a closure (e.g. CL:0000624 -> CL:0000084 -> CL:0000000) is a "
+                "recursive CTE over predicate = 'is_a' here, not precomputed. An edge's endpoints "
+                "are not required to resolve to a row in ontology.term — no foreign key is "
+                "enforced, matching every other table in this catalog.",
     ),
 }
 

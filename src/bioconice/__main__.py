@@ -1,6 +1,6 @@
 import argparse
 
-from . import bugsigdb, catalog, cellxgene, ensembl, icite, ncbi, ncbi_go
+from . import bugsigdb, catalog, cellxgene, ensembl, icite, ncbi, ncbi_go, obo
 from . import ncbi_accession, ncbi_pubmed
 
 
@@ -51,6 +51,12 @@ def main():
     cx.add_argument("--json", help="an already-fetched datasets listing JSON; skips the API call")
     cx.add_argument("--census-release", help="Census build to reference, e.g. 2025-11-08 "
                      "(default: the release manifest's 'stable' LTS alias)")
+    ob = sub.add_parser("ingest-obo", help="land one OBO ontology's release, then derive term + relationship")
+    ob.add_argument("ontology", choices=sorted(obo.REGISTRY),
+                    help="cl, uberon, mondo, efo, hsapdv, mmusdv, go")
+    ob.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    ob.add_argument("--url", help="an already-downloaded OBO Graphs JSON file or alternate URL; "
+                    "skips the registry URL (how offline tests stay offline)")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
@@ -71,6 +77,8 @@ def main():
     elif args.cmd == "ingest-cellxgene":
         _print(cellxgene.ingest(cat, args.release, json_path=args.json,
                                 census_release=args.census_release))
+    elif args.cmd == "ingest-obo":
+        _print(obo.ingest(cat, args.release, args.ontology, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
