@@ -48,18 +48,19 @@ def test_retired_then_reappearing_in_the_same_release_is_reopened(cat):
 
 
 def test_opened_and_retired_in_the_same_release_leaves_nothing(cat):
-    load(cat, "2026.08", "tiny.gtf")
-    load(cat, "2026.09", "tiny_next.gtf")           # new genes opened at 2026.09
+    # tiny_next lacks one of tiny's genes, so tiny loaded after it opens a gene
+    load(cat, "2026.08", "tiny_next.gtf")
+    load(cat, "2026.09", "tiny.gtf")                 # a gene opens at 2026.09
     versions = {}
     for g, vf, vt in genes(cat):
         versions.setdefault(g, set()).add(vf)
     # genuinely new keys at 2026.09 — not changed genes, whose new version also opens there
     opened = {g for g, vfs in versions.items() if vfs == {"2026.09"}}
     assert opened
-    load(cat, "2026.09", "tiny.gtf")                 # they vanish within the same release
+    load(cat, "2026.09", "tiny_next.gtf")            # it vanishes within the same release
     assert not {g for g, vf, vt in genes(cat) if g in opened}
     # and rerunning is a no-op
-    counts = load(cat, "2026.09", "tiny.gtf")
+    counts = load(cat, "2026.09", "tiny_next.gtf")
     assert counts["annotation.gene"]["written"] == 0
 
 

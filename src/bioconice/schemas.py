@@ -18,14 +18,13 @@ from pyiceberg.partitioning import PartitionField, PartitionSpec
 from pyiceberg.schema import Schema
 from pyiceberg.transforms import IdentityTransform
 from pyiceberg.types import (
-    BooleanType, DoubleType, IntegerType, LongType, NestedField, StringType,
+    BooleanType, DoubleType, IntegerType, ListType, LongType, NestedField, StringType,
 )
 
 MULTI_VALUED = (
-    "Multi-valued: ontology term ids the source publishes for this field, "
-    "pipe-joined in one string, same order as the paired _labels column. "
-    "Joins to ontology.term once the ontology namespace lands (issue #83); "
-    "readable without it in the meantime."
+    "Ontology term ids of every value the listing gives, sorted, as a list — a convenience "
+    "for list_contains() filters. The joinable form is resource.resource_relationship, one "
+    "row per (dataset version, relationship, term)."
 )
 
 VALID_FROM = (
@@ -978,14 +977,10 @@ TABLES = {
                             "parse this way, or that carries more than one organism, fails the ingest loudly rather "
                             "than dropping or guessing (issue #84 acceptance criterion 3)."),
             NestedField(8, "organism_label", StringType(), doc="Organism common/scientific name as CZI labels it, e.g. 'Homo sapiens'."),
-            NestedField(9, "assay_term_ids", StringType(), doc=MULTI_VALUED + " EFO terms."),
-            NestedField(10, "assay_labels", StringType(), doc="Pipe-joined labels paired with assay_term_ids, same order."),
-            NestedField(11, "tissue_term_ids", StringType(), doc=MULTI_VALUED + " UBERON (or CL) terms."),
-            NestedField(12, "tissue_labels", StringType(), doc="Pipe-joined labels paired with tissue_term_ids, same order."),
-            NestedField(13, "disease_term_ids", StringType(), doc=MULTI_VALUED + " MONDO terms, or PATO:0000461 for 'normal'."),
-            NestedField(14, "disease_labels", StringType(), doc="Pipe-joined labels paired with disease_term_ids, same order."),
-            NestedField(15, "cell_type_term_ids", StringType(), doc=MULTI_VALUED + " CL terms, or 'unknown'."),
-            NestedField(16, "cell_type_labels", StringType(), doc="Pipe-joined labels paired with cell_type_term_ids, same order."),
+            NestedField(9, "assay_term_ids", ListType(element_id=109, element_type=StringType(), element_required=False), doc=MULTI_VALUED + " EFO terms."),
+            NestedField(10, "tissue_term_ids", ListType(element_id=110, element_type=StringType(), element_required=False), doc=MULTI_VALUED + " UBERON (or CL) terms."),
+            NestedField(11, "disease_term_ids", ListType(element_id=111, element_type=StringType(), element_required=False), doc=MULTI_VALUED + " MONDO terms, or PATO:0000461 for 'normal'."),
+            NestedField(12, "cell_type_term_ids", ListType(element_id=112, element_type=StringType(), element_required=False), doc=MULTI_VALUED + " CL terms, or 'unknown'."),
             NestedField(17, "cell_count", LongType(), required=True, doc="Total cells in the dataset."),
             NestedField(18, "primary_cell_count", LongType(), doc="Cells flagged is_primary_data = true. <= cell_count."),
             NestedField(19, "mean_genes_per_cell", DoubleType(), doc="Mean genes detected per cell."),
@@ -1351,6 +1346,33 @@ TABLES = {
                 "Source: NIH iCite / NIH-OCC, CC BY 4.0.",
         properties={"bioc.column.citing_pmid.prefix": "pubmed",
                     "bioc.column.cited_pmid.prefix": "pubmed"},
+    ),
+    "resource.resource_relationship": TableDef(
+        schema=Schema(
+            NestedField(1, "resource_id", StringType(), required=True,
+                        doc="The resource this row is about: resource.cellxgene__dataset.dataset_version_id, "
+                            "resource.bedbase__bedfile.resource_id, ... Part of the merge key."),
+            NestedField(2, "relationship", StringType(), required=True,
+                        doc="What the target is to the resource: has_assay, has_tissue, has_disease, "
+                            "has_cell_type (CELLxGENE, targets are ontology term ids); derived_from_sample, "
+                            "derived_from_experiment (BEDbase, targets are 'geo:gsm…'-style accessions). "
+                            "Part of the merge key."),
+            NestedField(3, "target_id", StringType(), required=True,
+                        doc="The related thing, as a CURIE or accession: joins to ontology.term.term_id when it "
+                            "is an ontology term, and through ontology.relationship for rollups. Part of the merge key."),
+            NestedField(4, "source", StringType(), required=True,
+                        doc="The writer that asserted this row ('cellxgene', 'bedbase'): its merge scope, so one "
+                            "catalog's re-ingest never retires another's rows (ADR-0004). Part of the merge key."),
+            NestedField(5, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(6, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("resource_id", "relationship", "target_id", "source"),
+        partition_by=("source",),
+        comment="SPEC.md's resource_relationship: one row per (resource, relationship, target). The "
+                "joinable form of every multi-valued field on a resource catalog row — the "
+                "'which datasets have cell type X in tissue Y' question is a join here, and an ontology "
+                "rollup is a join through ontology.relationship. A relationship has no attributes, so a "
+                "row is only ever asserted or withdrawn.",
     ),
 }
 
