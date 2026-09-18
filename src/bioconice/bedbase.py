@@ -51,7 +51,7 @@ import duckdb
 from pyiceberg.expressions import And, AlwaysTrue, EqualTo, In
 
 from . import merge
-from .ncbi import _land, _manifest
+from .ncbi import _land
 
 BASE = "https://api.bedbase.org/v1"
 PAGE = 100
@@ -192,10 +192,10 @@ def land_raw(cat, release, limit=None, bed_urls=None, bedset_urls=None):
     bedset_urls = bedset_urls if bedset_urls is not None else _page_urls("bedset", limit)
 
     n_bed = _land_retrying(cat, release, "raw.bedbase__bed", _read_bed(bed_urls, limit))
-    _manifest(cat, release, "bedbase_bed", f"{BASE}/bed/list", n_bed)
+    merge.manifest(cat, release, "bedbase_bed", f"{BASE}/bed/list", n_bed)
 
     n_bedset = _land_retrying(cat, release, "raw.bedbase__bedset", _read_bedset(bedset_urls, limit))
-    _manifest(cat, release, "bedbase_bedset", f"{BASE}/bedset/list", n_bedset)
+    merge.manifest(cat, release, "bedbase_bedset", f"{BASE}/bedset/list", n_bedset)
 
     return n_bed, n_bedset
 

@@ -25,13 +25,12 @@ silently and forever. Data Vault calls that the flip-flop effect. The same trap
 exists one level in: gene2ensembl and gene_info both produce cross-references,
 so they are merged in a single call rather than one each.
 
-`_land` and `_manifest` are the shared machinery for every NCBI dump: the
+`_land` and `merge.manifest` are the shared machinery for every NCBI dump: the
 sibling gene2* modules differ from this one only in URL, raw table, column
 spec and derivation, so they import from here rather than restating it.
 """
 
 import time
-from datetime import datetime, timezone
 
 import duckdb
 import pyarrow as pa
@@ -39,7 +38,6 @@ from pyiceberg.exceptions import RESTError
 from pyiceberg.expressions import AlwaysTrue, And, EqualTo
 
 from . import merge, schemas
-from .ensembl import _write
 
 DATA = "https://ftp.ncbi.nlm.nih.gov/gene/DATA/"
 
@@ -146,27 +144,6 @@ def _land(cat, release, identifier, source, config=None):
     return n
 
 
-def _manifest(cat, release, source, url, rows, version=None, method="retrieval_date"):
-    """Record what this release was built from — ADR-0007.
-
-    Shared by the NCBI ingests, each under its own `source` key: they land
-    independently, and one overwriting another's manifest row would misreport
-    what either was built from. NCBI has no version, so the retrieval date is
-    it; a source with a real release label passes `version` and `method`.
-    """
-    now = datetime.now(timezone.utc)
-    con = duckdb.connect()
-    arrow = con.sql(f"""
-        SELECT '{release}' AS release, '{source}' AS source,
-               '{version or now.date()}' AS source_version,
-               '{method}' AS version_method,
-               '{now.isoformat(timespec="seconds")}' AS retrieved_at,
-               '{url}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
-    """).to_arrow_table()
-    _write(cat, "provenance.release", arrow,
-           And(EqualTo("release", release), EqualTo("source", source)))
-
-
 def land_raw(cat, release, urls=None):
     """Phase 1: all three NCBI Gene dumps, verbatim and unfiltered."""
     urls = urls or {}
@@ -176,7 +153,7 @@ def land_raw(cat, release, urls=None):
     # One source, three files: `url` is the directory they came from and
     # `row_count` their total, because the manifest is keyed (release, source).
     # Per-file provenance needs a third key column — issue #8.
-    _manifest(cat, release, "ncbi_gene", DATA, sum(counts.values()))
+    merge.manifest(cat, release, "ncbi_gene", DATA, sum(counts.values()))
     return counts
 
 

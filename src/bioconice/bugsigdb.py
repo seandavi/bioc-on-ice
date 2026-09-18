@@ -30,12 +30,12 @@ reproduce. Land them if that rollup turns out to be wanted before #18 arrives.
 
 import re
 import urllib.request
-from datetime import datetime, timezone
 
 import duckdb
-from pyiceberg.expressions import And, EqualTo
+from pyiceberg.expressions import EqualTo
 
-from .ensembl import _write
+from . import merge
+
 
 REPO = "https://raw.githubusercontent.com/waldronlab/bugsigdbexports"
 DEFAULT_VERSION = "v1.3.1"
@@ -143,24 +143,7 @@ def land_raw(cat, release, version=DEFAULT_VERSION, url=None):
                       delim=',', quote='"', escape='"')
     """).to_arrow_table()
 
-    n = _write(cat, "raw.bugsigdb__full_dump", arrow, EqualTo("bugsigdb_version", version))
-    _manifest(cat, release, version, url, n)
+    n = merge.write(cat, "raw.bugsigdb__full_dump", arrow, EqualTo("bugsigdb_version", version))
+    # release_number: BugSigDB publishes real, citable release tags.
+    merge.manifest(cat, release, "bugsigdb", url, n, version=version, method="release_number")
     return n
-
-
-def _manifest(cat, release, version, url, rows):
-    """Record what this release was built from — ADR-0007.
-
-    `release_number` rather than `retrieval_date`: BugSigDB publishes real,
-    citable release tags, so recording a date here would discard the version the
-    source itself uses.
-    """
-    con = duckdb.connect()
-    arrow = con.sql(f"""
-        SELECT '{release}' AS release, 'bugsigdb' AS source,
-               '{version}' AS source_version, 'release_number' AS version_method,
-               '{datetime.now(timezone.utc).isoformat(timespec="seconds")}' AS retrieved_at,
-               '{url}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
-    """).to_arrow_table()
-    _write(cat, "provenance.release", arrow,
-           And(EqualTo("release", release), EqualTo("source", "bugsigdb")))

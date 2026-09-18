@@ -46,7 +46,7 @@ import duckdb
 from pyiceberg.expressions import AlwaysTrue, EqualTo
 
 from . import merge
-from .ncbi import _land, _manifest
+from .ncbi import _land
 
 FIGSHARE = "https://api.figshare.com/v2"
 COLLECTION = 4586573
@@ -126,7 +126,7 @@ def land_raw(cat, release, snapshot=None, csv=None):
         csv = fetch(label, url, size)
     n = _land(cat, release, "raw.icite__metadata",
               f"(SELECT *, '{label}' AS snapshot FROM {_read(csv)})")
-    _manifest(cat, release, "icite", url, n, version=label, method="release_number")
+    merge.manifest(cat, release, "icite", url, n, version=label, method="release_number")
     return label, n
 
 

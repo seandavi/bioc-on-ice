@@ -40,9 +40,11 @@ is where Data Vault has moved.
 """
 
 import time
+from datetime import datetime, timezone
 
 import duckdb
 from pyiceberg.exceptions import CommitFailedException, RESTError
+from pyiceberg.expressions import And, EqualTo
 
 from . import schemas
 
@@ -207,3 +209,36 @@ def merge(cat, identifier, incoming, release, scope):
     return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "reopened", "superseded", "retired")),
             "unchanged": stats.get("unchanged", 0),
             **{s: n for s, n in stats.items() if s != "history"}}
+
+
+def write(cat, identifier, arrow, overwrite_filter):
+    """Create-if-missing, cast to the declared schema, overwrite the filter's rows."""
+    table = schemas.create(cat, identifier)
+    # Casting to the declared schema is the check: a column we failed to produce,
+    # or a null in an identifier field, fails here rather than landing quietly.
+    overwrite(cat, identifier, table, arrow.cast(table.schema().as_arrow()), overwrite_filter)
+    return arrow.num_rows
+
+
+def manifest(cat, release, source, url, rows, version=None, method="retrieval_date"):
+    """Record what this release was built from — ADR-0007.
+
+    Every lander writes under its own `source` key: they land independently,
+    and one overwriting another's manifest row would misreport what either was
+    built from. A source with no version of its own (NCBI) is versioned by the
+    retrieval date; one with a real, citable release label passes `version` and
+    method="release_number", so the version the source itself uses is kept.
+    """
+    now = datetime.now(timezone.utc)
+    con = duckdb.connect()
+    arrow = con.sql(f"""
+        SELECT '{release}' AS release, '{source}' AS source,
+               '{version or now.date()}' AS source_version,
+               '{method}' AS version_method,
+               '{now.isoformat(timespec="seconds")}' AS retrieved_at,
+               '{url}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
+    """).to_arrow_table()
+    # A manifest row states what a completed ingest used; it is not versioned,
+    # so it is replaced wholesale for its (release, source) rather than merged.
+    write(cat, "provenance.release", arrow,
+          And(EqualTo("release", release), EqualTo("source", source)))

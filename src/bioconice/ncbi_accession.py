@@ -28,7 +28,7 @@ import duckdb
 from pyiceberg.expressions import And, EqualTo
 
 from . import merge
-from .ncbi import DATA, _derive, _land, _manifest, _where, tsv
+from .ncbi import DATA, _derive, _land, _where, tsv
 
 URL = f"{DATA}gene2accession.gz"
 
@@ -57,7 +57,7 @@ def land_raw(cat, release, url=None):
               f"THEN coalesce(orientation, '-') ELSE orientation END AS orientation) "
               f"FROM {tsv(url or URL, COLUMNS)})")
     n = _land(cat, release, "raw.ncbi__gene2accession", source)
-    _manifest(cat, release, "ncbi_gene2accession", URL, n)
+    merge.manifest(cat, release, "ncbi_gene2accession", URL, n)
     return n
 
 
