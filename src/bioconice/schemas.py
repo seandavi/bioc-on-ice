@@ -66,6 +66,26 @@ _CELLOSAURUS_CREDIT = (
 )
 
 
+# BioGRID's licence, verbatim from its LICENSE.txt (fetched 2026-09-18). MIT asks that the
+# copyright and permission notice travel with every copy, so it rides in the comment of each
+# table that holds BioGRID rows.
+BIOGRID_MIT = (
+    "BioGRID data: The MIT License (MIT). Copyright © 2005 Mike Tyers Lab. Permission is hereby "
+    "granted, free of charge, to any person obtaining a copy of this software, download files, "
+    "and associated documentation files (the “Software”), to deal in the Software without "
+    "restriction, including without limitation the rights to use, copy, modify, merge, publish, "
+    "distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom "
+    "the Software is furnished to do so, subject to the following conditions: The above "
+    "copyright notice and this permission notice shall be included in all copies or substantial "
+    "portions of the Software. THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, "
+    "EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS "
+    "FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT "
+    "HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF "
+    "CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE "
+    "USE OR OTHER DEALINGS IN THE SOFTWARE."
+)
+
+
 @dataclass(frozen=True)
 class TableDef:
     """A declared table.
@@ -2785,6 +2805,278 @@ TABLES = {
         properties={"bioc.column.urs_taxid.prefix": "rnacentral",
                     "bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.license": "CC0-1.0"},
+    ),
+    "raw.biogrid__interactions": TableDef(
+        schema=Schema(
+            NestedField(1, "biogrid_interaction_id", StringType(), required=True,
+                        doc="'#BioGRID Interaction ID', e.g. 253053. One per curated interaction "
+                            "evidence; unique on every row of a release and stable across releases "
+                            "(checked 5.0.255 -> 5.0.261), so it is the natural key."),
+            NestedField(2, "entrez_gene_a", StringType(),
+                        doc="'Entrez Gene Interactor A', e.g. 7157. NULL ('-' upstream) for the "
+                            "interactors BioGRID has no Entrez gene for (7,076 rows in 5.0.261)."),
+            NestedField(3, "entrez_gene_b", StringType(), doc="'Entrez Gene Interactor B'. As entrez_gene_a."),
+            NestedField(4, "biogrid_id_a", StringType(),
+                        doc="'BioGRID ID Interactor A': BioGRID's own interactor id, e.g. 113010. Always present."),
+            NestedField(5, "biogrid_id_b", StringType(), doc="'BioGRID ID Interactor B'."),
+            NestedField(6, "systematic_name_a", StringType(),
+                        doc="'Systematic Name Interactor A': the organism database's locus name, e.g. YFL039C."),
+            NestedField(7, "systematic_name_b", StringType(), doc="'Systematic Name Interactor B'."),
+            NestedField(8, "official_symbol_a", StringType(), doc="'Official Symbol Interactor A', e.g. TP53."),
+            NestedField(9, "official_symbol_b", StringType(), doc="'Official Symbol Interactor B', e.g. MDM2."),
+            NestedField(10, "synonyms_a", StringType(), doc="'Synonyms Interactor A', '|'-separated as published."),
+            NestedField(11, "synonyms_b", StringType(), doc="'Synonyms Interactor B', '|'-separated as published."),
+            NestedField(12, "experimental_system", StringType(),
+                        doc="'Experimental System': BioGRID's own evidence vocabulary, e.g. "
+                            "'Affinity Capture-Western', 'Two-hybrid', 'Synthetic Lethality'. Not a PSI-MI term."),
+            NestedField(13, "experimental_system_type", StringType(),
+                        doc="'Experimental System Type': 'physical' or 'genetic'."),
+            NestedField(14, "author", StringType(), doc="'Author': first author and year, e.g. 'Zhang Y (2003)'."),
+            NestedField(15, "publication_source", StringType(),
+                        doc="'Publication Source': 'PUBMED:<pmid>', or 'DOI:<doi>' for preprints."),
+            NestedField(16, "organism_id_a", StringType(), doc="'Organism ID Interactor A': NCBI taxonomy id, as text."),
+            NestedField(17, "organism_id_b", StringType(), doc="'Organism ID Interactor B': NCBI taxonomy id, as text."),
+            NestedField(18, "throughput", StringType(),
+                        doc="'Throughput': 'Low Throughput', 'High Throughput', or both '|'-separated."),
+            NestedField(19, "score", StringType(),
+                        doc="'Score': the study's own confidence score, where it published one. The "
+                            "scale is per study, not comparable across rows."),
+            NestedField(20, "modification", StringType(),
+                        doc="'Modification': the post-translational modification for Biochemical Activity rows, e.g. Phosphorylation."),
+            NestedField(21, "qualifications", StringType(), doc="'Qualifications': curator free-text notes on the evidence."),
+            NestedField(22, "tags", StringType(), doc="'Tags': BioGRID curation-project tags, '|'-separated."),
+            NestedField(23, "source_database", StringType(),
+                        doc="'Source Database': who curated the record — BIOGRID, or a partner "
+                            "(FLYBASE, WORMBASE, POMBASE, BAR)."),
+            NestedField(24, "swissprot_a", StringType(), doc="'SWISS-PROT Accessions Interactor A', '|'-separated."),
+            NestedField(25, "trembl_a", StringType(), doc="'TREMBL Accessions Interactor A', '|'-separated."),
+            NestedField(26, "refseq_a", StringType(), doc="'REFSEQ Accessions Interactor A' (proteins), '|'-separated."),
+            NestedField(27, "swissprot_b", StringType(), doc="'SWISS-PROT Accessions Interactor B', '|'-separated."),
+            NestedField(28, "trembl_b", StringType(), doc="'TREMBL Accessions Interactor B', '|'-separated."),
+            NestedField(29, "refseq_b", StringType(), doc="'REFSEQ Accessions Interactor B' (proteins), '|'-separated."),
+            NestedField(30, "ontology_term_ids", StringType(),
+                        doc="'Ontology Term IDs': phenotype/cell-line terms qualifying the evidence, '|'-separated."),
+            NestedField(31, "ontology_term_names", StringType(), doc="'Ontology Term Names', parallel to ontology_term_ids."),
+            NestedField(32, "ontology_term_categories", StringType(), doc="'Ontology Term Categories', parallel to ontology_term_ids."),
+            NestedField(33, "ontology_term_qualifier_ids", StringType(), doc="'Ontology Term Qualifier IDs', parallel to ontology_term_ids."),
+            NestedField(34, "ontology_term_qualifier_names", StringType(), doc="'Ontology Term Qualifier Names', parallel to ontology_term_ids."),
+            NestedField(35, "ontology_term_types", StringType(), doc="'Ontology Term Types', parallel to ontology_term_ids."),
+            NestedField(36, "organism_name_a", StringType(), doc="'Organism Name Interactor A', e.g. Homo sapiens."),
+            NestedField(37, "organism_name_b", StringType(), doc="'Organism Name Interactor B'."),
+            NestedField(38, "biogrid_version", StringType(), required=True,
+                        doc="BioGRID release the file came from, e.g. '5.0.261', from the file name."),
+            NestedField(39, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="BioGRID's BIOGRID-ALL tab3 file landed verbatim and whole: every organism, every "
+                "column as text, one row per curated interaction evidence. '-' upstream reads as "
+                "NULL; nothing is split. Holds the LATEST release only, the narrowing "
+                "raw.icite__metadata makes: every release stays citable under BioGRID's "
+                "Release-Archive. " + BIOGRID_MIT,
+        properties={"bioc.column.entrez_gene_a.prefix": "ncbigene",
+                    "bioc.column.entrez_gene_b.prefix": "ncbigene",
+                    "bioc.license": "MIT"},
+    ),
+    "raw.intact__mitab": TableDef(
+        schema=Schema(
+            NestedField(1, "id_a", StringType(), required=True,
+                        doc="'#ID(s) interactor A': the primary identifier as 'db:id', e.g. uniprotkb:P04637, "
+                            "chebi:\"CHEBI:15422\", intact:EBI-123. One value per row in practice."),
+            NestedField(2, "id_b", StringType(),
+                        doc="'ID(s) interactor B'. NULL ('-' upstream) for a single-participant interaction such "
+                            "as autophosphorylation (324 rows on 2026-01-09)."),
+            NestedField(3, "alt_ids_a", StringType(),
+                        doc="'Alt. ID(s) interactor A': secondary accessions and other databases' ids for A, "
+                            "'|'-separated 'db:id'."),
+            NestedField(4, "alt_ids_b", StringType(),
+                        doc="'Alt. ID(s) interactor B'. As alt_ids_a."),
+            NestedField(5, "aliases_a", StringType(),
+                        doc="'Alias(es) interactor A': names as 'db:name(name type)', e.g. uniprotkb:TP53(gene "
+                            "name), '|'-separated."),
+            NestedField(6, "aliases_b", StringType(),
+                        doc="'Alias(es) interactor B'. As aliases_a."),
+            NestedField(7, "detection_methods", StringType(),
+                        doc="'Interaction detection method(s)': PSI-MI term, e.g. psi-mi:\"MI:0018\"(two hybrid)."),
+            NestedField(8, "first_authors", StringType(),
+                        doc="'Publication 1st author(s)', e.g. 'Puthalakath et al. (1999)'."),
+            NestedField(9, "publication_ids", StringType(),
+                        doc="'Publication Identifier(s)': 'pubmed:<pmid>', 'imex:IM-…', 'doi:…', 'mint:…', "
+                            "'|'-separated. 'pubmed:unassigned…' marks a paper with no PMID yet."),
+            NestedField(10, "taxid_a", StringType(),
+                        doc="'Taxid interactor A': 'taxid:9606(human)|taxid:9606(Homo sapiens)' — one id, short "
+                            "and full label. -1 is 'in vitro', -2 'chemical synthesis'. NULL for small molecules."),
+            NestedField(11, "taxid_b", StringType(),
+                        doc="'Taxid interactor B'. As taxid_a."),
+            NestedField(12, "interaction_types", StringType(),
+                        doc="'Interaction type(s)': PSI-MI term, e.g. psi-mi:\"MI:0915\"(physical association)."),
+            NestedField(13, "source_databases", StringType(),
+                        doc="'Source database(s)': the curating IMEx member as a PSI-MI term — IntAct, MINT, "
+                            "UniProt, DIP, MatrixDB and others."),
+            NestedField(14, "interaction_ids", StringType(), required=True,
+                        doc="'Interaction identifier(s)': 'intact:EBI-…' always, then 'imex:IM-…', 'mint:…', "
+                            "'dip:…' where assigned. The intact: AC is shared by every binary row expanded from "
+                            "one n-ary interaction."),
+            NestedField(15, "confidence_values", StringType(),
+                        doc="'Confidence value(s)': 'intact-miscore:0.51' and any author scores, '|'-separated."),
+            NestedField(16, "expansion_methods", StringType(),
+                        doc="'Expansion method(s)': psi-mi:\"MI:1060\"(spoke expansion) when the row was "
+                            "generated from an n-ary interaction; NULL for a true binary one."),
+            NestedField(17, "biological_roles_a", StringType(),
+                        doc="'Biological role(s) interactor A': PSI-MI term, e.g. enzyme, enzyme target, "
+                            "unspecified role."),
+            NestedField(18, "biological_roles_b", StringType(),
+                        doc="'Biological role(s) interactor B'."),
+            NestedField(19, "experimental_roles_a", StringType(),
+                        doc="'Experimental role(s) interactor A': PSI-MI term — bait, prey, neutral component."),
+            NestedField(20, "experimental_roles_b", StringType(),
+                        doc="'Experimental role(s) interactor B'."),
+            NestedField(21, "interactor_types_a", StringType(),
+                        doc="'Type(s) interactor A': PSI-MI term — protein, small molecule, messenger rna, "
+                            "deoxyribonucleic acid, gene, molecule set and others."),
+            NestedField(22, "interactor_types_b", StringType(),
+                        doc="'Type(s) interactor B'."),
+            NestedField(23, "xrefs_a", StringType(),
+                        doc="'Xref(s) interactor A': GO, Ensembl, InterPro and other cross-references, "
+                            "'|'-separated."),
+            NestedField(24, "xrefs_b", StringType(),
+                        doc="'Xref(s) interactor B'."),
+            NestedField(25, "interaction_xrefs", StringType(),
+                        doc="'Interaction Xref(s)': cross-references of the interaction itself, e.g. GO or PDB."),
+            NestedField(26, "annotations_a", StringType(),
+                        doc="'Annotation(s) interactor A': 'topic:text' curator annotations."),
+            NestedField(27, "annotations_b", StringType(),
+                        doc="'Annotation(s) interactor B'."),
+            NestedField(28, "interaction_annotations", StringType(),
+                        doc="'Interaction annotation(s)': 'topic:text' — figure legend, dataset, comment, "
+                            "curation depth."),
+            NestedField(29, "host_organisms", StringType(),
+                        doc="'Host organism(s)': taxid of the organism the experiment was performed in."),
+            NestedField(30, "interaction_parameters", StringType(),
+                        doc="'Interaction parameter(s)': kinetic or affinity measurements, e.g. kd."),
+            NestedField(31, "creation_date", StringType(),
+                        doc="'Creation date' of the record at IntAct, YYYY/MM/DD."),
+            NestedField(32, "update_date", StringType(),
+                        doc="'Update date' of the record at IntAct, YYYY/MM/DD."),
+            NestedField(33, "checksums_a", StringType(),
+                        doc="'Checksum(s) interactor A': rogid and crc64 of the sequence."),
+            NestedField(34, "checksums_b", StringType(),
+                        doc="'Checksum(s) interactor B'."),
+            NestedField(35, "interaction_checksums", StringType(),
+                        doc="'Interaction Checksum(s)': intact-crc and rigid."),
+            NestedField(36, "negative", StringType(),
+                        doc="'Negative': 'true' for an interaction shown NOT to occur (the rows of "
+                            "intact_negative.txt), 'false' otherwise."),
+            NestedField(37, "features_a", StringType(),
+                        doc="'Feature(s) interactor A': binding sites, tags, mutations with their ranges."),
+            NestedField(38, "features_b", StringType(),
+                        doc="'Feature(s) interactor B'."),
+            NestedField(39, "stoichiometry_a", StringType(),
+                        doc="'Stoichiometry(s) interactor A'."),
+            NestedField(40, "stoichiometry_b", StringType(),
+                        doc="'Stoichiometry(s) interactor B'."),
+            NestedField(41, "identification_methods_a", StringType(),
+                        doc="'Identification method participant A': PSI-MI term for how the participant was "
+                            "identified."),
+            NestedField(42, "identification_methods_b", StringType(),
+                        doc="'Identification method participant B'."),
+            NestedField(43, "intact_version", StringType(), required=True,
+                        doc="IntAct release the files came from: the dated FTP directory, e.g. '2026-01-09'."),
+            NestedField(44, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="IntAct's PSI-MI MITAB 2.7 export (psimitab/intact.zip: intact.txt and "
+                "intact_negative.txt) landed verbatim and whole: every organism and molecule "
+                "type, all 42 columns as text, one row per binary interaction evidence — n-ary "
+                "interactions arrive spoke-expanded, several rows under one interaction AC. Cells "
+                "are MITAB 'db:id(text)' entries, '|'-separated, and stay unsplit; '-' upstream "
+                "reads as NULL. Holds the LATEST release only, like raw.biogrid__interactions: "
+                "dated releases stay frozen on the EBI FTP. Attribution: IntAct (EMBL-EBI), "
+                "CC BY 4.0; del Toro et al. NAR 2022.",
+        properties={"bioc.license": "CC-BY-4.0"},
+    ),
+    "annotation.interaction": TableDef(
+        schema=Schema(
+            NestedField(1, "source", StringType(), required=True,
+                        doc="The asserting interaction database, from the controlled writer "
+                            "vocabulary: 'BIOGRID' or 'INTACT'. Part of the business key and of "
+                            "every writer's merge scope, so the databases stack in one table and "
+                            "neither can retire the other's rows (ADR-0004). An experiment curated "
+                            "by both appears once per source; nothing is de-duplicated across them."),
+            NestedField(2, "interaction_id", StringType(), required=True,
+                        doc="The source's own id for the interaction evidence: the BioGRID "
+                            "Interaction ID, e.g. '253053', or the IntAct interaction AC, e.g. "
+                            "'EBI-526131'. Stable across releases in both. One row per id under "
+                            "BIOGRID; under INTACT an n-ary interaction is several rows sharing one "
+                            "id (see expansion_method)."),
+            NestedField(3, "interactor_a_namespace", StringType(), required=True,
+                        doc="Identifier authority of interactor_a_id, in the SOURCE's native space — "
+                            "nothing is mapped. BIOGRID: 'ENTREZ', or 'BIOGRID' for the few "
+                            "interactors with no Entrez gene. INTACT: 'UNIPROT' (95%), 'INTACT', "
+                            "'CHEBI', 'ENSEMBL' and a tail of others, upstream's database name "
+                            "upper-cased. To compare sources, map through "
+                            "annotation.identifier_mapping."),
+            NestedField(4, "interactor_a_id", StringType(), required=True,
+                        doc="Interactor A, e.g. '7157' (ENTREZ) or 'P04637' (UNIPROT; isoform and "
+                            "chain suffixes such as 'P04637-2' kept). A/B order is as published and "
+                            "is meaningful — for bait-prey methods BioGRID puts the bait in A — so "
+                            "a symmetric lookup must test both orders."),
+            NestedField(5, "interactor_b_namespace", StringType(), required=True,
+                        doc="Identifier authority of interactor_b_id. As interactor_a_namespace."),
+            NestedField(6, "interactor_b_id", StringType(), required=True,
+                        doc="Interactor B. Equal to A for a self-interaction, including IntAct's "
+                            "single-participant interactions (autophosphorylation), which upstream "
+                            "publishes with an empty B."),
+            NestedField(7, "taxon_id_a", IntegerType(),
+                        doc="NCBI taxonomy id of interactor A. NULL for small molecules and for "
+                            "IntAct's pseudo-taxa ('in vitro', 'chemical synthesis')."),
+            NestedField(8, "taxon_id_b", IntegerType(),
+                        doc="NCBI taxonomy id of interactor B; differs from taxon_id_a for a "
+                            "cross-species (e.g. host-pathogen) interaction."),
+            NestedField(9, "detection_method_id", StringType(),
+                        doc="PSI-MI id of the detection method, e.g. 'MI:0018'. NULL under BIOGRID, "
+                            "whose tab3 file carries its own vocabulary instead."),
+            NestedField(10, "detection_method", StringType(),
+                        doc="Detection method label: the PSI-MI term name under INTACT ('two "
+                            "hybrid'), BioGRID's Experimental System under BIOGRID ('Two-hybrid', "
+                            "'Affinity Capture-Western'). The two vocabularies are not aligned."),
+            NestedField(11, "interaction_type_id", StringType(),
+                        doc="PSI-MI id of the interaction type, e.g. 'MI:0915'. NULL under BIOGRID."),
+            NestedField(12, "interaction_type", StringType(),
+                        doc="Interaction type label: a PSI-MI term under INTACT ('physical "
+                            "association', 'direct interaction', 'phosphorylation reaction'); "
+                            "'physical' or 'genetic' under BIOGRID. A genetic interaction is not "
+                            "evidence of physical contact."),
+            NestedField(13, "expansion_method", StringType(),
+                        doc="'spoke expansion' when the row was generated from an n-ary interaction "
+                            "(bait paired with each prey), so the pair was co-purified rather than "
+                            "shown to bind directly; NULL for a binary interaction as reported. "
+                            "Always NULL under BIOGRID, which does not flag it."),
+            NestedField(14, "negative", BooleanType(),
+                        doc="True when the evidence is that the interaction does NOT occur (IntAct's "
+                            "negative file, ~1,000 rows). Filter on it before counting a row as an "
+                            "interaction. Always false under BIOGRID."),
+            NestedField(15, "pubmed_id", StringType(),
+                        doc="PubMed id of the publication reporting the evidence. NULL where the "
+                            "source has none (preprints; IntAct's 'unassigned' papers)."),
+            NestedField(16, "doi", StringType(),
+                        doc="DOI of the publication, lower-cased, where the source gives one: "
+                            "BioGRID only when there is no PMID, IntAct alongside it."),
+            NestedField(17, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(18, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("source", "interaction_id", "interactor_a_id", "interactor_b_id"),
+        partition_by=("source",),
+        comment="Molecular interaction evidence, stacked across interaction databases: one row "
+                "per evidence (one experiment in one publication) per pair, each in its source's "
+                "own identifier space — Entrez genes for BIOGRID, mostly UniProtKB proteins for "
+                "INTACT. The same pair recurs once per paper, method and direction; count "
+                "distinct pairs, not rows. A/B order is as published, so search both orders. "
+                "Genetic (BIOGRID) and negative (INTACT) rows are included and flagged. IntAct "
+                "rows: IntAct (EMBL-EBI), CC BY 4.0; del Toro et al. NAR 2022. " + BIOGRID_MIT,
+        properties={"bioc.column.taxon_id_a.prefix": "ncbitaxon",
+                    "bioc.column.taxon_id_b.prefix": "ncbitaxon",
+                    "bioc.column.pubmed_id.prefix": "pubmed",
+                    "bioc.license": "MIT AND CC-BY-4.0"},
     ),
 }
 
