@@ -1430,6 +1430,34 @@ def create(cat, identifier):
         PartitionField(source_id=d.schema.find_field(n).field_id, field_id=1000 + i,
                        transform=IdentityTransform(), name=n)
         for i, n in enumerate(d.partition_by)])
-    return rate_limited(lambda: cat.create_table_if_not_exists(
+    table = rate_limited(lambda: cat.create_table_if_not_exists(
         identifier, schema=d.iceberg_schema(), partition_spec=spec,
         properties={"comment": d.comment, **d.properties}))
+    return _evolve(table, d, identifier)
+
+
+def _evolve(table, d, identifier):
+    """Add columns the declaration has gained since the table was created.
+
+    Without this a new column in a TableDef never reaches a live table, and the
+    cast in merge.write fails on it. Only optional columns can be added: existing
+    rows read NULL for them. A new *required* column (a row-key change, as in
+    issue #94) has no value for the rows already there, so that is a rebuild and
+    this refuses it rather than guessing.
+
+    ponytail: additions only. A changed type, a dropped column or a changed doc
+    string is left alone — handle those when one actually happens.
+    """
+    live = {f.name for f in table.schema().fields}
+    missing = [f for f in d.schema.fields if f.name not in live]
+    if not missing:
+        return table
+    required = [f.name for f in missing if f.required]
+    if required:
+        raise ValueError(f"{identifier}: declared required column(s) {required} are not in the "
+                         "live table; Iceberg cannot add a required column to existing rows — "
+                         "rebuild the table")
+    with table.update_schema() as update:
+        for f in missing:
+            update.add_column(f.name, f.field_type, doc=f.doc)
+    return table
