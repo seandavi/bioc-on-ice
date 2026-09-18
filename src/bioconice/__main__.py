@@ -2,6 +2,7 @@ import argparse
 
 from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, mane, ncbi, ncbi_go, obo
 from . import ncbi_accession, ncbi_orthologs, ncbi_pubmed
+from . import pubtator3
 
 
 def _print(counts):
@@ -47,6 +48,12 @@ def main():
     ic.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
     ic.add_argument("--snapshot", help="iCite snapshot label, e.g. 2026-08 (default: latest on Figshare)")
     ic.add_argument("--csv", help="an already-extracted icite_metadata.csv; skips download")
+
+    pt = sub.add_parser("ingest-pubtator3",
+                        help="land the five PubTator3 entity dumps whole, then derive mentions")
+    pt.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    pt.add_argument("--url", help="alternate directory or URL prefix (with trailing slash) holding "
+                    "the five <kind>2pubtator3.gz files; default is NCBI's FTP directory")
 
     cx = sub.add_parser("ingest-cellxgene", help="land the CELLxGENE Discover dataset listing whole, then derive")
     cx.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
@@ -95,6 +102,8 @@ def main():
         print(f"{'raw.bugsigdb__full_dump':40} {n:>10,} rows  ({args.version})")
     elif args.cmd == "ingest-icite":
         _print(icite.ingest(cat, args.release, args.snapshot, args.csv))
+    elif args.cmd == "ingest-pubtator3":
+        _print(pubtator3.ingest(cat, args.release, args.url))
     elif args.cmd == "ingest-cellxgene":
         _print(cellxgene.ingest(cat, args.release, json_path=args.json,
                                 census_release=args.census_release))
