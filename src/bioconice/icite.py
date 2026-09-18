@@ -19,6 +19,10 @@ Two derived tables, because the columns change at two different rates:
                                  (doi, title, authors, journal, year, flags).
                                  Type 2 like every other annotation table;
                                  these rarely change, so history stays small.
+  annotation.icite__citation     keyed by (citing_pmid, cited_pmid) — the graph
+                                 itself, exploded from cited_by, merged in 16
+                                 shards of cited_pmid so ~930M edges never sit in
+                                 memory at once.
   annotation.icite__metrics      keyed by (pmid, snapshot) — how it is *cited*
                                  as of one snapshot. Citation counts move for
                                  nearly every paper every month; as Type 2
@@ -217,6 +221,41 @@ def transform(cat, release, snapshot):
     }
 
 
+SHARDS = 16
+
+
+def transform_citations(cat, release, snapshot):
+    """Phase 2b: the citation graph, one merge per shard of cited_pmid.
+
+    cited_by is the citing PMIDs of each paper, space-separated, ~930M edges in
+    all — the same graph as the Open Citation Collection file (their sum equals
+    every citation_count). Exploded once into DuckDB, then merged SHARDS times
+    with `cited_pmid % SHARDS` as the scope, so each merge holds ~1/16 of the
+    graph; the shard is a partition column, so the scope scan prunes to it.
+    """
+    con = duckdb.connect()
+    con.register("raw", cat.load_table("raw.icite__metadata").scan(
+        row_filter=EqualTo("snapshot", snapshot),
+        selected_fields=("pmid", "cited_by")).to_arrow())
+    con.execute(f"""
+        CREATE TABLE edges AS
+        SELECT DISTINCT citing_pmid, pmid AS cited_pmid,
+               (pmid::BIGINT % {SHARDS})::INTEGER AS shard
+        FROM (SELECT pmid, unnest(str_split(cited_by, ' ')) AS citing_pmid
+              FROM raw WHERE cited_by IS NOT NULL AND cited_by <> '')
+        WHERE citing_pmid <> ''
+    """)
+    con.unregister("raw")
+    out = {}
+    for shard in range(SHARDS):
+        inc = con.sql(f"SELECT citing_pmid, cited_pmid, shard FROM edges WHERE shard = {shard}"
+                      ).to_arrow_table()
+        out[f"annotation.icite__citation [shard {shard}]"] = merge.merge(
+            cat, "annotation.icite__citation", inc, release, EqualTo("shard", shard))
+    return out
+
+
 def ingest(cat, release, snapshot=None, csv=None):
     label, n = land_raw(cat, release, snapshot, csv)
-    return {f"raw.icite__metadata [{label}]": n, **transform(cat, release, label)}
+    return {f"raw.icite__metadata [{label}]": n, **transform(cat, release, label),
+            **transform_citations(cat, release, label)}

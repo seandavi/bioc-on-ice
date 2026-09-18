@@ -1325,6 +1325,29 @@ TABLES = {
                 "leaves for a follow-up, to land as a resource_relationship-style membership "
                 "table when it does.",
         properties={},
+    "annotation.icite__citation": TableDef(
+        schema=Schema(
+            NestedField(1, "citing_pmid", StringType(), required=True,
+                        doc="PubMed id of the paper that cites. Part of the merge key."),
+            NestedField(2, "cited_pmid", StringType(), required=True,
+                        doc="PubMed id of the paper cited. Part of the merge key."),
+            NestedField(3, "shard", IntegerType(), required=True,
+                        doc="cited_pmid modulo 16: the unit this table is merged and partitioned in, "
+                            "so ~930M edges never sit in memory at once. Implementation detail, "
+                            "safe to ignore; it exists so the table's write path is honest."),
+            NestedField(4, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(5, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("citing_pmid", "cited_pmid"),
+        partition_by=("shard",),
+        comment="The PubMed citation graph as iCite publishes it: one row per (citing, cited) "
+                "pair, from the NIH Open Citation Collection via the cited_by lists in "
+                "raw.icite__metadata. ~930M edges. An edge has no attributes, so it is only ever "
+                "asserted or withdrawn: valid_from is the release it appeared in, valid_to the "
+                "release it vanished. 'Who cites X' is WHERE cited_pmid = X AND valid_to IS NULL. "
+                "Source: NIH iCite / NIH-OCC, CC BY 4.0.",
+        properties={"bioc.column.citing_pmid.prefix": "pubmed",
+                    "bioc.column.cited_pmid.prefix": "pubmed"},
     ),
 }
 

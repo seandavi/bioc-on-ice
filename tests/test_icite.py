@@ -59,6 +59,18 @@ def test_publication_is_typed_and_metrics_are_per_snapshot(cat):
     assert {r["snapshot"] for r in met.values()} == {"2026-08"}
 
 
+def test_citation_graph_is_exploded_and_sharded(cat):
+    counts = icite.ingest(cat, REL, snapshot="2026-08", csv=CSV)
+    edges = {(r["citing_pmid"], r["cited_pmid"]) for r in rows(cat, "annotation.icite__citation")}
+    assert edges == {("2000000", "1000000"), ("3000000", "1000000"), ("3000000", "2000000")}
+    assert all(r["shard"] == int(r["cited_pmid"]) % icite.SHARDS
+               for r in rows(cat, "annotation.icite__citation"))
+    written = sum(c["written"] for k, c in counts.items() if k.startswith("annotation.icite__citation"))
+    assert written == 3
+    # a citing paper need not itself be a record: 3000000 cites, and is not cited
+    assert {r["cited_pmid"] for r in rows(cat, "annotation.icite__citation")} == {"1000000", "2000000"}
+
+
 def test_next_snapshot_keeps_old_metrics_and_versions_only_changed_papers(cat, tmp_path):
     icite.ingest(cat, REL, snapshot="2026-08", csv=CSV)
     # next month: one paper's citations grew, its title is unchanged; one paper vanished
@@ -79,6 +91,9 @@ def test_next_snapshot_keeps_old_metrics_and_versions_only_changed_papers(cat, t
     assert sorted((r["pmid"], r["snapshot"], r["citation_count"]) for r in met
                   if r["pmid"] == "1000000") == [("1000000", "2026-08", 120), ("1000000", "2026-09", 130)]
     assert all(r["valid_to"] is None for r in met)
+    # edges: the same three, none rewritten (3000000 still appears as a citer)
+    cit = [c for k, c in counts.items() if k.startswith("annotation.icite__citation")]
+    assert sum(c["written"] for c in cit) == 0 and sum(c["unchanged"] for c in cit) == 3
     # raw holds the latest snapshot only
     assert {r["snapshot"] for r in rows(cat, "raw.icite__metadata")} == {"2026-09"}
 
