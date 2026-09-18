@@ -3078,6 +3078,146 @@ TABLES = {
                     "bioc.column.pubmed_id.prefix": "pubmed",
                     "bioc.license": "MIT AND CC-BY-4.0"},
     ),
+    "raw.complexportal__complex": TableDef(
+        schema=Schema(
+            NestedField(1, "complex_ac", StringType(), required=True,
+                        doc="'#Complex ac', e.g. CPX-663. Unique across every file of a release, so "
+                            "it is the natural key even though raw declares none."),
+            NestedField(2, "recommended_name", StringType(), doc="'Recommended name' of the complex."),
+            NestedField(3, "aliases", StringType(), doc="'Aliases for complex', '|'-separated."),
+            NestedField(4, "taxonomy_identifier", StringType(),
+                        doc="'Taxonomy identifier': NCBI taxonomy id, as text. For a host-pathogen "
+                            "complex this is the pathogen's."),
+            NestedField(5, "participants", StringType(),
+                        doc="'Identifiers (and stoichiometry) of molecules in complex': 'ac(n)' "
+                            "entries, '|'-separated — UniProtKB, ChEBI, RNAcentral or CPX- (a "
+                            "sub-complex) accessions; (0) means stoichiometry unknown; "
+                            "'[P02400,P05319](1)' is a molecule set, alternatives for one position."),
+            NestedField(6, "evidence_code", StringType(),
+                        doc="'Evidence Code': one ECO term as 'ECO:0000353(label)'."),
+            NestedField(7, "experimental_evidence", StringType(),
+                        doc="'Experimental evidence': the supporting IntAct interaction, EMDB or PDB "
+                            "entry, e.g. intact:EBI-8000888."),
+            NestedField(8, "go_annotations", StringType(),
+                        doc="'Go Annotations': 'GO:0045892(label)' entries, '|'-separated."),
+            NestedField(9, "cross_references", StringType(),
+                        doc="'Cross references': 'db:id(qualifier)' entries, '|'-separated — PubMed, "
+                            "wwPDB, EMDB, Reactome, the complex's own primary AC."),
+            NestedField(10, "description", StringType(), doc="'Description': curated function summary."),
+            NestedField(11, "complex_properties", StringType(),
+                        doc="'Complex properties': curated structural and biophysical notes."),
+            NestedField(12, "complex_assembly", StringType(),
+                        doc="'Complex assembly', e.g. Heterodimer, Homotetramer."),
+            NestedField(13, "ligand", StringType(), doc="'Ligand': bound ligands, as published."),
+            NestedField(14, "disease", StringType(), doc="'Disease': associated diseases with their xrefs, as published."),
+            NestedField(15, "agonist", StringType(), doc="'Agonist', as published."),
+            NestedField(16, "antagonist", StringType(), doc="'Antagonist', as published."),
+            NestedField(17, "comment", StringType(), doc="'Comment': curator free text."),
+            NestedField(18, "source", StringType(),
+                        doc="'Source': the curating database as a PSI-MI term, e.g. "
+                            "psi-mi:\"MI:0469\"(IntAct), psi-mi:\"MI:2424\"(HuMap)."),
+            NestedField(19, "expanded_participants", StringType(),
+                        doc="'Expanded participant list': participants with every sub-complex "
+                            "flattened into its members. Same 'ac(n)' form as participants."),
+            NestedField(20, "file", StringType(), required=True,
+                        doc="The complextab file the row came from, e.g. '9606.tsv'. "
+                            "'9606_predicted.tsv' is the only marker of a predicted complex."),
+            NestedField(21, "complexportal_version", StringType(), required=True,
+                        doc="Complex Portal release: the dated FTP directory, e.g. '2026-01-09'."),
+            NestedField(22, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="Every Complex Portal ComplexTab file of a release — one per species, plus the "
+                "predicted human complexes — landed verbatim and whole: all 19 columns as text, "
+                "one row per complex, nothing split. '-' upstream reads as NULL. Replaced per "
+                "complexportal_version, so versions accumulate. Licence CC0.",
+        properties={"bioc.column.complex_ac.prefix": "complexportal",
+                    "bioc.license": "CC0-1.0"},
+    ),
+    "annotation.complexportal__complex": TableDef(
+        schema=Schema(
+            NestedField(1, "complex_ac", StringType(), required=True,
+                        doc="Complex Portal accession, e.g. 'CPX-663'. Stable; the key."),
+            NestedField(2, "taxon_id", IntegerType(), doc=(
+                "NCBI taxonomy id of the complex. For a host-pathogen complex this is the "
+                "pathogen's, so it is not necessarily every participant's.")),
+            NestedField(3, "name", StringType(),
+                        doc="Recommended name, e.g. 'TP53-MDM4 transcription regulation complex'. "
+                            "NULL for nearly every predicted complex, which upstream leaves unnamed."),
+            NestedField(4, "aliases", StringType(), doc="Other names, '|'-separated as published."),
+            NestedField(5, "predicted", BooleanType(),
+                        doc="True for a machine-learning prediction (hu.MAP, human only; 15,284 of "
+                            "20,579 in 2026-01-09), false for a manually curated complex. Filter on "
+                            "it: the two are not the same kind of evidence."),
+            NestedField(6, "evidence_code", StringType(),
+                        doc="ECO id of the evidence for the complex, e.g. 'ECO:0000353' (physical "
+                            "interaction evidence), 'ECO:0005544' (inferred by orthology), "
+                            "'ECO:0008004' (machine learning)."),
+            NestedField(7, "evidence", StringType(), doc="The ECO term's label."),
+            NestedField(8, "experimental_evidence", StringType(),
+                        doc="The supporting experimental record as 'db:id', e.g. "
+                            "'intact:EBI-8000888'. NULL for inferred and predicted complexes."),
+            NestedField(9, "assembly", StringType(), doc="Assembly type, e.g. Heterodimer. NULL where not curated."),
+            NestedField(10, "go_annotations", StringType(),
+                        doc="GO terms as 'GO:0045892(label)', '|'-separated as published. Not yet exploded."),
+            NestedField(11, "cross_references", StringType(),
+                        doc="Cross-references as 'db:id(qualifier)', '|'-separated as published: "
+                            "PubMed, wwPDB, EMDB, Reactome."),
+            NestedField(12, "description", StringType(), doc="Curated summary of the complex's function."),
+            NestedField(13, "properties", StringType(), doc="Curated structural and biophysical notes."),
+            NestedField(14, "ligand", StringType(), doc="Bound ligands, as published."),
+            NestedField(15, "disease", StringType(), doc="Associated diseases with their xrefs, as published."),
+            NestedField(16, "agonist", StringType(), doc="Agonists, as published."),
+            NestedField(17, "antagonist", StringType(), doc="Antagonists, as published."),
+            NestedField(18, "comment", StringType(), doc="Curator free text."),
+            NestedField(19, "curated_by", StringType(),
+                        doc="The database that curated (or predicted) the complex, e.g. IntAct, "
+                            "UniProt, Saccharomyces Genome Database, HuMap."),
+            NestedField(20, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(21, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("complex_ac",),
+        comment="Macromolecular complexes from Complex Portal (EMBL-EBI), one row per complex "
+                "across 28 species: name, evidence, GO annotation and function. Manually curated "
+                "complexes and hu.MAP predictions share the table; `predicted` tells them apart. "
+                "Members are in annotation.complexportal__participant. Licence CC0.",
+        properties={"bioc.column.complex_ac.prefix": "complexportal",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.evidence_code.prefix": "eco",
+                    "bioc.license": "CC0-1.0"},
+    ),
+    "annotation.complexportal__participant": TableDef(
+        schema=Schema(
+            NestedField(1, "complex_ac", StringType(), required=True,
+                        doc="Complex Portal accession; join to annotation.complexportal__complex."),
+            NestedField(2, "participant_id", StringType(), required=True,
+                        doc="The member molecule in Complex Portal's own identifier space: a "
+                            "UniProtKB accession ('P04637'; isoform 'P04637-2' and processed-chain "
+                            "'-PRO_…' suffixes kept), 'CHEBI:29105', an RNAcentral 'URS…_9606', or "
+                            "'CPX-…' for a sub-complex, which is NOT flattened into its members."),
+            NestedField(3, "participant_namespace", StringType(),
+                        doc="Authority of participant_id, read off its form: 'UNIPROT' (98%), "
+                            "'CHEBI', 'COMPLEXPORTAL', 'RNACENTRAL', 'INTACT'. NULL for the handful "
+                            "of ids that match none (GenBank nucleotide accessions)."),
+            NestedField(4, "stoichiometry", IntegerType(),
+                        doc="Copies of the participant in the complex. NULL where unknown, which "
+                            "upstream prints as (0) — most rows, and every predicted complex."),
+            NestedField(5, "molecule_set", StringType(),
+                        doc="The set as published, e.g. '[P02400,P05319]', when this participant is "
+                            "one of several interchangeable molecules filling a single position: "
+                            "each member is its own row carrying the same set and the position's "
+                            "stoichiometry. NULL for an ordinary participant."),
+            NestedField(6, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(7, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("complex_ac", "participant_id"),
+        comment="Members of each Complex Portal complex, one row per (complex, molecule), in "
+                "Complex Portal's identifier space — nothing is mapped to genes. Find the "
+                "complexes a protein belongs to by UniProt accession; a complex with N members "
+                "is N rows, not N*(N-1)/2 pairs. Licence CC0.",
+        properties={"bioc.column.complex_ac.prefix": "complexportal",
+                    "bioc.license": "CC0-1.0"},
+    ),
 }
 
 
