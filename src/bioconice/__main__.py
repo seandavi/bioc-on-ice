@@ -15,6 +15,8 @@ from . import ncbi_go
 from . import ncbi_orthologs
 from . import ncbi_pubmed
 from . import obo
+from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, mane, ncbi, ncbi_go, obo
+from . import eqtlcatalogue, ncbi_accession, ncbi_orthologs, ncbi_pubmed
 from . import pubtator3
 from . import wikipathways
 
@@ -109,6 +111,14 @@ def main():
     wp.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
     wp.add_argument("--url", help="a dated archive directory (e.g. https://data.wikipathways.org/"
                     "20260810/gmt/) or a local directory of .gmt files; default is current/gmt/")
+    eq = sub.add_parser("ingest-eqtlcatalogue",
+                        help="land the eQTL Catalogue dataset metadata and FTP paths whole, then "
+                             "derive resource entries (summary statistics are referenced)")
+    eq.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    eq.add_argument("--url", help="root of a copy of eQTL-Catalogue-resources — another git ref on "
+                    "raw.githubusercontent.com, or a local checkout; default is tag v26.09.2")
+    eq.add_argument("--eqtl-release", help="eQTL Catalogue release to land, the N of "
+                    f"dataset_metadata_rN.tsv (default: {eqtlcatalogue.RELEASE})")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
@@ -143,6 +153,8 @@ def main():
         _print(cellosaurus.ingest(cat, args.release, args.url))
     elif args.cmd == "ingest-wikipathways":
         _print(wikipathways.ingest(cat, args.release, args.url))
+    elif args.cmd == "ingest-eqtlcatalogue":
+        _print(eqtlcatalogue.ingest(cat, args.release, args.url, args.eqtl_release))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
