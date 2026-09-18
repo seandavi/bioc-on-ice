@@ -46,9 +46,17 @@ unchanged is Milestone 2 and not built yet.
 | --- | --- | --- |
 | `org.*.eg.db` (OrgDb), one per organism | `annotation.ncbi__gene`, `annotation.identifier_mapping`, `annotation.ncbi__gene_go`, `annotation.ncbi__gene_pubmed` | 51,796 taxa: symbols, aliases, descriptions, cross-references between Entrez, Ensembl, RefSeq, HGNC and OMIM, GO, PubMed |
 | `TxDb.*`, `EnsDb.*`, one per organism per build | `annotation.gene`, `annotation.transcript`, `annotation.exon`, `reference.genome` | Ensembl 116, 276 species: 7.4M genes, 14.1M transcripts, 143.3M exons |
-| `GO.db` | `ontology.term`, `ontology.relationship` | GO, plus CL, UBERON, MONDO, EFO, HsapDv and MmusDv: 258,393 terms, 487,920 edges |
+| `GO.db` | `ontology.term`, `ontology.relationship` | GO, plus CL, UBERON, MONDO, EFO, DO, HsapDv and MmusDv: 273,258 terms, 514,649 edges |
 | AnnotationHub, ExperimentHub | `resource.*` (see below) | CELLxGENE Discover. The hubs' own 117,671 records are planned |
 | `bugsigdbr` | `raw.bugsigdb__full_dump`, `annotation.signature_taxon` | BugSigDB v1.3.1: 7,365 signatures, 59,486 signature-taxon rows |
+| `Orthology.eg.db` | `annotation.ortholog` | NCBI gene_orthologs: 37.8M ortholog pairs across 1,753 taxa, stored in both directions, stacked by `source` so a second writer can join |
+| OrgDb symbols | `annotation.hgnc__gene` | HGNC complete set: 45,083 approved genes, 128,704 cross-references (Entrez, Ensembl, UCSC, OMIM) |
+| nothing equivalent | `annotation.mane__transcript` | MANE v1.5: 19,437 transcripts (19,363 Select, 74 Plus Clinical) pairing RefSeq and Ensembl |
+| `gwascat` | `clinical.gwas_catalog__association`, `clinical.gwas_catalog__study` | GWAS Catalog 2026-09-15: 1,192,472 associations, 230,057 studies, traits as EFO ids that join `ontology.term` |
+| nothing equivalent | `annotation.interaction`, `annotation.complexportal__complex`, `annotation.complexportal__participant` | BioGRID 5.0.261 (2.94M interactions) and IntAct 2026-01-09 (1.79M) stacked by `source`; Complex Portal: 20,579 complexes, 101,561 participants |
+| `rWikiPathways` (API client) | `annotation.wikipathways__pathway`, `annotation.wikipathways__gene_pathway` | WikiPathways 20260910: 1,957 pathways in 18 species, 76,046 gene-pathway rows |
+| nothing equivalent | `annotation.cellosaurus__cell_line`, `annotation.cellosaurus__xref`, `annotation.cellosaurus__disease` | Cellosaurus 56.0: 168,970 cell lines, 473,381 cross-references (DepMap, ENCODE, GEO, CLO...), 124,953 disease rows |
+| nothing equivalent | `annotation.rnacentral__rna`, `identifier_mapping` under `source='RNACENTRAL'` | RNAcentral 27: all 264M id-mapping rows landed; derived for human and mouse so far (5.9M ncRNA cross-references to miRBase, Rfam, HGNC, Ensembl, RefSeq) |
 | nothing equivalent | `annotation.icite__publication`, `annotation.icite__metrics`, `annotation.icite__citation` | NIH iCite: every PubMed record and ~930M citation edges |
 
 Knowingly not served: KEGG pathways (redistribution is restricted) and the
@@ -64,7 +72,9 @@ dataset is a query, and the bytes come from the original host.
 | --- | --- | --- |
 | [CELLxGENE Discover](https://cellxgene.cziscience.com) | 2,228 datasets in 391 collections: 291.8M cells (171.1M primary), 10 species, 664 spatial datasets | `h5ad_uri` per dataset, and the Census `2025-11-08` SOMA build on public S3 |
 | CELLxGENE ontology links | 44,139 rows in `resource.resource_relationship`: cell type, tissue, assay, disease | terms in `ontology.term`, so a dataset search can walk the ontology |
-| [BEDbase](https://bedbase.org) | landed 2026-09-18: 537,557 of 663,721 BED files (81%), all 22,189 bedsets, 1.17M `resource_relationship` rows to GEO/ENCODE accessions | every genome complete except hg38 (421,384 of 546,706): the API's offset listing stops answering past ~70k, so hg38 files in no bedset are unreachable — see #79 |
+| [BEDbase](https://bedbase.org) | landed 2026-09-18: 537,557 of 663,721 BED files (81%), all 22,189 bedsets, 1.17M `resource_relationship` rows to GEO/ENCODE accessions | every genome complete except hg38 (421,384 of 546,706): the API's offset listing stops answering past ~70k, so hg38 files in no bedset are unreachable — see #115 |
+| [ENCODE](https://www.encodeproject.org) | 28,642 experiments and 1,659,000 files, 1.71M `resource_relationship` rows (file → dataset, experiment → biosample term and target gene) | `href` and public S3 URI per file; every one of BEDbase's 405,210 ENCODE file targets now resolves |
+| [eQTL Catalogue](https://www.ebi.ac.uk/eqtl/) | release 7: 758 datasets from 42 studies, tissue and cell type as UBERON/CL/EFO terms | summary statistics and credible sets on the EBI FTP, by URI |
 
 Human datasets containing any kind of T cell, largest first, with the file to
 fetch. The recursive CTE walks `is_a` so subtypes need not be listed by hand
@@ -133,7 +143,7 @@ memory. Measured into R2 on 2026-09-12 (land + derive, per command):
 | `ingest-ncbi` | 72.2M genes, 121.9M mappings | 6m40s | 131 GB |
 | `ingest-gene2go` | 124.7M | 4m34s | 110 GB |
 | `ingest-ncbi-pubmed` | 82.9M | 1m44s | 35 GB |
-| `ingest-ncbi-accession` | 330.9M mappings | 13m37s | 320 GB |
+| `ingest-ncbi-accession` | 330.9M mappings | 13m37s | 320 GB (first load); 19m59s, 435 GB when re-merged against the existing rows on 2026-09-18 — see #147 |
 
 A one-species refresh (`--taxa 9606`) stays small.
 
