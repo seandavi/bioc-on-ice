@@ -1,0 +1,239 @@
+{
+  "about": [
+    "The fixed question set for SPEC.md acceptance criterion B4 (agent-aware). HELD OUT: an agent under test",
+    "is given the catalog endpoint and each entry's `question` — nothing else from this file, no SPEC, no README.",
+    "Its SQL is correct when it returns `expected`. `sql` is the reference answer, written against the README's",
+    "anonymous ATTACH (catalog alias `bioc`); tests/acceptance/test_live.py runs it to prove `expected` still",
+    "holds against the live catalog. Every `expected` was produced by running `sql` anonymously on 2026-09-18.",
+    "Answers are pinned to a release with `valid_from <= R AND (valid_to IS NULL OR valid_to > R)`, and to the",
+    "closed release 2026.08 wherever the source existed then. 2026.09 was still under construction when this",
+    "was written, so the questions pinned to it ask for facts a within-release correction is unlikely to move.",
+    "If one moves anyway, re-derive `expected` by running `sql`; do not loosen the comparison.",
+    "`expected` is a list of rows; row order is not significant."
+  ],
+  "questions": [
+    {
+      "id": "gene-count-at-release",
+      "question": "How many protein-coding genes did Ensembl annotate in the human genome as of biocOnIce release 2026.08?",
+      "exercises": "A1; annotation.gene",
+      "sql": [
+        "SELECT COUNT(*) FROM bioc.annotation.gene",
+        "WHERE taxon_id = 9606 AND source = 'ENSEMBL' AND gene_type = 'protein_coding'",
+        "  AND valid_from <= '2026.08' AND (valid_to IS NULL OR valid_to > '2026.08')"
+      ],
+      "expected": [[20131]]
+    },
+    {
+      "id": "canonical-transcript-exon-count",
+      "question": "Which Ensembl transcript is the canonical one for human BRCA2 in release 2026.08, and how many exons does it have?",
+      "exercises": "A1; annotation.gene, annotation.transcript, annotation.exon",
+      "sql": [
+        "SELECT t.transcript_id, COUNT(*) AS exons",
+        "FROM bioc.annotation.gene g",
+        "JOIN bioc.annotation.transcript t USING (gene_id, taxon_id, source)",
+        "JOIN bioc.annotation.exon e USING (transcript_id, taxon_id, source)",
+        "WHERE g.symbol = 'BRCA2' AND g.taxon_id = 9606 AND g.source = 'ENSEMBL' AND t.canonical",
+        "  AND g.valid_from <= '2026.08' AND (g.valid_to IS NULL OR g.valid_to > '2026.08')",
+        "  AND t.valid_from <= '2026.08' AND (t.valid_to IS NULL OR t.valid_to > '2026.08')",
+        "  AND e.valid_from <= '2026.08' AND (e.valid_to IS NULL OR e.valid_to > '2026.08')",
+        "GROUP BY t.transcript_id"
+      ],
+      "expected": [["ENST00000380152", 27]]
+    },
+    {
+      "id": "first-exon-minus-strand",
+      "question": "Human BRCA1 is on the reverse strand. In release 2026.08, what are the chromosome, start and end (1-based, inclusive) of the first exon — the 5'-most in transcript order — of its canonical transcript?",
+      "exercises": "A1, B3 (coordinate convention; order by rank, not coordinate); annotation.exon",
+      "sql": [
+        "SELECT e.sequence_name, e.start, e.\"end\", e.strand",
+        "FROM bioc.annotation.gene g",
+        "JOIN bioc.annotation.transcript t USING (gene_id, taxon_id, source)",
+        "JOIN bioc.annotation.exon e USING (transcript_id, taxon_id, source)",
+        "WHERE g.symbol = 'BRCA1' AND g.taxon_id = 9606 AND g.source = 'ENSEMBL' AND t.canonical AND e.rank = 1",
+        "  AND g.valid_from <= '2026.08' AND (g.valid_to IS NULL OR g.valid_to > '2026.08')",
+        "  AND t.valid_from <= '2026.08' AND (t.valid_to IS NULL OR t.valid_to > '2026.08')",
+        "  AND e.valid_from <= '2026.08' AND (e.valid_to IS NULL OR e.valid_to > '2026.08')"
+      ],
+      "expected": [["17", 43125271, 43125364, "-"]]
+    },
+    {
+      "id": "assembly-at-release",
+      "question": "Which mouse genome assembly — name and GenBank assembly accession — do the Ensembl gene models of release 2026.08 sit on?",
+      "exercises": "A1; reference.genome",
+      "sql": [
+        "SELECT assembly_name, genome_id FROM bioc.reference.genome",
+        "WHERE taxon_id = 10090 AND source = 'ENSEMBL'",
+        "  AND valid_from <= '2026.08' AND (valid_to IS NULL OR valid_to > '2026.08')"
+      ],
+      "expected": [["GRCm39", "GCA_000001635.9"]]
+    },
+    {
+      "id": "symbol-to-omim",
+      "question": "What is the OMIM number of the human gene CFTR, as of release 2026.08?",
+      "exercises": "A1; annotation.ncbi__gene joined to annotation.identifier_mapping",
+      "sql": [
+        "SELECT m.target_id",
+        "FROM bioc.annotation.ncbi__gene g",
+        "JOIN bioc.annotation.identifier_mapping m",
+        "  ON m.taxon_id = g.taxon_id AND m.source_namespace = 'ENTREZ' AND m.source_id = g.gene_id",
+        "WHERE g.symbol = 'CFTR' AND g.taxon_id = 9606 AND m.source = 'NCBI' AND m.target_namespace = 'OMIM'",
+        "  AND g.valid_from <= '2026.08' AND (g.valid_to IS NULL OR g.valid_to > '2026.08')",
+        "  AND m.valid_from <= '2026.08' AND (m.valid_to IS NULL OR m.valid_to > '2026.08')"
+      ],
+      "expected": [["602421"]]
+    },
+    {
+      "id": "symbol-renamed-between-releases",
+      "question": "An analysis run against release 2026.08 reports the human gene C17orf99. What is the official symbol of that same gene in release 2026.09?",
+      "exercises": "A1, A2 (point-in-time across two releases); annotation.ncbi__gene",
+      "sql": [
+        "SELECT now.symbol",
+        "FROM bioc.annotation.ncbi__gene then_",
+        "JOIN bioc.annotation.ncbi__gene now USING (gene_id, taxon_id)",
+        "WHERE then_.symbol = 'C17orf99' AND then_.taxon_id = 9606",
+        "  AND then_.valid_from <= '2026.08' AND (then_.valid_to IS NULL OR then_.valid_to > '2026.08')",
+        "  AND now.valid_from <= '2026.09' AND (now.valid_to IS NULL OR now.valid_to > '2026.09')"
+      ],
+      "expected": [["IL40"]]
+    },
+    {
+      "id": "go-function-terms",
+      "question": "How many distinct GO molecular-function terms were directly annotated to the human insulin gene (INS) in release 2026.08?",
+      "exercises": "A1; annotation.ncbi__gene, annotation.ncbi__gene_go",
+      "sql": [
+        "SELECT COUNT(DISTINCT a.go_id)",
+        "FROM bioc.annotation.ncbi__gene g",
+        "JOIN bioc.annotation.ncbi__gene_go a USING (gene_id, taxon_id)",
+        "WHERE g.symbol = 'INS' AND g.taxon_id = 9606 AND a.category = 'Function'",
+        "  AND g.valid_from <= '2026.08' AND (g.valid_to IS NULL OR g.valid_to > '2026.08')",
+        "  AND a.valid_from <= '2026.08' AND (a.valid_to IS NULL OR a.valid_to > '2026.08')"
+      ],
+      "expected": [[7]]
+    },
+    {
+      "id": "gene-paper-count",
+      "question": "How many publications had NCBI linked to the human gene BRCA1 as of release 2026.08?",
+      "exercises": "A1; annotation.ncbi__gene, annotation.ncbi__gene_pubmed",
+      "sql": [
+        "SELECT COUNT(*)",
+        "FROM bioc.annotation.ncbi__gene g",
+        "JOIN bioc.annotation.ncbi__gene_pubmed p USING (gene_id, taxon_id)",
+        "WHERE g.symbol = 'BRCA1' AND g.taxon_id = 9606",
+        "  AND g.valid_from <= '2026.08' AND (g.valid_to IS NULL OR g.valid_to > '2026.08')",
+        "  AND p.valid_from <= '2026.08' AND (p.valid_to IS NULL OR p.valid_to > '2026.08')"
+      ],
+      "expected": [[7219]]
+    },
+    {
+      "id": "most-cited-gene-paper",
+      "question": "Of the publications NCBI linked to human XIST in release 2026.08, which one had the most citations in iCite's 2026-08 snapshot? Give its PMID and publication year.",
+      "exercises": "A1; annotation.ncbi__gene_pubmed joined to annotation.icite__metrics and annotation.icite__publication",
+      "sql": [
+        "SELECT p.pubmed_id, pub.year",
+        "FROM bioc.annotation.ncbi__gene g",
+        "JOIN bioc.annotation.ncbi__gene_pubmed p USING (gene_id, taxon_id)",
+        "JOIN bioc.annotation.icite__metrics m ON m.pmid = p.pubmed_id AND m.snapshot = '2026-08'",
+        "JOIN bioc.annotation.icite__publication pub ON pub.pmid = p.pubmed_id",
+        "WHERE g.symbol = 'XIST' AND g.taxon_id = 9606",
+        "  AND g.valid_from <= '2026.08' AND (g.valid_to IS NULL OR g.valid_to > '2026.08')",
+        "  AND p.valid_from <= '2026.08' AND (p.valid_to IS NULL OR p.valid_to > '2026.08')",
+        "  AND m.valid_from <= '2026.09' AND (m.valid_to IS NULL OR m.valid_to > '2026.09')",
+        "  AND pub.valid_from <= '2026.09' AND (pub.valid_to IS NULL OR pub.valid_to > '2026.09')",
+        "ORDER BY m.citation_count DESC LIMIT 1"
+      ],
+      "expected": [["27602518", 2016]]
+    },
+    {
+      "id": "is-a-closure",
+      "question": "According to the Cell Ontology, is a hepatocyte a kind of epithelial cell?",
+      "exercises": "ontology.term, ontology.relationship (transitive is_a; terms imported into several ontologies)",
+      "sql": [
+        "WITH RECURSIVE ancestors(term_id) AS (",
+        "  SELECT term_id FROM bioc.ontology.term",
+        "  WHERE ontology = 'cl' AND name = 'hepatocyte'",
+        "    AND valid_from <= '2026.09' AND (valid_to IS NULL OR valid_to > '2026.09')",
+        "  UNION",
+        "  SELECT r.object_id FROM bioc.ontology.relationship r JOIN ancestors a ON r.subject_id = a.term_id",
+        "  WHERE r.ontology = 'cl' AND r.predicate = 'is_a'",
+        "    AND r.valid_from <= '2026.09' AND (r.valid_to IS NULL OR r.valid_to > '2026.09')",
+        ")",
+        "SELECT COUNT(*) > 0 FROM ancestors a JOIN bioc.ontology.term t ON t.term_id = a.term_id",
+        "WHERE t.ontology = 'cl' AND t.name = 'epithelial cell'",
+        "  AND t.valid_from <= '2026.09' AND (t.valid_to IS NULL OR t.valid_to > '2026.09')"
+      ],
+      "expected": [[true]]
+    },
+    {
+      "id": "go-direct-parents",
+      "question": "In the Gene Ontology, what are the direct is_a parents of 'apoptotic process'? Give their names.",
+      "exercises": "ontology.term, ontology.relationship",
+      "sql": [
+        "SELECT parent.name",
+        "FROM bioc.ontology.term child",
+        "JOIN bioc.ontology.relationship r ON r.ontology = 'go' AND r.subject_id = child.term_id AND r.predicate = 'is_a'",
+        "JOIN bioc.ontology.term parent ON parent.ontology = 'go' AND parent.term_id = r.object_id",
+        "WHERE child.ontology = 'go' AND child.name = 'apoptotic process'",
+        "  AND child.valid_from <= '2026.09' AND (child.valid_to IS NULL OR child.valid_to > '2026.09')",
+        "  AND r.valid_from <= '2026.09' AND (r.valid_to IS NULL OR r.valid_to > '2026.09')",
+        "  AND parent.valid_from <= '2026.09' AND (parent.valid_to IS NULL OR parent.valid_to > '2026.09')"
+      ],
+      "expected": [["programmed cell death"]]
+    },
+    {
+      "id": "dataset-assays",
+      "question": "Which assays, by name, produced the CELLxGENE dataset 'Tabula Sapiens - All Cells', and what DOI is its collection published under?",
+      "exercises": "resource.cellxgene__dataset, resource.resource_relationship, ontology.term",
+      "sql": [
+        "SELECT t.name, ds.collection_doi",
+        "FROM bioc.resource.cellxgene__dataset ds",
+        "JOIN bioc.resource.resource_relationship rr",
+        "  ON rr.resource_id = ds.dataset_version_id AND rr.relationship = 'has_assay' AND rr.source = 'cellxgene'",
+        "JOIN bioc.ontology.term t ON t.ontology = 'efo' AND t.term_id = rr.target_id",
+        "WHERE ds.title = 'Tabula Sapiens - All Cells'",
+        "  AND ds.valid_from <= '2026.09' AND (ds.valid_to IS NULL OR ds.valid_to > '2026.09')",
+        "  AND rr.valid_from <= '2026.09' AND (rr.valid_to IS NULL OR rr.valid_to > '2026.09')",
+        "  AND t.valid_from <= '2026.09' AND (t.valid_to IS NULL OR t.valid_to > '2026.09')"
+      ],
+      "expected": [["10x 3' v3", "10.1126/science.abl4896"], ["10x 5' v2", "10.1126/science.abl4896"], ["Smart-seq2", "10.1126/science.abl4896"], ["Smart-seq3", "10.1126/science.abl4896"]]
+    },
+    {
+      "id": "bedset-size",
+      "question": "How many BED files does BEDbase hold for GEO series GSE32970, and who is credited as the author of that set?",
+      "exercises": "resource.bedbase__bedset",
+      "sql": [
+        "SELECT bedfile_count, author FROM bioc.resource.bedbase__bedset",
+        "WHERE resource_id = 'gse32970'",
+        "  AND valid_from <= '2026.09' AND (valid_to IS NULL OR valid_to > '2026.09')"
+      ],
+      "expected": [[97, "ENCODE, DCC"]]
+    },
+    {
+      "id": "bedfile-to-experiment",
+      "question": "BEDbase has a BED file derived from ENCODE file ENCFF044KHD. Which genome is it on, which protein was targeted in which cell line, and which ENCODE experiment does it come from?",
+      "exercises": "resource.bedbase__bedfile, resource.resource_relationship",
+      "sql": [
+        "SELECT f.genome_alias, f.target, f.cell_line, x.target_id",
+        "FROM bioc.resource.resource_relationship s",
+        "JOIN bioc.resource.bedbase__bedfile f ON f.resource_id = s.resource_id",
+        "JOIN bioc.resource.resource_relationship x",
+        "  ON x.resource_id = s.resource_id AND x.relationship = 'derived_from_experiment' AND x.source = 'bedbase'",
+        "WHERE s.source = 'bedbase' AND s.relationship = 'derived_from_sample' AND lower(s.target_id) = 'encode:encff044khd'",
+        "  AND x.target_id LIKE 'encode:%'",
+        "  AND s.valid_from <= '2026.09' AND (s.valid_to IS NULL OR s.valid_to > '2026.09')",
+        "  AND x.valid_from <= '2026.09' AND (x.valid_to IS NULL OR x.valid_to > '2026.09')",
+        "  AND f.valid_from <= '2026.09' AND (f.valid_to IS NULL OR f.valid_to > '2026.09')"
+      ],
+      "expected": [["hg38", "CTCF", "K562", "encode:ENCSR000AKO"]]
+    },
+    {
+      "id": "release-provenance",
+      "question": "Which Ensembl release and which NCBI Gene download date was biocOnIce release 2026.08 built from?",
+      "exercises": "A6; provenance.release",
+      "sql": [
+        "SELECT source, source_version FROM bioc.provenance.release",
+        "WHERE release = '2026.08' AND source IN ('ensembl', 'ncbi_gene')"
+      ],
+      "expected": [["ensembl", "116"], ["ncbi_gene", "2026-08-07"]]
+    }
+  ]
+}
