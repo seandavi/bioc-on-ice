@@ -28,7 +28,7 @@ import duckdb
 from pyiceberg.expressions import And, EqualTo
 
 from . import merge
-from .ncbi import DATA, _derive, _land, _manifest, _where
+from .ncbi import DATA, _derive, _land, _manifest, _where, tsv
 
 URL = f"{DATA}gene2accession.gz"
 
@@ -49,7 +49,7 @@ COLUMNS = (
 
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2accession verbatim and whole into raw.ncbi__gene2accession."""
-    n = _land(cat, release, "raw.ncbi__gene2accession", url or URL, COLUMNS)
+    n = _land(cat, release, "raw.ncbi__gene2accession", tsv(url or URL, COLUMNS))
     _manifest(cat, release, "ncbi_gene2accession", URL, n)
     return n
 

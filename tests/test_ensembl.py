@@ -417,5 +417,5 @@ def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):
     empty = tmp_path / "empty.tsv"
     empty.write_text("#tax_id\tGeneID\tDiscontinued_GeneID\tDiscontinued_Symbol\tDiscontinue_Date\n")
     with pytest.raises(SystemExit, match="yielded no rows"):
-        ncbi._land(cat, "2026.09", "raw.ncbi__gene_history", str(empty),
-                   ncbi.COLUMNS["gene_history"])
+        ncbi._land(cat, "2026.09", "raw.ncbi__gene_history",
+                   ncbi.tsv(str(empty), ncbi.COLUMNS["gene_history"]))
