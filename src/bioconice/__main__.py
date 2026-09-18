@@ -1,6 +1,6 @@
 import argparse
 
-from . import bugsigdb, catalog, ensembl, icite, ncbi, ncbi_go
+from . import bugsigdb, catalog, cellxgene, ensembl, icite, ncbi, ncbi_go
 from . import ncbi_accession, ncbi_pubmed
 
 
@@ -46,6 +46,12 @@ def main():
     ic.add_argument("--snapshot", help="iCite snapshot label, e.g. 2026-08 (default: latest on Figshare)")
     ic.add_argument("--csv", help="an already-extracted icite_metadata.csv; skips download")
 
+    cx = sub.add_parser("ingest-cellxgene", help="land the CELLxGENE Discover dataset listing whole, then derive")
+    cx.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    cx.add_argument("--json", help="an already-fetched datasets listing JSON; skips the API call")
+    cx.add_argument("--census-release", help="Census build to reference, e.g. 2025-11-08 "
+                     "(default: the release manifest's 'stable' LTS alias)")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -62,6 +68,9 @@ def main():
         print(f"{'raw.bugsigdb__full_dump':40} {n:>10,} rows  ({args.version})")
     elif args.cmd == "ingest-icite":
         _print(icite.ingest(cat, args.release, args.snapshot, args.csv))
+    elif args.cmd == "ingest-cellxgene":
+        _print(cellxgene.ingest(cat, args.release, json_path=args.json,
+                                census_release=args.census_release))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None

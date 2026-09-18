@@ -30,6 +30,7 @@ authentication:
       - annotation
       - ontology
       - clinical
+      - resource
     permissions:
       - read
 
@@ -46,6 +47,7 @@ authentication:
         - annotation
         - ontology
         - clinical
+        - resource
       permissions:
         - read
         - write
@@ -62,6 +64,7 @@ authentication:
         - annotation
         - ontology
         - clinical
+        - resource
       permissions:
         - read
 
@@ -76,6 +79,7 @@ authentication:
         - raw
         - reference
         - annotation
+        - resource
       permissions:
         - read
 
