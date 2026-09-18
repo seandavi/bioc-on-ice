@@ -76,7 +76,8 @@ Serving is live behind icegate at
 read** — no token needed. Vended credentials are contained to this catalog's
 bucket, read-only, by a bucket-scoped backend token
 ([ADR-0011](docs/adr/0011-bucket-scoped-vending-tokens.md)). Write access
-remains key-only.
+remains key-only. Deploying a config change to the gateway is
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 Not yet: the `ensembl` row of the release manifest (see below), sequence lengths,
 and everything in Milestone 2.
