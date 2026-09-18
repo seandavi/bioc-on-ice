@@ -56,14 +56,31 @@ def species_info(ensembl_release, species):
     raise SystemExit(f"{species} not in Ensembl release {ensembl_release} vertebrates")
 
 
+def _pick_gtf(names, ensembl_release, species):
+    """The primary GTF among a directory's files: not .chr, .abinitio or a patch build.
+
+    Prefer the file stamped with this Ensembl release. Three species in the
+    vertebrates tree — C. elegans, D. melanogaster, S. cerevisiae — are imported
+    from Ensembl Metazoa/Fungi and keep that division's release number
+    (`WBcel235.63.gtf.gz` under release 116), so when no file carries the
+    release, a single remaining primary GTF is taken as it is.
+    """
+    primary = [n for n in names if n.endswith(".gtf.gz")
+               and not re.search(r"\.(chr|abinitio|chr_patch_hapl_scaff)\.", n)]
+    stamped = [n for n in primary if n.endswith(f".{ensembl_release}.gtf.gz")]
+    if len(stamped) == 1:
+        return stamped[0]
+    if not stamped and len(primary) == 1:
+        return primary[0]
+    raise SystemExit(f"no unambiguous primary GTF for {species} in Ensembl release "
+                     f"{ensembl_release}: {primary or names}")
+
+
 def gtf_url(ensembl_release, species):
-    """The primary GTF for a species (not .chr, .abinitio or the patch build)."""
     listing = f"{FTP.format(release=ensembl_release)}/gtf/{species}/"
     with urllib.request.urlopen(listing) as r:
-        m = re.search(rf'>([^<>"]+\.{ensembl_release}\.gtf\.gz)<', r.read().decode())
-    if not m:
-        raise SystemExit(f"no GTF for {species} in Ensembl release {ensembl_release}")
-    return listing + m.group(1)
+        names = re.findall(r'>([^<>"]+\.gtf\.gz)<', r.read().decode())
+    return listing + _pick_gtf(names, ensembl_release, species)
 
 
 def _write(cat, identifier, arrow, overwrite_filter):

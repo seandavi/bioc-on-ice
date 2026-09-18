@@ -419,3 +419,20 @@ def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):
     with pytest.raises(SystemExit, match="yielded no rows"):
         ncbi._land(cat, "2026.09", "raw.ncbi__gene_history",
                    ncbi.tsv(str(empty), ncbi.COLUMNS["gene_history"]))
+
+
+def test_pick_gtf_prefers_release_stamp_and_accepts_cross_imports():
+    """Vertebrates carry .116; the Metazoa/Fungi imports keep their own release number."""
+    ciona = ["Ciona_intestinalis.KH.116.abinitio.gtf.gz", "Ciona_intestinalis.KH.116.chr.gtf.gz",
+             "Ciona_intestinalis.KH.116.gtf.gz"]
+    assert ensembl._pick_gtf(ciona, "116", "ciona_intestinalis") == "Ciona_intestinalis.KH.116.gtf.gz"
+    # C. elegans under release 116 is WormBase's build with Metazoa's release number
+    assert ensembl._pick_gtf(["Caenorhabditis_elegans.WBcel235.63.gtf.gz"], "116",
+                             "caenorhabditis_elegans") == "Caenorhabditis_elegans.WBcel235.63.gtf.gz"
+    fly = ["Drosophila_melanogaster.BDGP6.54.63.chr.gtf.gz", "Drosophila_melanogaster.BDGP6.54.63.gtf.gz"]
+    assert ensembl._pick_gtf(fly, "116", "drosophila_melanogaster") == fly[1]
+    # ambiguity or nothing is a loud stop, never a guess
+    with pytest.raises(SystemExit, match="no unambiguous primary GTF"):
+        ensembl._pick_gtf([], "116", "nothing")
+    with pytest.raises(SystemExit, match="no unambiguous primary GTF"):
+        ensembl._pick_gtf(["A.x.63.gtf.gz", "A.y.64.gtf.gz"], "116", "two_builds")
