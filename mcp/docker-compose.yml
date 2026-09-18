@@ -3,7 +3,7 @@
 # `docker compose up -d --build` from there. See README.md.
 #
 # Follows compose/ntfy/docker-compose.yml's pattern exactly (grey-cloud
-# hostname, LE via the `cloudflare` certresolver) — see
+# hostname; TLS terminated at Cloudflare's edge (proxied DNS), Traefik serving its Origin CA cert) — see
 # monode/infrastructure/compose/README.md § "Adding a New Service".
 services:
   bioconice-mcp:
@@ -32,7 +32,9 @@ services:
       - "traefik.http.routers.bioconice-mcp.rule=Host(`bioconice-mcp.cancerdatasci.org`)"
       - "traefik.http.routers.bioconice-mcp.entrypoints=websecure"
       - "traefik.http.routers.bioconice-mcp.tls=true"
-      - "traefik.http.routers.bioconice-mcp.tls.certresolver=cloudflare"
+      # Orange-cloud (proxied) row of monode compose/README.md "TLS strategy": Cloudflare
+      # terminates TLS at the edge and Traefik serves its default Origin CA certificate, so
+      # no cert resolver. Grey-cloud + Let's Encrypt never issued for this host (2026-09-18).
       - "traefik.http.services.bioconice-mcp.loadbalancer.server.port=8000"
     # No auth in v1: every tool is read-only against data that is already
     # anonymously public through icegate, so there is nothing a token would

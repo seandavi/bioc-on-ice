@@ -36,7 +36,7 @@ policy allowing browser reads (explorer/README.md). First deployed 2026-09-18.
 
 The MCP server is **not** a Worker: it runs on onclappc02 as a docker compose service
 behind Traefik (`mcp/README.md`), the platform's pattern for services that need a real
-engine.
+engine. Live since 2026-09-18 at https://bioconice-mcp.cancerdatasci.org (proxied DNS, Cloudflare edge TLS).
 
 ## Deploy
 

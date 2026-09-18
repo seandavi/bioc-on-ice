@@ -125,3 +125,18 @@ Logs on stdout (`docker logs bioconice-mcp`): uvicorn's access lines, plus **one
 tool call** — `{"tool", "args", "ms", "ok", "rows", "truncated", "error"}` — which is what tells
 you how the server is used. Request-level access logs are Traefik's, already shipped to
 ClickHouse by Vector (monode `TELEMETRY.md`).
+
+
+## How it is reached (as deployed 2026-09-18)
+
+`https://bioconice-mcp.cancerdatasci.org` is a **proxied** (orange-cloud) Cloudflare DNS record
+pointing at onclappc02. Cloudflare terminates TLS at its edge; Traefik serves its default Origin CA
+certificate to Cloudflare and routes `Host(bioconice-mcp.cancerdatasci.org)` to this container on
+the `proxy` network. This is the orange-cloud row of monode's `compose/README.md` "TLS strategy":
+no `certresolver` label. The grey-cloud + Let's Encrypt row was tried first and Traefik never
+initiated issuance for this host (no ACME entry, nothing logged at INFO), so we switched rather
+than debug the shared proxy. Consequence to know: Cloudflare's proxy closes idle responses after
+100 s; MCP tool calls finish in seconds, but a very long streamed response would be cut.
+
+Client config: `{"mcpServers": {"bioconice": {"url": "https://bioconice-mcp.cancerdatasci.org/mcp"}}}`.
+Health: `/health/live` (process), `/health` (lake reachable). Logs: `docker logs bioconice-mcp`.
