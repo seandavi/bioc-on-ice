@@ -79,10 +79,10 @@ in the icegate checkout, with the same two environment variables.
 
 ## Known gaps (2026-09-18)
 
-1. **Config drift.** The live Worker predates the `resource` grants, so the
-   CELLxGENE and BEDbase loads 403 until the next deploy.
+1. ~~Config drift: the live Worker predated the `resource` grants.~~ Closed —
+   the gateway serves `resource.*` (checked 2026-09-18).
 2. **`logpush: true` is uncommitted** in the icegate checkout's `wrangler.jsonc`
-   (enabled via the API on 2026-08-07). A fresh clone would deploy without it and
+   (enabled via the API on 2026-08-07; icegate#35). A fresh clone would deploy without it and
    silently stop the access logs. It belongs in a commit to the icegate repo.
 3. **No uptime check.** The platform convention for always-on services
    (`monode/infrastructure/OBSERVABILITY.md`) is a GCP uptime check with

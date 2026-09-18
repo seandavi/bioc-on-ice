@@ -31,14 +31,17 @@ VALID_FROM = (
     "The biocOnIce release from which this version of the record is valid. "
     "A row is one *version*: any change to any attribute closes the previous "
     "row and opens a new one, so the value here is not necessarily when the "
-    "record first existed."
+    "record first existed. It is when biocOnIce first carried this version, not "
+    "when the source created it — the 51,794 taxa added in 2026.09 existed at "
+    "NCBI for years."
 )
 VALID_TO = (
     "The biocOnIce release at which this version stopped being current, "
     "exclusive. NULL means this is the current version — it does not mean "
     "unknown. Queries wanting current data must filter on valid_to IS NULL; "
     "queries wanting release R want "
-    "valid_from <= R AND (valid_to IS NULL OR valid_to > R)."
+    "valid_from <= R AND (valid_to IS NULL OR valid_to > R). Like valid_from, "
+    "this is a biocOnIce release, not the date the source changed the record."
 )
 TAXON = "NCBI taxonomy id of the organism, e.g. 9606 for human. Part of the merge key."
 SOURCE = (
