@@ -289,6 +289,16 @@ For Claude Code specifically, that is also one command:
 claude mcp add bioconice -- uvx --from git+https://github.com/seandavi/bioc-on-ice bioconice-mcp
 ```
 
+The two apps keep **separate** config files, and adding the server to one does
+not add it to the other. `claude mcp add` writes Claude Code's config only
+(`~/.claude.json`). Claude Desktop reads `claude_desktop_config.json` (Settings
+→ Developer → Edit Config; on macOS,
+`~/Library/Application Support/Claude/claude_desktop_config.json`). In that
+file give `command` as the absolute path that `which uvx` prints: Desktop is a
+GUI app and does not inherit the shell's `PATH`, so a bare `uvx` fails with
+`spawn uvx ENOENT`. Quit Desktop fully and reopen it to load the change; its
+per-server log is `~/Library/Logs/Claude/mcp-server-bioconice.log`.
+
 Once the docker-compose deployment in [`mcp/`](mcp/) is live, the same
 clients can instead point at the hosted URL:
 `{"mcpServers": {"bioconice": {"url": "https://bioconice-mcp.cancerdatasci.org/mcp"}}}`
