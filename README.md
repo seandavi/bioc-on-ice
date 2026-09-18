@@ -64,7 +64,7 @@ dataset is a query, and the bytes come from the original host.
 | --- | --- | --- |
 | [CELLxGENE Discover](https://cellxgene.cziscience.com) | 2,228 datasets in 391 collections: 291.8M cells (171.1M primary), 10 species, 664 spatial datasets | `h5ad_uri` per dataset, and the Census `2025-11-08` SOMA build on public S3 |
 | CELLxGENE ontology links | 44,139 rows in `resource.resource_relationship`: cell type, tissue, assay, disease | terms in `ontology.term`, so a dataset search can walk the ontology |
-| [BEDbase](https://bedbase.org) | lander written, not yet landed | 663,721 BED files in 22,189 bedsets upstream |
+| [BEDbase](https://bedbase.org) | landed 2026-09-18: 537,557 of 663,721 BED files (81%), all 22,189 bedsets, 1.17M `resource_relationship` rows to GEO/ENCODE accessions | every genome complete except hg38 (421,384 of 546,706): the API's offset listing stops answering past ~70k, so hg38 files in no bedset are unreachable — see #79 |
 
 Human datasets containing any kind of T cell, largest first, with the file to
 fetch. The recursive CTE walks `is_a` so subtypes need not be listed by hand
