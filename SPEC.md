@@ -443,7 +443,17 @@ ontology
 term_id
 name
 definition
+namespace
+synonyms
+obsolete
+replaced_by
 ```
+
+Landed from each ontology's own OBO Graphs JSON release (issue #83): `namespace` is the
+OBO namespace/aspect (GO's biological_process/molecular_function/cellular_component);
+`synonyms` is every synonym '|'-joined into one string, regardless of scope
+(exact/narrow/broad/related); `obsolete` terms are kept, never dropped, with `replaced_by`
+carrying the successor's id where the ontology names exactly one.
 
 ---
 
@@ -453,10 +463,14 @@ definition
 relationship
 ------------
 ontology
-subject
+subject_id
 predicate
-object
+object_id
 ```
+
+`subject`/`object` in the original design are `subject_id`/`object_id`: both are term ids,
+and every other table in this catalog names an id column `<entity>_id` rather than bare
+`<entity>`.
 
 ---
 
