@@ -1602,12 +1602,17 @@ TABLES = {
                         doc="What the target is to the resource: has_assay, has_tissue, has_disease, "
                             "has_cell_type (CELLxGENE; eQTL Catalogue the last two; targets are ontology term ids); derived_from_sample, "
                             "derived_from_experiment (BEDbase, targets are 'geo:gsm…'-style accessions). "
+                            "has_cell_type (CELLxGENE, targets are ontology term ids); derived_from_sample, "
+                            "derived_from_experiment (BEDbase, targets are 'geo:gsm…'-style accessions); "
+                            "part_of_dataset, has_biosample, has_target_gene (ENCODE, targets are 'encode:ENCSR…', "
+                            "an ontology term id, 'ncbigene:<Entrez id>'). "
                             "Part of the merge key."),
             NestedField(3, "target_id", StringType(), required=True,
                         doc="The related thing, as a CURIE or accession: joins to ontology.term.term_id when it "
                             "is an ontology term, and through ontology.relationship for rollups. Part of the merge key."),
             NestedField(4, "source", StringType(), required=True,
                         doc="The writer that asserted this row ('cellxgene', 'bedbase', 'eqtlcatalogue'): its merge scope, so one "
+                        doc="The writer that asserted this row ('cellxgene', 'bedbase', 'encode'): its merge scope, so one "
                             "catalog's re-ingest never retires another's rows (ADR-0004). Part of the merge key."),
             NestedField(5, "valid_from", StringType(), required=True, doc=VALID_FROM),
             NestedField(6, "valid_to", StringType(), doc=VALID_TO),
@@ -1619,6 +1624,243 @@ TABLES = {
                 "'which datasets have cell type X in tissue Y' question is a join here, and an ontology "
                 "rollup is a join through ontology.relationship. A relationship has no attributes, so a "
                 "row is only ever asserted or withdrawn.",
+    ),
+    # The two raw ENCODE tables are report.tsv columns, all text: (name, doc) pairs in
+    # request order, names being encode.EXPERIMENT_FIELDS / FILE_FIELDS with '.' -> '_'.
+    "raw.encode__experiment": TableDef(
+        schema=Schema(*(NestedField(i, n, StringType(), doc=d,
+                                    required=n in {"accession", "retrieval_date", "landed_in"})
+                        for i, (n, d) in enumerate((
+            ("accession", "ENCODE experiment accession, e.g. 'ENCSR000AKS'. Experiments share the ENCSR "
+                          "prefix with every other dataset type (annotations, references, series)."),
+            ("uuid", "The portal's internal UUID for the object."),
+            ("status", "'released', 'archived' or 'revoked' — everything an anonymous request can see. "
+                       "Landed whole: not filtered to released."),
+            ("date_created", "ISO 8601 timestamp the object was created on the portal."),
+            ("date_submitted", "YYYY-MM-DD the lab submitted the experiment. NULL where never recorded."),
+            ("date_released", "YYYY-MM-DD of public release."),
+            ("description", "Submitter's free-text description. Whitespace runs are collapsed to one space "
+                            "by the portal's TSV writer; quote characters are literal."),
+            ("assay_term_id", "Assay ontology id, e.g. 'OBI:0000716' (ChIP-seq); 'NTR:…' is an ENCODE "
+                              "new-term-request placeholder, not a published term."),
+            ("assay_term_name", "Assay ontology label, e.g. 'ChIP-seq'."),
+            ("assay_title", "ENCODE's display refinement of the assay, e.g. 'TF ChIP-seq', 'Histone ChIP-seq'."),
+            ("assay_slims", "Assay category slims, ','-joined, e.g. 'DNA binding'."),
+            ("biosample_ontology_term_id", "Biosample type as an ontology CURIE: UBERON (tissue), CL (cell type), "
+                                           "EFO or CLO (cell line), or an 'NTR:' placeholder."),
+            ("biosample_ontology_term_name", "Label of biosample_ontology_term_id, e.g. 'K562', 'liver'."),
+            ("biosample_ontology_classification", "'tissue', 'cell line', 'primary cell', 'in vitro differentiated "
+                                                  "cells', 'organoid', 'whole organisms', ..."),
+            ("biosample_ontology_organ_slims", "Organ slims of the biosample term, ','-joined."),
+            ("biosample_ontology_cell_slims", "Cell slims of the biosample term, ','-joined."),
+            ("biosample_summary", "ENCODE's generated one-line biosample description, including organism, "
+                                  "treatments and modifications."),
+            ("replicates_library_biosample_organism_scientific_name",
+             "Organism of the replicates' biosamples, e.g. 'Homo sapiens'; ','-joined if replicates differ. "
+             "NULL for the experiments with no replicate."),
+            ("replicates_library_biosample_organism_taxon_id",
+             "NCBI taxonomy id of the same, as text; ','-joined if replicates differ."),
+            ("target_name", "Target as ENCODE names it, '<label>-<organism>', e.g. 'CTCF-human'. NULL for "
+                            "assays without a target."),
+            ("target_label", "Target label, e.g. 'CTCF', 'H3K27ac'."),
+            ("target_investigated_as", "Target categories, ','-joined, e.g. 'histone,narrow histone mark'."),
+            ("target_genes_geneid", "Entrez GeneIDs of the target's genes, ','-joined — three for a histone "
+                                    "mark. NULL where the target has no gene (a synthetic tag, say)."),
+            ("target_genes_symbol", "Symbols of the same genes, ','-joined, in the same order."),
+            ("control_type", "Set on control experiments, e.g. 'input library'. NULL otherwise."),
+            ("perturbed", "'True' or 'False': whether the biosample was treated or genetically modified."),
+            ("lab_title", "Submitting lab, e.g. 'Michael Snyder, Stanford'."),
+            ("award_name", "Grant number, e.g. 'U54HG006996'."),
+            ("award_project", "Funding project: 'ENCODE', 'Roadmap', 'modENCODE', 'modERN', 'GGR', ..."),
+            ("award_rfa", "Project phase, e.g. 'ENCODE4'."),
+            ("assembly", "Assembly labels of the experiment's processed files, ','-joined, as the portal "
+                         "spells them ('GRCh38', 'hg19', 'mm10-minimal')."),
+            ("replication_type", "'isogenic', 'anisogenic', 'unreplicated', ..."),
+            ("bio_replicate_count", "Number of biological replicates, as text."),
+            ("tech_replicate_count", "Number of technical replicates, as text."),
+            ("dbxrefs", "External cross-references, ','-joined CURIE-like strings, e.g. 'GEO:GSE30263'."),
+            ("doi", "The experiment's DOI, e.g. '10.17989/ENCSR000AKS'."),
+            ("internal_tags", "ENCODE collection tags, ','-joined, e.g. 'ENCYCLOPEDIAv5'."),
+            ("alternate_accessions", "Accessions merged into this one, ','-joined."),
+            ("supersedes", "Object paths of the experiments this one replaces, ','-joined."),
+            ("superseded_by", "Object paths of the experiments that replace this one, ','-joined."),
+            ("possible_controls", "Object paths of this experiment's control experiments, ','-joined."),
+            ("retrieval_date", "UTC date this report was downloaded, YYYY-MM-DD. The source's own version: "
+                               "the portal is a live inventory with no release number."),
+            ("landed_in", "The biocOnIce release whose ingest landed these rows."),
+        ), 1))),
+        comment="The ENCODE portal's Experiment inventory landed verbatim from report.tsv: one row per "
+                "experiment, every status, every assay and organism. All text; list-valued fields are "
+                "','-joined as the portal writes them. The columns are the explicit field list "
+                "encode.EXPERIMENT_FIELDS, a declared subset of the Experiment object. Holds the LATEST "
+                "crawl only, as raw.cellxgene__dataset does. ENCODE data are free of use restrictions; the "
+                "ENCODE Consortium asks to be cited: https://www.encodeproject.org/help/citing-encode/",
+    ),
+    "raw.encode__file": TableDef(
+        schema=Schema(*(NestedField(i, n, StringType(), doc=d,
+                                    required=n in {"title", "retrieval_date", "landed_in"})
+                        for i, (n, d) in enumerate((
+            ("accession", "ENCODE file accession, e.g. 'ENCFF002FAS'. NULL for the 1,283 files (2026-09-18) "
+                          "that have only an external_accession."),
+            ("external_accession", "Another archive's accession or a name, for a file ENCODE gave no "
+                                   "accession: SRA runs ('SRR1270455'), named reference files "
+                                   "('GRCh38_EBV.chrom.sizes'). NULL otherwise."),
+            ("title", "accession, or external_accession where there is none: what the portal keys the file "
+                      "by ('/files/<title>/'). Never NULL."),
+            ("uuid", "The portal's internal UUID for the object."),
+            ("status", "'released', 'archived' or 'revoked'. Landed whole: not filtered to released."),
+            ("dataset", "Object path of the dataset the file belongs to: '/experiments/ENCSR…/', "
+                        "'/annotations/ENCSR…/', '/references/ENCSR…/', ... Only the first kind is in "
+                        "raw.encode__experiment."),
+            ("file_format", "'bed', 'bigWig', 'fastq', 'bam', 'bigBed', 'tsv', 'tar', ..."),
+            ("file_format_type", "Sub-format, mostly for bed/bigBed: 'narrowPeak', 'bed3+', 'idr_thresholded_peak', ..."),
+            ("file_type", "file_format and file_format_type together, e.g. 'bed narrowPeak'."),
+            ("output_type", "What the file holds, e.g. 'reads', 'alignments', 'IDR thresholded peaks'."),
+            ("output_category", "Coarse class of output_type: 'raw data', 'alignment', 'signal', 'annotation', ..."),
+            ("assembly", "Genome assembly label as the portal spells it: 'GRCh38', 'hg19', 'mm10', "
+                         "'mm10-minimal', 'dm6', 'ce11', ... NULL for unaligned data. A label, not an "
+                         "assembly key."),
+            ("genome_annotation", "Gene annotation version used, e.g. 'V29' (GENCODE), 'M21'. NULL where none."),
+            ("file_size", "Size in bytes, as text."),
+            ("md5sum", "MD5 of the file as stored (compressed, where it is)."),
+            ("content_md5sum", "MD5 of the uncompressed content, where the portal computed one."),
+            ("href", "Download path relative to https://www.encodeproject.org, "
+                     "'/files/<acc>/@@download/<acc>.<ext>'; it redirects to cloud_metadata_url."),
+            ("cloud_metadata_url", "Direct HTTPS URL of the object in the public encode-public S3 bucket."),
+            ("s3_uri", "The same object as an s3:// URI."),
+            ("no_file_available", "'True' where ENCODE holds metadata for a file it does not host."),
+            ("restricted", "'True' where the file is access-restricted (no public URL). NULL is unrestricted."),
+            ("derived_from", "Object paths of the files this one was computed from, ','-joined. Mostly "
+                             "'/files/ENCFF…/', occasionally a named reference file."),
+            ("biological_replicates", "Biological replicate numbers the file covers, ','-joined."),
+            ("technical_replicates", "Technical replicates as '<bio>_<tech>', ','-joined."),
+            ("preferred_default", "'True' where ENCODE marks the file as the default one to use for its dataset."),
+            ("processed", "'True' for pipeline output, 'False' for submitted raw data."),
+            ("run_type", "Sequencing run type for reads: 'single-ended' or 'paired-ended'."),
+            ("read_length", "Read length for reads, as text."),
+            ("paired_end", "'1' or '2' for one end of a paired-end fastq."),
+            ("paired_with", "Object path of the mate fastq."),
+            ("date_created", "ISO 8601 timestamp the file object was created."),
+            ("lab_title", "Lab that produced the file; 'ENCODE Processing Pipeline' for uniform processing."),
+            ("award_project", "Funding project, as raw.encode__experiment.award_project."),
+            ("award_rfa", "Project phase, e.g. 'ENCODE4'."),
+            ("alternate_accessions", "Accessions merged into this one, ','-joined."),
+            ("superseded_by", "Object paths of the files that replace this one, ','-joined."),
+            ("retrieval_date", "UTC date this report was downloaded, YYYY-MM-DD. The source's own version."),
+            ("landed_in", "The biocOnIce release whose ingest landed these rows."),
+        ), 1))),
+        comment="The ENCODE portal's File inventory landed verbatim from report.tsv: one row per file, "
+                "every status, format and dataset type. Metadata only — the files themselves stay in "
+                "ENCODE's public bucket. All text; list-valued fields are ','-joined as the portal writes "
+                "them. The columns are the explicit field list encode.FILE_FIELDS. Holds the LATEST crawl "
+                "only. ENCODE data are free of use restrictions; the ENCODE Consortium asks to be cited: "
+                "https://www.encodeproject.org/help/citing-encode/",
+    ),
+    "resource.encode__experiment": TableDef(
+        schema=Schema(
+            NestedField(1, "resource_id", StringType(), required=True,
+                        doc="'encode:' + accession, e.g. 'encode:ENCSR000AKS' — the spelling BEDbase's "
+                            "derived_from_experiment rows use as target_id in resource.resource_relationship, "
+                            "so the two join with '='. Business key."),
+            NestedField(2, "accession", StringType(), required=True, doc="Bare ENCODE accession, e.g. 'ENCSR000AKS'."),
+            NestedField(3, "status", StringType(), doc="'released', 'archived' or 'revoked'. Filter on it: archived and "
+                                                       "revoked experiments are rows here too."),
+            NestedField(4, "description", StringType(), doc="Submitter's free-text description."),
+            NestedField(5, "assay_term_id", StringType(), doc="Assay ontology id, mostly OBI; 'NTR:…' is an ENCODE placeholder."),
+            NestedField(6, "assay_term_name", StringType(), doc="Assay label, e.g. 'ChIP-seq'."),
+            NestedField(7, "assay_title", StringType(), doc="ENCODE's finer assay name, e.g. 'TF ChIP-seq'."),
+            NestedField(8, "biosample_term_id", StringType(),
+                        doc="Biosample type as a CURIE in ontology.term.term_id's form: UBERON, CL, EFO or CLO; "
+                            "'NTR:…' placeholders resolve nowhere. Joinable form: resource.resource_relationship "
+                            "(has_biosample)."),
+            NestedField(9, "biosample_term_name", StringType(), doc="Label of biosample_term_id, e.g. 'K562'."),
+            NestedField(10, "biosample_classification", StringType(), doc="'tissue', 'cell line', 'primary cell', ..."),
+            NestedField(11, "biosample_summary", StringType(), doc="ENCODE's one-line biosample description."),
+            NestedField(12, "taxon_id", IntegerType(),
+                        doc="NCBI taxonomy id. NULL where the experiment has no replicate, or replicates of more "
+                            "than one organism."),
+            NestedField(13, "organism", StringType(), doc="Scientific name as published; ','-joined if more than one."),
+            NestedField(14, "target_label", StringType(), doc="Assay target, e.g. 'CTCF', 'H3K27ac'. NULL for untargeted assays."),
+            NestedField(15, "target_investigated_as", StringType(), doc="Target categories as published, ','-joined."),
+            NestedField(16, "target_gene_ids", ListType(element_id=116, element_type=StringType(), element_required=False),
+                        doc="Entrez GeneIDs of the target's genes, sorted list. Joinable form: "
+                            "resource.resource_relationship (has_target_gene, 'ncbigene:<id>')."),
+            NestedField(17, "control_type", StringType(), doc="Set on control experiments, e.g. 'input library'."),
+            NestedField(18, "lab", StringType(), doc="Submitting lab."),
+            NestedField(19, "award", StringType(), doc="Grant number."),
+            NestedField(20, "project", StringType(), doc="'ENCODE', 'Roadmap', 'modENCODE', 'modERN', 'GGR', ..."),
+            NestedField(21, "rfa", StringType(), doc="Project phase, e.g. 'ENCODE4'."),
+            NestedField(22, "assemblies", ListType(element_id=122, element_type=StringType(), element_required=False),
+                        doc="Assembly labels of the experiment's processed files, sorted list, as the portal spells them."),
+            NestedField(23, "dbxrefs", ListType(element_id=123, element_type=StringType(), element_required=False),
+                        doc="External cross-references, sorted list, e.g. ['GEO:GSE30263'] — upstream's spelling, "
+                            "not the 'geo:gse…' one BEDbase writes."),
+            NestedField(24, "doi", StringType(), doc="The experiment's DOI."),
+            NestedField(25, "date_submitted", StringType(), doc="YYYY-MM-DD, as published."),
+            NestedField(26, "date_released", StringType(), doc="YYYY-MM-DD, as published."),
+            NestedField(27, "portal_uri", StringType(), required=True, doc="The experiment's page on encodeproject.org."),
+            NestedField(28, "provider", StringType(), required=True, doc="Constant 'ENCODE'."),
+            NestedField(29, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(30, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("resource_id",),
+        comment="One row per ENCODE experiment, Type 2 by resource_id: assay, biosample, target, lab and award. "
+                "Every status is here — filter status = 'released' for current data. Its files are "
+                "resource.encode__file rows with this resource_id as dataset_id. ENCODE data are free of use "
+                "restrictions; the ENCODE Consortium asks to be cited: "
+                "https://www.encodeproject.org/help/citing-encode/",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.target_gene_ids.prefix": "ncbigene",
+                    "bioc.column.doi.prefix": "doi"},
+    ),
+    "resource.encode__file": TableDef(
+        schema=Schema(
+            NestedField(1, "resource_id", StringType(), required=True,
+                        doc="'encode:' + accession, e.g. 'encode:ENCFF002FAS' — the spelling BEDbase's "
+                            "derived_from_sample rows use as target_id. Business key."),
+            NestedField(2, "accession", StringType(), required=True,
+                        doc="Bare ENCODE file accession; for the ~1,300 files that have none, the external "
+                            "accession or name the portal keys them by (raw.encode__file.title)."),
+            NestedField(3, "dataset_id", StringType(),
+                        doc="'encode:' + the accession of the dataset the file belongs to. Joins "
+                            "resource.encode__experiment.resource_id when dataset_type = 'experiments'."),
+            NestedField(4, "dataset_type", StringType(),
+                        doc="Kind of dataset, as the portal's path segment: 'experiments', 'annotations', "
+                            "'references', ... Only experiments are landed (encode.py)."),
+            NestedField(5, "status", StringType(), doc="'released', 'archived' or 'revoked'."),
+            NestedField(6, "file_format", StringType(), doc="'bed', 'bigWig', 'fastq', 'bam', ..."),
+            NestedField(7, "file_format_type", StringType(), doc="Sub-format, e.g. 'narrowPeak'. NULL for most formats."),
+            NestedField(8, "file_type", StringType(), doc="Format and sub-format together, e.g. 'bed narrowPeak'."),
+            NestedField(9, "output_type", StringType(), doc="What the file holds, e.g. 'IDR thresholded peaks'."),
+            NestedField(10, "output_category", StringType(), doc="'raw data', 'alignment', 'signal', 'annotation', ..."),
+            NestedField(11, "assembly", StringType(),
+                        doc="Assembly LABEL as published ('GRCh38', 'hg19', 'mm10-minimal'), not an assembly key: "
+                            "free of any join until issue #94 defines one. NULL for unaligned data."),
+            NestedField(12, "genome_annotation", StringType(), doc="Gene annotation version, e.g. 'V29'."),
+            NestedField(13, "size", LongType(), doc="Bytes."),
+            NestedField(14, "md5sum", StringType(), doc="MD5 of the file as stored."),
+            NestedField(15, "content_md5sum", StringType(), doc="MD5 of the uncompressed content, where published."),
+            NestedField(16, "https_uri", StringType(),
+                        doc="Portal download URL; redirects to cloud_uri. NULL where no file is available."),
+            NestedField(17, "cloud_uri", StringType(), doc="Direct HTTPS URL in the public encode-public bucket."),
+            NestedField(18, "s3_uri", StringType(), doc="s3://encode-public/… URI of the same object; anonymous read."),
+            NestedField(19, "no_file_available", BooleanType(), doc="True where ENCODE holds metadata only."),
+            NestedField(20, "restricted", BooleanType(), doc="True where access is restricted. NULL means unrestricted."),
+            NestedField(21, "preferred_default", BooleanType(), doc="True where ENCODE marks this the file to use by default."),
+            NestedField(22, "derived_from", ListType(element_id=122, element_type=StringType(), element_required=False),
+                        doc="'encode:'-prefixed ids of the files this was computed from, sorted list; join to "
+                            "resource_id. A few name a reference file rather than an accession."),
+            NestedField(23, "lab", StringType(), doc="Producing lab; 'ENCODE Processing Pipeline' for uniform processing."),
+            NestedField(24, "date_created", StringType(), doc="ISO 8601 timestamp, as published."),
+            NestedField(25, "provider", StringType(), required=True, doc="Constant 'ENCODE'."),
+            NestedField(26, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(27, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("resource_id",),
+        comment="One row per ENCODE file, Type 2 by resource_id. Objects are REFERENCED, never ingested: "
+                "https_uri / cloud_uri / s3_uri point at ENCODE's public bucket, with size and md5sum. "
+                "Every status and every dataset type is here. ENCODE data are free of use restrictions; the "
+                "ENCODE Consortium asks to be cited: https://www.encodeproject.org/help/citing-encode/",
     ),
     "raw.hgnc__complete_set": TableDef(
         schema=Schema(

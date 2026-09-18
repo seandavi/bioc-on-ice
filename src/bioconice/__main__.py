@@ -19,6 +19,7 @@ from . import ncbi_pubmed
 from . import obo
 from . import pubtator3
 from . import wikipathways
+from . import encode
 
 
 def _print(counts):
@@ -127,6 +128,12 @@ def main():
                     "date becomes the version) or a local copy holding both files; default is "
                     "the newest dated directory")
 
+    en = sub.add_parser("ingest-encode",
+                        help="land the ENCODE portal's experiment and file inventory whole, then derive")
+    en.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    en.add_argument("--experiments", help="an already-downloaded Experiment report.tsv; skips that download")
+    en.add_argument("--files", help="an already-downloaded File report.tsv; skips that download")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -164,6 +171,8 @@ def main():
         _print(eqtlcatalogue.ingest(cat, args.release, args.url, args.eqtl_release))
     elif args.cmd == "ingest-gwas-catalog":
         _print(gwas_catalog.ingest(cat, args.release, args.url))
+    elif args.cmd == "ingest-encode":
+        _print(encode.ingest(cat, args.release, args.experiments, args.files))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
