@@ -134,8 +134,44 @@ def _flag(col):
             f"ELSE error('{col}: unexpected ' || {col}) END")
 
 
+# Normalisation rules, decided from the 2026-08 snapshot (41.0M rows):
+#   doi    3.9M upper-cased, 443 with stray whitespace, one with an https://doi.org/
+#          prefix, 6,414 values that are not DOIs at all ('0161901/AIM.003'). A DOI
+#          is case-insensitive and always '10.<registrant>/<suffix>', so: trim,
+#          lower-case, strip a resolver or 'doi:' prefix, and NULL anything that
+#          still does not look like one. Raw keeps the original.
+#   title  7,774 with leading/trailing whitespace; authors and journal had none.
+#   year   1800-2028 are all real: PMC digitised 18th/19th-century journals, and
+#          ahead-of-print records carry next year's date. No floor is imposed.
+DOI = ("NULLIF(regexp_extract(lower(trim(doi)), "
+       "'^(?:https?://(?:dx\\.)?doi\\.org/|doi:\\s*)?(10\\.[0-9]{4,9}/.+)$', 1), '')")
+
+# Assertions on the derived rows: each SQL counts violations, and one violation
+# fails the ingest before anything is written. These are the invariants the
+# tables' docs promise; a snapshot that breaks one needs a person, not a merge.
+CHECKS = {
+    "pmid is numeric":            "SELECT count(*) FROM pub WHERE TRY_CAST(pmid AS BIGINT) IS NULL",
+    "pmid is unique":             "SELECT count(*) - count(DISTINCT pmid) FROM pub",
+    "year is plausible":          "SELECT count(*) FROM pub WHERE year NOT BETWEEN 1600 AND 2100",
+    "doi is a normalised DOI":    "SELECT count(*) FROM pub WHERE doi IS NOT NULL AND (doi <> lower(doi) OR doi NOT LIKE '10.%/%')",
+    "text has no edge whitespace": "SELECT count(*) FROM pub WHERE title <> trim(title) OR authors <> trim(authors) OR journal <> trim(journal)",
+    "text has no empty strings":  "SELECT count(*) FROM pub WHERE '' IN (title, authors, journal, doi)",
+}
+
+
+def _check(con):
+    failed = {name: con.sql(sql).fetchone()[0] for name, sql in CHECKS.items()}
+    failed = {k: v for k, v in failed.items() if v}
+    if failed:
+        raise ValueError("icite: derived rows violate " + "; ".join(f"{k} ({v:,} rows)" for k, v in failed.items()))
+
+
 def transform(cat, release, snapshot):
-    """Phase 2: the paper (Type 2, by pmid) and its metrics (by pmid and snapshot)."""
+    """Phase 2: the paper (Type 2, by pmid) and its metrics (by pmid and snapshot).
+
+    Normalises (DOI, whitespace) and asserts the invariants in CHECKS before
+    any merge runs, so a bad snapshot fails loudly and writes nothing.
+    """
     con = duckdb.connect()
     # Only the columns derived here: the cited_by/references lists are most of
     # the file's 30 GB and nothing below reads them.
@@ -147,14 +183,17 @@ def transform(cat, release, snapshot):
                          "expected_citations_per_year", "field_citation_rate", "human",
                          "animal", "molecular_cellular", "apt", "provisional")).to_arrow())
 
-    pub = con.sql(f"""
-        SELECT pmid, NULLIF(doi, '') AS doi, NULLIF(title, '') AS title,
-               NULLIF(authors, '') AS authors, NULLIF(journal, '') AS journal,
+    con.execute(f"""
+        CREATE TABLE pub AS
+        SELECT pmid, {DOI} AS doi, NULLIF(trim(title), '') AS title,
+               NULLIF(trim(authors), '') AS authors, NULLIF(trim(journal), '') AS journal,
                year::INTEGER AS year,
                {_flag('is_research_article')} AS is_research_article,
                {_flag('is_clinical')} AS is_clinical
         FROM raw
-    """).to_arrow_table()
+    """)
+    _check(con)
+    pub = con.sql("SELECT * FROM pub").to_arrow_table()
 
     metrics = con.sql(f"""
         SELECT pmid, snapshot,
