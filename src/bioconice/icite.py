@@ -132,8 +132,15 @@ def _flag(col):
 def transform(cat, release, snapshot):
     """Phase 2: the paper (Type 2, by pmid) and its metrics (by pmid and snapshot)."""
     con = duckdb.connect()
+    # Only the columns derived here: the cited_by/references lists are most of
+    # the file's 30 GB and nothing below reads them.
     con.register("raw", cat.load_table("raw.icite__metadata").scan(
-        row_filter=EqualTo("snapshot", snapshot)).to_arrow())
+        row_filter=EqualTo("snapshot", snapshot),
+        selected_fields=("pmid", "snapshot", "doi", "title", "authors", "journal", "year",
+                         "is_research_article", "is_clinical", "relative_citation_ratio",
+                         "nih_percentile", "citation_count", "citations_per_year",
+                         "expected_citations_per_year", "field_citation_rate", "human",
+                         "animal", "molecular_cellular", "apt", "provisional")).to_arrow())
 
     pub = con.sql(f"""
         SELECT pmid, NULLIF(doi, '') AS doi, NULLIF(title, '') AS title,
