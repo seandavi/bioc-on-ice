@@ -48,7 +48,7 @@ import time
 import urllib.request
 
 import duckdb
-from pyiceberg.expressions import AlwaysTrue, In
+from pyiceberg.expressions import And, AlwaysTrue, EqualTo, In
 
 from . import merge
 from .ncbi import _land, _manifest
@@ -242,8 +242,8 @@ def transform(cat, release, limit=None):
                NULLIF(annotation_cell_line, '') AS cell_line,
                NULLIF(annotation_tissue, '') AS tissue,
                NULLIF(annotation_treatment, '') AS treatment,
-               NULLIF(annotation_global_sample_id, '') AS sample_id,
-               NULLIF(annotation_global_experiment_id, '') AS experiment_id,
+               list_sort(str_split(NULLIF(annotation_global_sample_id, ''), '|')) AS sample_id,
+               list_sort(str_split(NULLIF(annotation_global_experiment_id, ''), '|')) AS experiment_id,
                bed_compliance AS compliance, data_format AS format,
                license_id, 'BEDbase' AS provider,
                submission_date AS submitted, last_update_date AS updated
@@ -272,11 +272,23 @@ def transform(cat, release, limit=None):
         ids = [r[0] for r in con.sql(f"SELECT resource_id FROM {table}").fetchall()]
         return In("resource_id", ids)
 
+    # The joinable form of the accession lists: one row per (bed file, derived_from_*, accession).
+    rel = con.sql("""
+        SELECT DISTINCT * FROM (
+            SELECT resource_id, 'derived_from_sample' AS relationship, unnest(sample_id) AS target_id,
+                   'bedbase' AS source FROM bedfile
+            UNION ALL
+            SELECT resource_id, 'derived_from_experiment', unnest(experiment_id), 'bedbase' FROM bedfile)
+    """).to_arrow_table()
+    rel_scope = (EqualTo("source", "bedbase") if not limit
+                 else And(EqualTo("source", "bedbase"), scope("bedfile")))
     return {
         "resource.bedbase__bedfile": merge.merge(
             cat, "resource.bedbase__bedfile", bedfile, release, scope("bedfile")),
         "resource.bedbase__bedset": merge.merge(
             cat, "resource.bedbase__bedset", bedset, release, scope("bedset")),
+        "resource.resource_relationship": merge.merge(
+            cat, "resource.resource_relationship", rel, release, rel_scope),
     }
 
 

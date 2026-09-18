@@ -267,10 +267,12 @@ def transform(cat, release, retrieval_date, census_release):
     ds = con.sql("SELECT * FROM ds").to_arrow_table()
 
     # The joinable form: one row per (dataset version, relationship, term id).
-    rel = con.sql(" UNION ALL ".join(
+    # DISTINCT: a listing can name the same term twice in one field (seen live,
+    # 2026-09-18), and the relationship is a set.
+    rel = con.sql("SELECT DISTINCT * FROM (" + " UNION ALL ".join(
         f"SELECT dataset_version_id AS resource_id, 'has_{f}' AS relationship, "
         f"unnest({f}_term_ids) AS target_id, 'cellxgene' AS source FROM ds"
-        for f in MULTI)).to_arrow_table()
+        for f in MULTI) + ")").to_arrow_table()
     return {
         "resource.cellxgene__dataset": merge.merge(
             cat, "resource.cellxgene__dataset", ds, release, AlwaysTrue()),

@@ -76,6 +76,14 @@ def test_species_id_to_taxon_id_join(cat):
     ingest(cat, REL)
     bf = {r["resource_id"]: r for r in rows(cat, "resource.bedbase__bedfile")}
     assert bf["0000120fe8c5334bb0ce759dfcf06c3b"]["taxon_id"] == 9606
+    # accession lists are sorted lists, and the joinable form is one relationship row each
+    assert bf["0000120fe8c5334bb0ce759dfcf06c3b"]["sample_id"] == ["geo:gsm4837486"]
+    assert bf["0000120fe8c5334bb0ce759dfcf06c3b"]["experiment_id"] == ["geo:gse159673", "geo:gse159675"]
+    rel = {(r["relationship"], r["target_id"]) for r in rows(cat, "resource.resource_relationship")
+           if r["resource_id"] == "0000120fe8c5334bb0ce759dfcf06c3b"}
+    assert rel == {("derived_from_sample", "geo:gsm4837486"),
+                   ("derived_from_experiment", "geo:gse159673"), ("derived_from_experiment", "geo:gse159675")}
+    assert {r["source"] for r in rows(cat, "resource.resource_relationship")} == {"bedbase"}
     assert bf["0000e6a889395d78ab9bf667326d8cff"]["taxon_id"] == 10090
     # a real co-infection record carries species_id '9606, 11676' — not one integer.
     # TRY_CAST makes this NULL rather than failing the whole ingest.

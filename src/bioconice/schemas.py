@@ -1262,11 +1262,13 @@ TABLES = {
             NestedField(12, "cell_line", StringType(), doc="Cell line sampled, where applicable."),
             NestedField(13, "tissue", StringType(), doc="Tissue sampled."),
             NestedField(14, "treatment", StringType(), doc="Treatment applied to the sample, free text."),
-            NestedField(15, "sample_id", StringType(),
-                        doc="GEO/ENCODE sample ids, pipe-separated, e.g. 'geo:gsm4837486'. A "
-                            "join key into Milestone 3's experimental metadata."),
-            NestedField(16, "experiment_id", StringType(),
-                        doc="GEO/ENCODE experiment ids, pipe-separated, e.g. 'geo:gse159673'."),
+            NestedField(15, "sample_id", ListType(element_id=115, element_type=StringType(), element_required=False),
+                        doc="GEO/ENCODE sample ids, sorted list, e.g. ['geo:gsm4837486']. The joinable form is "
+                            "resource.resource_relationship (derived_from_sample); a join key into Milestone 3's "
+                            "experimental metadata."),
+            NestedField(16, "experiment_id", ListType(element_id=116, element_type=StringType(), element_required=False),
+                        doc="GEO/ENCODE experiment ids, sorted list, e.g. ['geo:gse159673']. Joinable form: "
+                            "resource.resource_relationship (derived_from_experiment)."),
             NestedField(17, "compliance", StringType(), doc="BED-standard compliance class, e.g. 'bed6+4'."),
             NestedField(18, "format", StringType(), doc="Upstream data format BEDbase detected."),
             NestedField(19, "license_id", StringType(),
