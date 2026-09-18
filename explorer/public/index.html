@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>biocOnIce Explorer</title>
+<meta name="description" content="Browse the biocOnIce catalog: namespaces, tables, column docs, provenance and snapshot history, read live from the icegate REST catalog.">
+<link rel="stylesheet" href="style.css">
+<!--
+  Phase 2 (DuckDB-WASM) needs this: its browser build imports the bare
+  specifier "apache-arrow", which only resolves via an import map, and an
+  import map must be present before any module script runs — so it is
+  declared here unconditionally even though the query tab itself is an
+  opt-in, off-by-default feature (see app.js / explorer/README.md).
+-->
+<script type="importmap">
+{ "imports": { "apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@17.0.0/+esm" } }
+</script>
+</head>
+<body>
+<header>
+  <h1>biocOnIce Explorer</h1>
+  <span class="sub">reading <code id="catalog-endpoint"></code> live, anonymously</span>
+  <nav aria-label="Views">
+    <button id="nav-browse" aria-current="page">Browse</button>
+    <button id="nav-recipes">Recipes</button>
+  </nav>
+</header>
+
+<div class="layout">
+  <nav id="catalog" aria-label="Namespaces and tables">
+    <h2>Namespaces</h2>
+    <div id="catalog-tree" aria-busy="true">
+      <p class="status">Loading namespaces…</p>
+    </div>
+  </nav>
+
+  <main id="main">
+    <section id="view-browse">
+      <div id="table-view">
+        <p class="status">Select a table from the left to see its columns, provenance and a copyable query.</p>
+      </div>
+    </section>
+    <section id="view-recipes" hidden></section>
+  </main>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
