@@ -36,6 +36,9 @@ DATA = [
     # (no underscore) are not derived
     ["9606", "7157", "-", "AF307851.1", "12751130", "AAH03596.1", "13097747",
      "-", "-", "-", "-", "-", "-", "-", "-", "TP53"],
+    # PDB chain: underscored but not RefSeq, so it must NOT surface as REFSEQ_PROTEIN
+    ["9606", "7157", "-", "-", "-", "1FX0_A.1", "-", "-", "-", "-", "-", "-", "-",
+     "-", "-", "TP53"],
     # GenBank genomic placement: this one IS derived
     ["9606", "7157", "-", "-", "-", "-", "-", "AC087388.1", "12408591", "-",
      "-", "-", "-", "-", "-", "TP53"],
@@ -80,7 +83,7 @@ def maps(cat):
 
 def test_raw_is_verbatim_whole_and_gzipped(cat, g2a):
     n = ncbi_accession.land_raw(cat, REL, url=g2a)
-    assert n == 5
+    assert n == 6
 
     raw = rows(cat, "raw.ncbi__gene2accession")
     # whole: mouse lands even though only human is ever derived here
@@ -92,6 +95,10 @@ def test_raw_is_verbatim_whole_and_gzipped(cat, g2a):
     refseq = next(r for r in raw if r["genomic_nucleotide_accession_version"] == "NC_000017.11")
     assert refseq["rna_nucleotide_accession_version"] == "NM_000546.6"
     assert refseq["start_position_on_the_genomic_accession"] == "7668401"
+    # '-' is the minus strand where there is a placement, and NULL where there is none
+    assert refseq["orientation"] == "-" and genbank["status"] is None
+    unplaced = next(r for r in raw if r["protein_accession_version"] == "AAH03596.1")
+    assert unplaced["orientation"] is None
     assert {r["landed_in"] for r in raw} == {REL}
 
 
@@ -100,7 +107,7 @@ def test_manifest_uses_the_retrieval_date(cat, g2a):
     m = next(r for r in rows(cat, "provenance.release")
              if r["source"] == "ncbi_gene2accession")
     assert m["version_method"] == "retrieval_date"
-    assert m["row_count"] == 5 and m["retrieved_at"].startswith("20")
+    assert m["row_count"] == 6 and m["retrieved_at"].startswith("20")
 
 
 def test_derives_refseq_and_genbank_namespaces(cat, g2a):
@@ -114,7 +121,8 @@ def test_derives_refseq_and_genbank_namespaces(cat, g2a):
     # GenBank genomic surfaces; RefSeq genomic (NC_/NW_) deliberately does not
     assert m[("ENTREZ", "GENBANK_GENOMIC")] == ["AC087388.1"]
     all_targets = {t for v in m.values() for t in v}
-    assert not {"NC_000017.11", "NW_003315952.2", "AF307851.1", "AAH03596.1"} & all_targets
+    assert not {"NC_000017.11", "NW_003315952.2", "AF307851.1", "AAH03596.1",
+                "1FX0_A.1"} & all_targets
 
     # only the transformed taxon is derived, under this writer's own source
     assert {r["taxon_id"] for r in live(cat, "NCBI_ACCESSION")} == {9606}
