@@ -49,3 +49,20 @@ def test_gives_up_eventually(monkeypatch):
     t = Table([CommitFailedException("x")] * 20)
     with pytest.raises(RuntimeError, match="still failing"):
         merge.overwrite(Cat(t), "x.y", t, None, None)
+
+
+def test_schema_create_waits_out_429_and_raises_the_rest(monkeypatch):
+    from bioconice import schemas
+    slept = []
+    monkeypatch.setattr(schemas.time, "sleep", slept.append)
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RESTError("TooManyRequestsException: Rate limit exceeded: too many write requests")
+        return "made"
+
+    assert schemas.rate_limited(flaky) == "made" and slept == [65]
+    with pytest.raises(RESTError, match="401"):
+        schemas.rate_limited(lambda: (_ for _ in ()).throw(RESTError("401 unauthorized")))
