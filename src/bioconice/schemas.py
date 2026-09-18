@@ -108,6 +108,7 @@ NAMESPACES = {
 _OBO_ONTOLOGIES = (
     ("cl", "CC-BY-4.0"), ("uberon", "CC-BY-3.0"), ("mondo", "CC-BY-4.0"),
     ("efo", "Apache-2.0"), ("hsapdv", "CC-BY-4.0"), ("mmusdv", "CC-BY-4.0"), ("go", "CC-BY-4.0"),
+    ("doid", "CC0-1.0"),
 )
 
 
@@ -1032,7 +1033,7 @@ TABLES = {
     "ontology.term": TableDef(
         schema=Schema(
             NestedField(1, "ontology", StringType(), required=True,
-                        doc="Short ontology name: cl, uberon, mondo, efo, hsapdv, mmusdv, go. Part "
+                        doc="Short ontology name: cl, uberon, mondo, efo, hsapdv, mmusdv, go, doid. Part "
                             "of the merge key, so one ontology's re-ingest never retires another's "
                             "terms."),
             NestedField(2, "term_id", StringType(), required=True,
