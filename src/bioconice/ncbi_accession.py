@@ -49,7 +49,14 @@ COLUMNS = (
 
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2accession verbatim and whole into raw.ncbi__gene2accession."""
-    n = _land(cat, release, "raw.ncbi__gene2accession", tsv(url or URL, COLUMNS))
+    # '-' is NCBI's null marker AND the minus strand, and nullstr cannot tell them
+    # apart. NCBI writes '?' for an unknown orientation, so on a row that has
+    # positions a NULL can only have been the minus strand (checked on the first
+    # 2M rows, 2026-09-18: positioned rows are '+'/'-', every other row is '?').
+    source = ("(SELECT * REPLACE (CASE WHEN start_position_on_the_genomic_accession IS NOT NULL "
+              f"THEN coalesce(orientation, '-') ELSE orientation END AS orientation) "
+              f"FROM {tsv(url or URL, COLUMNS)})")
+    n = _land(cat, release, "raw.ncbi__gene2accession", source)
     _manifest(cat, release, "ncbi_gene2accession", URL, n)
     return n
 
@@ -57,10 +64,11 @@ def land_raw(cat, release, url=None):
 def transform(cat, release, taxon=None):
     """Phase 2: ENTREZ <-> accession cross-references, one species or (default) all.
 
-    RefSeq accessions are the underscored forms (NM_/NR_/XM_/XR_ RNA,
-    NP_/XP_/YP_ protein) and GenBank/INSDC accessions never contain an
-    underscore, so the underscore is the discriminator — it also holds for
-    every future RefSeq prefix. GenBank RNA and protein accessions are not
+    RefSeq accessions are two capitals and an underscore (NM_/NR_/XM_/XR_ RNA,
+    NP_/XP_/YP_/WP_ protein), which also holds for every future RefSeq prefix.
+    The underscore alone is not enough on the protein side: PDB chains
+    ('1FX0_A.1') carry one too. GenBank/INSDC accessions never contain an
+    underscore, which is what selects GENBANK_GENOMIC. GenBank RNA and protein accessions are not
     emitted (the issue asks for the RefSeq ones), and neither are RefSeq
     genomic accessions (NC_/NT_/NW_): a REFSEQ_GENOMIC namespace can be
     derived later from the same raw rows.
@@ -79,10 +87,10 @@ def transform(cat, release, taxon=None):
             SELECT 'ENTREZ' AS source_namespace, gene_id AS source_id,
                    'REFSEQ_RNA' AS target_namespace,
                    rna_nucleotide_accession_version AS target_id, taxon_id
-            FROM acc WHERE contains(rna_nucleotide_accession_version, '_')
+            FROM acc WHERE regexp_matches(rna_nucleotide_accession_version, '^[A-Z]{2}_')
           UNION ALL
             SELECT 'ENTREZ', gene_id, 'REFSEQ_PROTEIN', protein_accession_version, taxon_id
-            FROM acc WHERE contains(protein_accession_version, '_')
+            FROM acc WHERE regexp_matches(protein_accession_version, '^[A-Z]{2}_')
           UNION ALL
             SELECT 'ENTREZ', gene_id, 'GENBANK_GENOMIC',
                    genomic_nucleotide_accession_version, taxon_id
