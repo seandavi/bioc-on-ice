@@ -11,6 +11,11 @@ sorts every record into one of five outcomes:
   retired     absent upstream          -> close the old row at this release
   history     already closed           -> untouched
 
+Within the release being built, all of that is a draft: a row opened at this
+release is replaced rather than superseded, one retired at this release that
+comes back identical is reopened, and one opened and retired at this release
+is dropped. Only earlier releases are history.
+
 Nothing is ever updated in place. That is the point: overwriting a changed
 attribute is Kimball Type 1, which destroys history, and it is what made a
 point-in-time query return transcripts pointing at genes that did not yet
@@ -61,7 +66,7 @@ def overwrite(cat, identifier, table, arrow, overwrite_filter):
             time.sleep(2 ** attempt)
             table = cat.load_table(identifier)
         except RESTError as err:
-            if "429" not in str(err) and "TooManyRequests" not in type(err).__name__:
+            if not schemas.is_rate_limit(err):
                 raise
             time.sleep(65)
             table = cat.load_table(identifier)
@@ -113,7 +118,7 @@ def merge(cat, identifier, incoming, release, scope):
 
     con = duckdb.connect()
     con.register("inc", incoming)
-    con.register("cur", table.scan(row_filter=scope).to_arrow())
+    con.register("stored", table.scan(row_filter=scope).to_arrow())
 
     on = " AND ".join(f'i."{k}" = c."{k}"' for k in keys)
     # IS DISTINCT FROM, so a NULL becoming a value (or the reverse) counts as a
@@ -121,21 +126,48 @@ def merge(cat, identifier, incoming, release, scope):
     differs = " OR ".join(f'i."{a}" IS DISTINCT FROM c."{a}"' for a in attrs) or "false"
     live = "c.valid_to IS NULL"
     k0 = f'"{keys[0]}"'
+    kq = ", ".join(f'"{k}"' for k in keys)
+
+    # The release being merged is still under construction, so anything recorded
+    # in it is a draft that a later merge of the same release may correct:
+    #   - a live row opened at this release is replaced, not superseded;
+    #   - a row retired at this release that reappears identical is reopened,
+    #     not re-created as a new version (its interval never really closed);
+    #   - a row opened and retired at this release is dropped, since it existed
+    #     in no release; the same goes for such zero-width rows already stored.
+    # Only earlier releases are history. This is what makes the merge safe to
+    # rerun within a release, and what lets a mistaken ingest be undone by the
+    # correct one (2026-09-18: alternate Ensembl assemblies retiring the
+    # canonical one's genes under a shared taxon id).
+    con.execute("CREATE OR REPLACE TABLE cur AS "
+                "SELECT * FROM stored WHERE valid_from IS DISTINCT FROM valid_to")
+    # One stored row per incoming key to match against, by priority: a row
+    # retired at this release that is identical (reopen it, and thereby drop any
+    # replacement opened at this release), else the live row, else a row retired
+    # at this release that differs (history; the incoming opens a new version).
+    keq = " AND ".join(f'l."{k}" = c."{k}"' for k in keys)
+    con.execute(f"""
+        CREATE OR REPLACE TABLE cand AS
+        SELECT c.*, CASE WHEN c.valid_to = '{release}' AND NOT ({differs}) THEN 0
+                         WHEN c.valid_to IS NULL THEN 1 ELSE 2 END AS _prio
+        FROM cur c JOIN inc i ON {on}
+        WHERE c.valid_to IS NULL OR c.valid_to = '{release}'
+        QUALIFY row_number() OVER (PARTITION BY {", ".join(f'c."{k}"' for k in keys)} ORDER BY _prio) = 1
+    """)
     is_new = f"c.{k0} IS NULL"
-    # A new key, or a changed one, starts a version at this release; an
-    # unchanged one carries its own start forward.
-    opened = f"CASE WHEN {is_new} OR ({differs}) THEN '{release}' ELSE c.valid_from END"
-    # Re-ingesting the release that opened the live row is a correction *within*
-    # that release, not a new version: replace it, rather than emitting a
-    # zero-width interval and a duplicate row key.
+    reopen = f"c.valid_to = '{release}' AND NOT ({differs})"
+    # A new key, a changed one, or a retired one coming back changed starts a
+    # version at this release; unchanged and reopened rows keep their start.
+    opened = (f"CASE WHEN {is_new} OR ({differs}) THEN '{release}' ELSE c.valid_from END")
     supersede = f"c.valid_from < '{release}'"
 
     con.execute(f"""
         CREATE OR REPLACE TABLE merged AS
         SELECT {_cols(schema, 'live', release, opened)},
                CASE WHEN {is_new} THEN 'new'
+                    WHEN {reopen} THEN 'reopened'
                     WHEN {differs} THEN 'changed' ELSE 'unchanged' END AS _state
-        FROM inc i LEFT JOIN cur c ON {on} AND {live}
+        FROM inc i LEFT JOIN cand c ON {on}
       UNION ALL
         SELECT {_cols(schema, 'closing', release)}, 'superseded' AS _state
         FROM inc i JOIN cur c ON {on} AND {live}
@@ -143,16 +175,18 @@ def merge(cat, identifier, incoming, release, scope):
       UNION ALL
         SELECT {_cols(schema, 'closing', release)}, 'retired' AS _state
         FROM cur c LEFT JOIN inc i ON {on}
-        WHERE {live} AND i.{k0} IS NULL
+        WHERE {live} AND i.{k0} IS NULL AND {supersede}
       UNION ALL
         SELECT {_cols(schema, 'history', release)}, 'history' AS _state
-        FROM cur c WHERE c.valid_to IS NOT NULL
+        FROM cur c
+        WHERE c.valid_to IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM cand l WHERE l._prio = 0 AND {keq}
+                          AND l.valid_from = c.valid_from)
     """)
 
     # Iceberg declares identifier fields and enforces nothing, so both
     # invariants are ours. Violating either corrupts silently: the current view
     # still reads correctly while joins fan out.
-    kq = ", ".join(f'"{k}"' for k in keys)
     for what, sql in (
         ("more than one live row",
          f"SELECT {kq} FROM merged WHERE valid_to IS NULL GROUP BY ALL HAVING count(*) > 1"),
@@ -170,6 +204,6 @@ def merge(cat, identifier, incoming, release, scope):
     final = con.sql(f"SELECT {cols} FROM merged").to_arrow_table()
     overwrite(cat, identifier, table, final.cast(table.schema().as_arrow()), scope)
 
-    return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "superseded", "retired")),
+    return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "reopened", "superseded", "retired")),
             "unchanged": stats.get("unchanged", 0),
             **{s: n for s, n in stats.items() if s != "history"}}
