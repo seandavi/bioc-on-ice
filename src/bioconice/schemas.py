@@ -1357,6 +1357,17 @@ TABLES = {
 
 
 
+def is_rate_limit(err):
+    """R2 Data Catalog's catalog-wide write limit, however pyiceberg surfaces it.
+
+    The REST error's *message* is 'TooManyRequestsException: Rate limit
+    exceeded…' — the class is a plain RESTError and the text has no '429', so
+    matching on either alone misses it (it did, in production, 2026-09-18).
+    """
+    text = f"{type(err).__name__}: {err}"
+    return "429" in text or "TooManyRequests" in text
+
+
 def rate_limited(call):
     """Run one catalog write, waiting out R2 Data Catalog's catalog-wide 429.
 
@@ -1369,7 +1380,7 @@ def rate_limited(call):
         try:
             return call()
         except RESTError as err:
-            if "429" not in str(err) and "TooManyRequests" not in type(err).__name__:
+            if not is_rate_limit(err):
                 raise
             time.sleep(65)
     return call()

@@ -89,7 +89,7 @@ def _commit(table, arrow, first):
             (table.overwrite if first else table.append)(arrow)
             return
         except RESTError as err:
-            if "429" not in str(err) and "TooManyRequests" not in type(err).__name__:
+            if not schemas.is_rate_limit(err):
                 raise
             time.sleep(65)
     raise RuntimeError(f"commit still rate-limited after {attempt + 1} waits")
