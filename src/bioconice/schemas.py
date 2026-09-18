@@ -1611,8 +1611,8 @@ TABLES = {
                         doc="The related thing, as a CURIE or accession: joins to ontology.term.term_id when it "
                             "is an ontology term, and through ontology.relationship for rollups. Part of the merge key."),
             NestedField(4, "source", StringType(), required=True,
-                        doc="The writer that asserted this row ('cellxgene', 'bedbase', 'eqtlcatalogue'): its merge scope, so one "
-                        doc="The writer that asserted this row ('cellxgene', 'bedbase', 'encode'): its merge scope, so one "
+                        doc="The writer that asserted this row ('cellxgene', 'bedbase', 'eqtlcatalogue', 'encode'): "
+                            "its merge scope, so one "
                             "catalog's re-ingest never retires another's rows (ADR-0004). Part of the merge key."),
             NestedField(5, "valid_from", StringType(), required=True, doc=VALID_FROM),
             NestedField(6, "valid_to", StringType(), doc=VALID_TO),
