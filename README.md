@@ -311,3 +311,21 @@ what still needs a deploy.
 ```sh
 uv run pytest       # raw ingest -> transform -> query, on a fixture, offline
 ```
+
+## Acceptance
+
+[SPEC.md](SPEC.md#acceptance-criteria) sections A–C, checked against the live
+deployment through the gateway, anonymously — SELECTs, metadata reads and one
+unauthenticated write that must be refused. About five minutes; deselected from
+the default run:
+
+```sh
+uv run pytest -m slow tests/acceptance -rsx
+```
+
+`-rsx` lists the gaps: criteria that need the write key (A3, A4, C4's keyed
+half) or a browser (C3, #116) are skips, and criteria the live catalog does not
+yet meet are strict xfails, which start failing the day the gap closes.
+[`tests/acceptance/questions.json`](tests/acceptance/questions.json) is the
+held-out question set for criterion B4: an agent under test gets the endpoint
+and the `question` text only, and is right when its SQL returns `expected`.
