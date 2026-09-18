@@ -53,7 +53,7 @@ def main():
                      "(default: the release manifest's 'stable' LTS alias)")
     ob = sub.add_parser("ingest-obo", help="land one OBO ontology's release, then derive term + relationship")
     ob.add_argument("ontology", choices=sorted(obo.REGISTRY),
-                    help="cl, uberon, mondo, efo, hsapdv, mmusdv, go")
+                    help="cl, uberon, mondo, efo, hsapdv, mmusdv, go, doid")
     ob.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
     ob.add_argument("--url", help="an already-downloaded OBO Graphs JSON file or alternate URL; "
                     "skips the registry URL (how offline tests stay offline)")

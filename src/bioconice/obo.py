@@ -57,6 +57,7 @@ REGISTRY = {
     "hsapdv":  ("https://purl.obolibrary.org/obo/hsapdv.json", "CC-BY-4.0"),
     "mmusdv":  ("https://purl.obolibrary.org/obo/mmusdv.json", "CC-BY-4.0"),
     "go":      ("https://purl.obolibrary.org/obo/go/go-basic.json", "CC-BY-4.0"),
+    "doid":    ("https://purl.obolibrary.org/obo/doid.json", "CC0-1.0"),
 }
 
 # OBO Graphs JSON is one JSON object per file; DuckDB's 16 MB default max_object_size is
