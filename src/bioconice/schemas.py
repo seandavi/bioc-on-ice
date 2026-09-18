@@ -19,6 +19,13 @@ from pyiceberg.types import (
     BooleanType, DoubleType, IntegerType, LongType, NestedField, StringType,
 )
 
+MULTI_VALUED = (
+    "Multi-valued: ontology term ids the source publishes for this field, "
+    "pipe-joined in one string, same order as the paired _labels column. "
+    "Joins to ontology.term once the ontology namespace lands (issue #83); "
+    "readable without it in the meantime."
+)
+
 VALID_FROM = (
     "The biocOnIce release from which this version of the record is valid. "
     "A row is one *version*: any change to any attribute closes the previous "
@@ -87,6 +94,8 @@ NAMESPACES = {
            "re-derive or audit; query the annotation and reference namespaces instead.",
     "reference": "Genome assemblies and the sequences that make them up.",
     "annotation": "Gene, transcript and exon structure, and identifier cross-references.",
+    "resource": "Universal catalog entries for large or external data (matrices, images, "
+                "assemblies-as-files) that biocOnIce references by URI rather than ingests.",
 }
 
 TABLES = {
@@ -828,6 +837,148 @@ TABLES = {
                 "For the current view take the latest snapshot; to see a paper's trajectory, "
                 "order by snapshot. Source: NIH iCite, CC BY 4.0.",
         properties={"bioc.column.pmid.prefix": "pubmed"},
+    ),
+    "raw.cellxgene__dataset": TableDef(
+        schema=Schema(
+            NestedField(1, "dataset_id", StringType(), required=True,
+                        doc="CELLxGENE dataset id. Stable across revisions; a revision keeps "
+                            "this id and gets a new dataset_version_id."),
+            NestedField(2, "dataset_version_id", StringType(), required=True,
+                        doc="Id of this specific version of the dataset. What resource.cellxgene__dataset is keyed on."),
+            NestedField(3, "collection_id", StringType(), required=True, doc="Id of the collection this dataset belongs to."),
+            NestedField(4, "collection_version_id", StringType(), doc="Id of this version of the collection."),
+            NestedField(5, "collection_name", StringType(), doc="Collection title, e.g. a study or atlas name."),
+            NestedField(6, "collection_doi", StringType(), doc="DOI of the collection's publication, where one exists."),
+            NestedField(7, "collection_doi_label", StringType(), doc="Human-readable citation for collection_doi, as CZI formats it."),
+            NestedField(8, "title", StringType(), doc="Dataset title."),
+            NestedField(9, "citation", StringType(), doc="CZI's own suggested citation string for this dataset version."),
+            NestedField(10, "schema_version", StringType(), doc="CELLxGENE schema version the dataset's H5AD conforms to, e.g. '7.1.0'."),
+            NestedField(11, "cell_count", LongType(), doc="Total cells in the dataset."),
+            NestedField(12, "primary_cell_count", LongType(),
+                        doc="Cells flagged is_primary_data = true, CZI's own de-duplication rule (a cell profiled in "
+                            "two datasets is primary in exactly one). <= cell_count."),
+            NestedField(13, "mean_genes_per_cell", DoubleType(), doc="Mean genes detected per cell."),
+            NestedField(14, "published_at", StringType(), doc="ISO 8601 timestamp the dataset was first published, as CZI publishes it. Unparsed."),
+            NestedField(15, "revised_at", StringType(), doc="ISO 8601 timestamp of the latest revision; NULL if never revised. Unparsed."),
+            NestedField(16, "explorer_url", StringType(), doc="CELLxGENE Explorer URL for interactive browsing."),
+            NestedField(17, "processing_status", StringType(), doc="CZI's own pipeline status, e.g. 'SUCCESS'."),
+            NestedField(18, "tombstone", BooleanType(),
+                        doc="CZI's tombstone flag. Always false in this table in practice: a tombstoned dataset is "
+                            "excluded from the PUBLIC listing outright rather than kept with this set, so retirement "
+                            "here is via ordinary set-difference against the next crawl, not this column."),
+            NestedField(19, "visibility", StringType(), doc="CZI's visibility tag. Always 'PUBLIC': the listing is fetched pre-filtered to it."),
+            NestedField(20, "is_pre_analysis", BooleanType(), doc="CZI flag: dataset predates a schema change that added fields later versions carry."),
+            NestedField(21, "revision_of_collection", StringType(), doc="Collection id this collection supersedes, where this is a revision. NULL otherwise."),
+            NestedField(22, "revision_of_dataset", StringType(), doc="Dataset id this dataset version supersedes, where this is a revision. NULL otherwise."),
+            NestedField(23, "x_approximate_distribution", StringType(), doc="Distribution family CZI assumes for X, e.g. 'COUNT', for tools that need it."),
+            NestedField(24, "organism", StringType(),
+                        doc="[{label, ontology_term_id}, ...] as JSON text, unexploded -- exploding is interpretation, "
+                            "done in transform. NCBITaxon terms. Every dataset observed 2026-09-18 carries exactly one."),
+            NestedField(25, "assay", StringType(), doc="[{label, ontology_term_id}, ...] as JSON text. EFO terms."),
+            NestedField(26, "tissue", StringType(), doc="[{label, ontology_term_id, tissue_type}, ...] as JSON text. UBERON (or CL for cell culture) terms."),
+            NestedField(27, "disease", StringType(), doc="[{label, ontology_term_id}, ...] as JSON text. MONDO terms, or PATO:0000461 for 'normal'."),
+            NestedField(28, "cell_type", StringType(), doc="[{label, ontology_term_id}, ...] as JSON text. CL terms, or 'unknown'."),
+            NestedField(29, "development_stage", StringType(), doc="[{label, ontology_term_id}, ...] as JSON text. HsapDv/MmusDv/UBERON terms depending on organism."),
+            NestedField(30, "self_reported_ethnicity", StringType(), doc="[{label, ontology_term_id}, ...] as JSON text. HANCESTRO terms, or 'unknown'/'na'."),
+            NestedField(31, "sex", StringType(), doc="[{label, ontology_term_id}, ...] as JSON text. PATO terms, or 'unknown'."),
+            NestedField(32, "donor_id", StringType(), doc="[donor id, ...] as JSON text: plain curator-assigned strings, no ontology term."),
+            NestedField(33, "suspension_type", StringType(), doc="[suspension type, ...] as JSON text, e.g. 'cell', 'nucleus', 'na'. Plain strings, no ontology term."),
+            NestedField(34, "is_primary_data", StringType(), doc="[bool, ...] as JSON text: which is_primary_data values occur among this dataset's cells."),
+            NestedField(35, "assets", StringType(),
+                        doc="[{filesize, filetype, url}, ...] as JSON text. filetype is 'H5AD' for every dataset observed "
+                            "2026-09-18, plus 'ATAC_FRAGMENT'/'ATAC_INDEX' for 21 ATAC datasets. No SpatialData/OME-Zarr "
+                            "filetype has been observed; resource.cellxgene__dataset.spatialdata_uri stays NULL until one is."),
+            NestedField(36, "spatial", StringType(),
+                        doc="{has_fullres, is_single} as JSON text where the dataset is spatial; NULL (JSON null) otherwise. "
+                            "Presence, not content, is what resource.cellxgene__dataset.is_spatial reads."),
+            NestedField(37, "batch_condition", StringType(), doc="[column name, ...] as JSON text: obs columns CZI suggests batching on, where curated. Often NULL."),
+            NestedField(38, "perturbation_types", StringType(), doc="[perturbation type, ...] as JSON text, e.g. 'chemical'. NULL where not a perturbation dataset."),
+            NestedField(39, "genetic_perturbation_strategy", StringType(), doc="[strategy, ...] as JSON text. NULL in every dataset observed 2026-09-18."),
+            NestedField(40, "retrieval_date", StringType(), required=True,
+                        doc="UTC date this crawl of the listing was taken, YYYY-MM-DD. The source's own version: "
+                            "the Discover API publishes a live current-state listing, not archived per-release dumps."),
+            NestedField(41, "landed_in", StringType(), required=True, doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="The CELLxGENE Discover PUBLIC dataset listing landed verbatim: one row per dataset "
+                "version. Scalar fields are typed directly; multi-valued and nested fields are kept as "
+                "their JSON text, unexploded, per the raw contract. Holds the LATEST crawl only, a "
+                "deliberate narrowing of the raw layer's per-version rule (same reason as "
+                "raw.icite__metadata): the listing has no archived versions of its own to accumulate. "
+                "Licence CC BY 4.0.",
+        properties={"bioc.license": "CC-BY-4.0"},
+    ),
+    "resource.cellxgene__dataset": TableDef(
+        schema=Schema(
+            NestedField(1, "dataset_id", StringType(), required=True,
+                        doc="CELLxGENE dataset id. Stable across revisions; several rows here can share one, each a "
+                            "different dataset_version_id."),
+            NestedField(2, "dataset_version_id", StringType(), required=True,
+                        doc="Id of this specific dataset version. The business key: a revision or a tombstoned "
+                            "dataset closes this row (valid_to set) rather than updating it in place."),
+            NestedField(3, "collection_id", StringType(), required=True, doc="Id of the collection this dataset belongs to."),
+            NestedField(4, "collection_name", StringType(), doc="Collection title, e.g. a study or atlas name."),
+            NestedField(5, "collection_doi", StringType(), doc="DOI of the collection's publication, where one exists."),
+            NestedField(6, "title", StringType(), doc="Dataset title."),
+            NestedField(7, "taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxon id, parsed from the listing's organism ontology_term_id "
+                            "(always 'NCBITaxon:<id>' in data observed 2026-09-18). A dataset whose organism does not "
+                            "parse this way, or that carries more than one organism, fails the ingest loudly rather "
+                            "than dropping or guessing (issue #84 acceptance criterion 3)."),
+            NestedField(8, "organism_label", StringType(), doc="Organism common/scientific name as CZI labels it, e.g. 'Homo sapiens'."),
+            NestedField(9, "assay_term_ids", StringType(), doc=MULTI_VALUED + " EFO terms."),
+            NestedField(10, "assay_labels", StringType(), doc="Pipe-joined labels paired with assay_term_ids, same order."),
+            NestedField(11, "tissue_term_ids", StringType(), doc=MULTI_VALUED + " UBERON (or CL) terms."),
+            NestedField(12, "tissue_labels", StringType(), doc="Pipe-joined labels paired with tissue_term_ids, same order."),
+            NestedField(13, "disease_term_ids", StringType(), doc=MULTI_VALUED + " MONDO terms, or PATO:0000461 for 'normal'."),
+            NestedField(14, "disease_labels", StringType(), doc="Pipe-joined labels paired with disease_term_ids, same order."),
+            NestedField(15, "cell_type_term_ids", StringType(), doc=MULTI_VALUED + " CL terms, or 'unknown'."),
+            NestedField(16, "cell_type_labels", StringType(), doc="Pipe-joined labels paired with cell_type_term_ids, same order."),
+            NestedField(17, "cell_count", LongType(), required=True, doc="Total cells in the dataset."),
+            NestedField(18, "primary_cell_count", LongType(), doc="Cells flagged is_primary_data = true. <= cell_count."),
+            NestedField(19, "mean_genes_per_cell", DoubleType(), doc="Mean genes detected per cell."),
+            NestedField(20, "schema_version", StringType(), doc="CELLxGENE schema version the dataset's H5AD conforms to, e.g. '7.1.0'."),
+            NestedField(21, "license", StringType(), required=True, doc="Always 'CC BY 4.0': CELLxGENE Discover's uniform licence for public data."),
+            NestedField(22, "h5ad_uri", StringType(), required=True,
+                        doc="Public HTTPS URL of the dataset's H5AD, from the listing's assets. Referenced, never "
+                            "landed (SPEC.md Large Data Integration). Required: every row has one, or the ingest "
+                            "fails (issue #84 acceptance criterion 2)."),
+            NestedField(23, "census_release", StringType(), required=True,
+                        doc="Census build (e.g. '2025-11-08') this dataset's cells are reachable through, via "
+                            "annotation.cellxgene__cell (issue #85) keyed the same way. Defaults to the Census "
+                            "release manifest's 'stable' LTS alias at ingest time."),
+            NestedField(24, "published_at", StringType(), doc="ISO 8601 timestamp the dataset was first published. Unparsed."),
+            NestedField(25, "revised_at", StringType(), doc="ISO 8601 timestamp of the latest revision; NULL if never revised. Unparsed."),
+            NestedField(26, "tombstone", BooleanType(), required=True,
+                        doc="CZI's tombstone flag, carried through from raw. Always false in practice here: a "
+                            "tombstoned dataset is excluded from the PUBLIC listing outright, so its row is closed "
+                            "by ordinary retirement (valid_to set) rather than by this flag flipping true."),
+            NestedField(27, "is_spatial", BooleanType(), required=True,
+                        doc="True for a spatial dataset (the listing's spatial object is non-null: Visium, "
+                            "Slide-seq and similar). Issue #84 acceptance criterion 9."),
+            NestedField(28, "spatial_platform", StringType(),
+                        doc="Spatial platform name, derived from the assay ontology term via a controlled mapping "
+                            "(SPATIAL_PLATFORMS in cellxgene.py) -- never free text. NULL for a non-spatial dataset; "
+                            "for a spatial one, an assay term absent from the mapping fails the ingest loudly rather "
+                            "than becoming NULL (issue #84 acceptance criterion 11)."),
+            NestedField(29, "spatialdata_uri", StringType(),
+                        doc="URI of the scverse SpatialData (OME-Zarr) store, where the source publishes one. "
+                            "Images and transcript-level point clouds live there, referenced, never landed. NULL "
+                            "where absent -- as of 2026-09-18 that is every dataset (issue #84 acceptance criterion 10)."),
+            NestedField(30, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(31, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("dataset_version_id",),
+        comment="One row per CELLxGENE dataset version: what the dataset is, where its H5AD and Census "
+                "cells live, never the expression matrix itself. A dataset that disappears from the next "
+                "crawl (tombstoned, or superseded by a revision under a new dataset_version_id) is closed "
+                "by the ordinary merge set-difference rule; the revision's new dataset_version_id opens a "
+                "new row (issue #84 acceptance criterion 5). annotation.cellxgene__gene (Census var, keyed "
+                "by feature_id and census_release) and annotation.cellxgene__cell (Census obs, issue #85) "
+                "are companions, not here: var ships only inside the TileDB-SOMA store and tiledbsoma is "
+                "not an allowed dependency, so that table is deferred until Census publishes var in a "
+                "DuckDB-readable form.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.license": "CC-BY-4.0"},
     ),
 }
 

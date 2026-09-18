@@ -1,0 +1,381 @@
+[
+  {
+    "dataset_id": "d1-human",
+    "dataset_version_id": "d1-v1",
+    "collection_id": "coll-1",
+    "collection_version_id": "collv-1",
+    "collection_name": "Test collection",
+    "collection_doi": null,
+    "collection_doi_label": null,
+    "title": "Human blood T cells",
+    "citation": "Dataset Version: https://example/x.h5ad",
+    "schema_version": "7.1.0",
+    "cell_count": 450,
+    "primary_cell_count": 450,
+    "mean_genes_per_cell": 500.0,
+    "published_at": "2026-01-01T00:00:00+00:00",
+    "revised_at": null,
+    "explorer_url": "https://cellxgene.cziscience.com/e/x.cxg/",
+    "processing_status": "SUCCESS",
+    "tombstone": false,
+    "visibility": "PUBLIC",
+    "is_pre_analysis": false,
+    "revision_of_collection": null,
+    "revision_of_dataset": null,
+    "x_approximate_distribution": "COUNT",
+    "organism": [
+      {
+        "label": "Homo sapiens",
+        "ontology_term_id": "NCBITaxon:9606"
+      }
+    ],
+    "assay": [
+      {
+        "label": "10x 3' v3",
+        "ontology_term_id": "EFO:0009922"
+      }
+    ],
+    "tissue": [
+      {
+        "label": "blood",
+        "ontology_term_id": "UBERON:0000178",
+        "tissue_type": "tissue"
+      }
+    ],
+    "disease": [
+      {
+        "label": "normal",
+        "ontology_term_id": "PATO:0000461"
+      }
+    ],
+    "cell_type": [
+      {
+        "label": "T cell",
+        "ontology_term_id": "CL:0000084"
+      }
+    ],
+    "development_stage": [
+      {
+        "label": "adult",
+        "ontology_term_id": "HsapDv:0000087"
+      }
+    ],
+    "self_reported_ethnicity": [
+      {
+        "label": "unknown",
+        "ontology_term_id": "unknown"
+      }
+    ],
+    "sex": [
+      {
+        "label": "female",
+        "ontology_term_id": "PATO:0000383"
+      }
+    ],
+    "donor_id": [
+      "donor1"
+    ],
+    "suspension_type": [
+      "cell"
+    ],
+    "is_primary_data": [
+      true
+    ],
+    "assets": [
+      {
+        "filesize": 1234,
+        "filetype": "H5AD",
+        "url": "https://datasets.cellxgene.cziscience.com/d1-v1.h5ad"
+      }
+    ],
+    "spatial": null,
+    "batch_condition": null,
+    "perturbation_types": null,
+    "genetic_perturbation_strategy": null
+  },
+  {
+    "dataset_id": "d2-mouse",
+    "dataset_version_id": "d2-v1",
+    "collection_id": "coll-1",
+    "collection_version_id": "collv-1",
+    "collection_name": "Test collection",
+    "collection_doi": null,
+    "collection_doi_label": null,
+    "title": "Mouse liver atlas",
+    "citation": "Dataset Version: https://example/x.h5ad",
+    "schema_version": "7.1.0",
+    "cell_count": 106436,
+    "primary_cell_count": 100000,
+    "mean_genes_per_cell": 500.0,
+    "published_at": "2026-01-01T00:00:00+00:00",
+    "revised_at": null,
+    "explorer_url": "https://cellxgene.cziscience.com/e/x.cxg/",
+    "processing_status": "SUCCESS",
+    "tombstone": false,
+    "visibility": "PUBLIC",
+    "is_pre_analysis": false,
+    "revision_of_collection": null,
+    "revision_of_dataset": null,
+    "x_approximate_distribution": "COUNT",
+    "organism": [
+      {
+        "label": "Mus musculus",
+        "ontology_term_id": "NCBITaxon:10090"
+      }
+    ],
+    "assay": [
+      {
+        "label": "10x 3' v3",
+        "ontology_term_id": "EFO:0009922"
+      }
+    ],
+    "tissue": [
+      {
+        "label": "blood",
+        "ontology_term_id": "UBERON:0000178",
+        "tissue_type": "tissue"
+      }
+    ],
+    "disease": [
+      {
+        "label": "normal",
+        "ontology_term_id": "PATO:0000461"
+      }
+    ],
+    "cell_type": [
+      {
+        "label": "T cell",
+        "ontology_term_id": "CL:0000084"
+      }
+    ],
+    "development_stage": [
+      {
+        "label": "adult stage",
+        "ontology_term_id": "MmusDv:0000091"
+      }
+    ],
+    "self_reported_ethnicity": [
+      {
+        "label": "unknown",
+        "ontology_term_id": "unknown"
+      }
+    ],
+    "sex": [
+      {
+        "label": "female",
+        "ontology_term_id": "PATO:0000383"
+      }
+    ],
+    "donor_id": [
+      "donor1"
+    ],
+    "suspension_type": [
+      "cell"
+    ],
+    "is_primary_data": [
+      true
+    ],
+    "assets": [
+      {
+        "filesize": 1234,
+        "filetype": "H5AD",
+        "url": "https://datasets.cellxgene.cziscience.com/d2-v1.h5ad"
+      }
+    ],
+    "spatial": null,
+    "batch_condition": null,
+    "perturbation_types": null,
+    "genetic_perturbation_strategy": null
+  },
+  {
+    "dataset_id": "d3-spatial",
+    "dataset_version_id": "d3-v1",
+    "collection_id": "coll-1",
+    "collection_version_id": "collv-1",
+    "collection_name": "Test collection",
+    "collection_doi": null,
+    "collection_doi_label": null,
+    "title": "Visium mouse brain slice",
+    "citation": "Dataset Version: https://example/x.h5ad",
+    "schema_version": "7.1.0",
+    "cell_count": 4992,
+    "primary_cell_count": 4992,
+    "mean_genes_per_cell": 500.0,
+    "published_at": "2026-01-01T00:00:00+00:00",
+    "revised_at": null,
+    "explorer_url": "https://cellxgene.cziscience.com/e/x.cxg/",
+    "processing_status": "SUCCESS",
+    "tombstone": false,
+    "visibility": "PUBLIC",
+    "is_pre_analysis": false,
+    "revision_of_collection": null,
+    "revision_of_dataset": null,
+    "x_approximate_distribution": "COUNT",
+    "organism": [
+      {
+        "label": "Mus musculus",
+        "ontology_term_id": "NCBITaxon:10090"
+      }
+    ],
+    "assay": [
+      {
+        "label": "Visium Spatial Gene Expression V1",
+        "ontology_term_id": "EFO:0022857"
+      }
+    ],
+    "tissue": [
+      {
+        "label": "blood",
+        "ontology_term_id": "UBERON:0000178",
+        "tissue_type": "tissue"
+      }
+    ],
+    "disease": [
+      {
+        "label": "normal",
+        "ontology_term_id": "PATO:0000461"
+      }
+    ],
+    "cell_type": [
+      {
+        "label": "T cell",
+        "ontology_term_id": "CL:0000084"
+      }
+    ],
+    "development_stage": [
+      {
+        "label": "adult",
+        "ontology_term_id": "HsapDv:0000087"
+      }
+    ],
+    "self_reported_ethnicity": [
+      {
+        "label": "unknown",
+        "ontology_term_id": "unknown"
+      }
+    ],
+    "sex": [
+      {
+        "label": "female",
+        "ontology_term_id": "PATO:0000383"
+      }
+    ],
+    "donor_id": [
+      "donor1"
+    ],
+    "suspension_type": [
+      "cell"
+    ],
+    "is_primary_data": [
+      true
+    ],
+    "assets": [
+      {
+        "filesize": 1234,
+        "filetype": "H5AD",
+        "url": "https://datasets.cellxgene.cziscience.com/d3-v1.h5ad"
+      }
+    ],
+    "spatial": {
+      "has_fullres": false,
+      "is_single": true
+    },
+    "batch_condition": null,
+    "perturbation_types": null,
+    "genetic_perturbation_strategy": null
+  },
+  {
+    "dataset_id": "d4-zebrafish",
+    "dataset_version_id": "d4-v1",
+    "collection_id": "coll-1",
+    "collection_version_id": "collv-1",
+    "collection_name": "Test collection",
+    "collection_doi": null,
+    "collection_doi_label": null,
+    "title": "Zebrafish embryo atlas",
+    "citation": "Dataset Version: https://example/x.h5ad",
+    "schema_version": "7.1.0",
+    "cell_count": 17598,
+    "primary_cell_count": 17598,
+    "mean_genes_per_cell": 500.0,
+    "published_at": "2026-01-01T00:00:00+00:00",
+    "revised_at": null,
+    "explorer_url": "https://cellxgene.cziscience.com/e/x.cxg/",
+    "processing_status": "SUCCESS",
+    "tombstone": false,
+    "visibility": "PUBLIC",
+    "is_pre_analysis": false,
+    "revision_of_collection": null,
+    "revision_of_dataset": null,
+    "x_approximate_distribution": "COUNT",
+    "organism": [
+      {
+        "label": "Danio rerio",
+        "ontology_term_id": "NCBITaxon:7955"
+      }
+    ],
+    "assay": [
+      {
+        "label": "10x 3' v3",
+        "ontology_term_id": "EFO:0009922"
+      }
+    ],
+    "tissue": [
+      {
+        "label": "blood",
+        "ontology_term_id": "UBERON:0000178",
+        "tissue_type": "tissue"
+      }
+    ],
+    "disease": [
+      {
+        "label": "normal",
+        "ontology_term_id": "PATO:0000461"
+      }
+    ],
+    "cell_type": [
+      {
+        "label": "T cell",
+        "ontology_term_id": "CL:0000084"
+      }
+    ],
+    "development_stage": [
+      {
+        "label": "embryonic stage",
+        "ontology_term_id": "ZFS:0000015"
+      }
+    ],
+    "self_reported_ethnicity": [
+      {
+        "label": "unknown",
+        "ontology_term_id": "unknown"
+      }
+    ],
+    "sex": [
+      {
+        "label": "female",
+        "ontology_term_id": "PATO:0000383"
+      }
+    ],
+    "donor_id": [
+      "donor1"
+    ],
+    "suspension_type": [
+      "cell"
+    ],
+    "is_primary_data": [
+      true
+    ],
+    "assets": [
+      {
+        "filesize": 1234,
+        "filetype": "H5AD",
+        "url": "https://datasets.cellxgene.cziscience.com/d4-v1.h5ad"
+      }
+    ],
+    "spatial": null,
+    "batch_condition": null,
+    "perturbation_types": null,
+    "genetic_perturbation_strategy": null
+  }
+]

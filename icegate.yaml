@@ -30,6 +30,7 @@ authentication:
       - annotation
       - ontology
       - clinical
+      - resource
     permissions:
       - read
 
