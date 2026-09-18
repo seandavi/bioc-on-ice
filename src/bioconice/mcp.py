@@ -32,6 +32,7 @@ import urllib.request
 
 import duckdb
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -40,7 +41,14 @@ WAREHOUSE = "bioconice"
 MAX_LIMIT = 10_000
 DEFAULT_LIMIT = 1000
 
+# The streamable-HTTP transport refuses requests whose Host it was not told about
+# (DNS-rebinding protection, HTTP 421). Behind Traefik the Host is the public
+# hostname, so it must be listed; BIOCONICE_MCP_ALLOWED_HOSTS adds more.
+ALLOWED_HOSTS = ["localhost:*", "127.0.0.1:*", "bioconice-mcp.cancerdatasci.org",
+                 *filter(None, os.environ.get("BIOCONICE_MCP_ALLOWED_HOSTS", "").split(","))]
+
 mcp = FastMCP(
+
     "bioconice",
     instructions=(
         "Bioconductor gene/transcript/exon annotation, NCBI Gene, iCite citations, "
@@ -52,6 +60,9 @@ mcp = FastMCP(
         "(or a release predicate from resolve_release()) and getting every historical "
         "version of a row back, not just the current one."
     ),
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=ALLOWED_HOSTS,
+        allowed_origins=[f"https://{h}" for h in ALLOWED_HOSTS if ":*" not in h] + ["http://localhost:*"])
 )
 
 

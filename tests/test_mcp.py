@@ -342,3 +342,18 @@ def test_liveness_never_touches_the_lake():
     client = TestClient(m.mcp.streamable_http_app())
     r = client.get("/health/live")
     assert r.status_code == 200 and r.json() == {"status": "ok"}
+
+
+def test_public_hostname_is_an_allowed_host():
+    from starlette.testclient import TestClient
+    from bioconice import mcp as m
+    assert "bioconice-mcp.cancerdatasci.org" in m.ALLOWED_HOSTS
+    client = TestClient(m.mcp.streamable_http_app())
+    init = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}}
+    headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    # the public hostname is accepted; an unknown one is refused with 421
+    ok = client.post("/mcp", json=init, headers={**headers, "Host": "bioconice-mcp.cancerdatasci.org"})
+    assert ok.status_code == 200, ok.text[:200]
+    bad = client.post("/mcp", json=init, headers={**headers, "Host": "evil.example"})
+    assert bad.status_code == 421
