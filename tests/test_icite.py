@@ -78,6 +78,6 @@ def test_next_snapshot_keeps_old_metrics_and_versions_only_changed_papers(cat, t
 
 def test_unknown_flag_vocabulary_fails_loudly(cat, tmp_path):
     bad = tmp_path / "bad.csv"
-    bad.write_text(Path(CSV).read_text().replace(",Nature,Yes,", ",Nature,Maybe,"))
+    bad.write_text(Path(CSV).read_text().replace(",Nature,True,", ",Nature,Maybe,"))
     with pytest.raises(Exception, match="is_research_article: unexpected Maybe"):
         icite.ingest(cat, REL, snapshot="2026-08", csv=str(bad))

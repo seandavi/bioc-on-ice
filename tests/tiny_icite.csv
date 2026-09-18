@@ -1,4 +1,4 @@
 pmid,doi,year,title,authors,journal,is_research_article,relative_citation_ratio,nih_percentile,human,animal,molecular_cellular,apt,is_clinical,citation_count,citations_per_year,expected_citations_per_year,field_citation_rate,provisional,x_coord,y_coord,cited_by_clin,cited_by,references,last_modified
-1000000,10.1000/one,2001,"TP53, guardian of the genome","Smith J, Doe A",Nature,Yes,2.5,85.1,0.5,0.25,0.25,0.3,No,120,4.8,1.9,3.2,No,0.0,0.3,,2000000 3000000,,2026-08-01
-2000000,,2019,"A ""quoted"" title",Lee K,Cell,Yes,,,1.0,0.0,0.0,0.9,Yes,3,0.4,2.1,4.0,Yes,0.5,0.9,3000000,3000000,1000000,2026-08-01
-3000000,10.1000/three,1995,Editorial note,,Lancet,No,0.1,2.0,0.0,0.0,1.0,0.05,No,0,0.0,0.5,0.7,No,-0.5,0.1,,,1000000 2000000,2026-08-01
+1000000,10.1000/one,2001,"TP53, guardian of the genome","Smith J, Doe A",Nature,True,2.5,85.1,0.5,0.25,0.25,0.3,False,120,4.8,1.9,3.2,False,0.0,0.3,,2000000 3000000,,2026-08-01
+2000000,,2019,"A ""quoted"" title",Lee K,Cell,True,,,1.0,0.0,0.0,0.9,True,3,0.4,2.1,4.0,True,0.5,0.9,3000000,3000000,1000000,2026-08-01
+3000000,10.1000/three,1995,Editorial note,,Lancet,False,0.1,2.0,0.0,0.0,1.0,0.05,False,0,0.0,0.5,0.7,False,-0.5,0.1,,,1000000 2000000,2026-08-01

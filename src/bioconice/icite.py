@@ -27,7 +27,7 @@ Two derived tables, because the columns change at two different rates:
                                  Keyed by snapshot they are facts that never
                                  change, and a snapshot is a merge scope.
 
-Flags arrive as 'Yes'/'No' text and are read by name, not position, with every
+Flags arrive as 'True'/'False' text and are read by name, not position, with every
 column as text first: a reordered or renamed upstream column then fails loudly
 rather than shifting values.
 """
@@ -104,10 +104,13 @@ def fetch(label, url, size):
 def _read(csv):
     cols = ", ".join(f'"{c}"' for c in COLUMNS)  # "references" is a reserved word
     # all_varchar keeps raw unparsed and makes the read name-based. The dialect
-    # is stated, not sniffed: titles carry commas and quotes. null_padding
-    # because some rows end early (omicidx hit this on the same file).
+    # is stated, not sniffed: titles carry commas, quotes and line breaks.
+    # max_line_size because cited_by is the whole citing-PMID list on one line —
+    # 2.3 MB for the most-cited paper in the 2026-08 snapshot, over DuckDB's 2 MB
+    # default. Every row in that snapshot had all 25 columns, so no null_padding
+    # (which would also force the single-threaded scanner alongside quoted newlines).
     return (f"(SELECT {cols} FROM read_csv('{csv}', header=true, all_varchar=true, "
-            f"quote='\"', escape='\"', null_padding=true, sample_size=-1))")
+            f"quote='\"', escape='\"', sample_size=-1, max_line_size=268435456))")
 
 
 def land_raw(cat, release, snapshot=None, csv=None):
@@ -124,9 +127,11 @@ def land_raw(cat, release, snapshot=None, csv=None):
 
 
 def _flag(col):
-    # Loud on a new vocabulary: a third value would otherwise become NULL quietly.
-    return (f"CASE {col} WHEN 'Yes' THEN true WHEN 'No' THEN false "
-            f"WHEN NULL THEN NULL ELSE error('{col}: unexpected ' || {col}) END")
+    # The snapshot CSV prints 'True'/'False' where the API says 'Yes'/'No'. Loud
+    # on anything else: a third value would otherwise become NULL quietly.
+    return (f"CASE WHEN {col} IS NULL THEN NULL WHEN {col} IN ('True', 'Yes') THEN true "
+            f"WHEN {col} IN ('False', 'No') THEN false "
+            f"ELSE error('{col}: unexpected ' || {col}) END")
 
 
 def transform(cat, release, snapshot):
