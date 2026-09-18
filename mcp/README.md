@@ -113,3 +113,15 @@ onclappc02 docker-compose pattern — already the platform's standard place for
 an always-on service like this one, per `monode/infrastructure/INDEX.md` —
 turned out to need nothing this repo doesn't already have (docker, this
 Dockerfile) and no new Cloudflare product surface.
+
+## Health and logs
+
+| Endpoint | Meaning | Use |
+| --- | --- | --- |
+| `GET /health/live` | the process is up; never touches the lake | the external uptime check — a failure here means the container died |
+| `GET /health` (alias `/health/ready`) | icegate reachable and a release resolvable through DuckDB | the compose healthcheck; a 503 here with `/health/live` green means the gateway, not us |
+
+Logs on stdout (`docker logs bioconice-mcp`): uvicorn's access lines, plus **one JSON line per
+tool call** — `{"tool", "args", "ms", "ok", "rows", "truncated", "error"}` — which is what tells
+you how the server is used. Request-level access logs are Traefik's, already shipped to
+ClickHouse by Vector (monode `TELEMETRY.md`).

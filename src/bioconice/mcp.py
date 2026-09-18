@@ -20,9 +20,13 @@ HTTP instead.
 """
 
 import argparse
+import functools
 import json
+import logging
 import os
 import re
+import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -399,10 +403,42 @@ RECIPES = [
 
 
 # --------------------------------------------------------------------------
+# Tool-call log: one JSON line per call on stdout — tool, arguments (truncated),
+# milliseconds, rows returned, error. Traefik logs the request; this logs what
+# the request meant. Read with `docker logs bioconice-mcp`, or ship it.
+# --------------------------------------------------------------------------
+
+_log = logging.getLogger("bioconice.mcp")
+
+
+def _logged(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        t0 = time.time()
+        rec = {"tool": fn.__name__, "args": {k: repr(v)[:200] for k, v in kwargs.items()}}
+        try:
+            out = fn(*args, **kwargs)
+        except Exception as e:
+            rec.update(ms=round((time.time() - t0) * 1000), ok=False, error=f"{type(e).__name__}: {e}"[:300])
+            _log.info(json.dumps(rec))
+            raise
+        rec.update(ms=round((time.time() - t0) * 1000), ok=True)
+        if isinstance(out, (list, tuple)):
+            rec["rows"] = len(out)
+        elif isinstance(out, dict) and isinstance(out.get("rows"), list):
+            rec["rows"] = len(out["rows"])
+            rec["truncated"] = bool(out.get("truncated"))
+        _log.info(json.dumps(rec))
+        return out
+    return wrapper
+
+
+# --------------------------------------------------------------------------
 # MCP tools
 # --------------------------------------------------------------------------
 
 @mcp.tool()
+@_logged
 def list_tables(namespace: str = "") -> list[dict]:
     """List every table in the live biocOnIce lake (optionally one namespace).
 
@@ -431,6 +467,7 @@ def list_tables(namespace: str = "") -> list[dict]:
 
 
 @mcp.tool()
+@_logged
 def describe_table(table: str) -> dict:
     """Full column-level description of one table, straight from Iceberg metadata.
 
@@ -448,6 +485,7 @@ def describe_table(table: str) -> dict:
 
 
 @mcp.tool()
+@_logged
 def resolve_release(
     release: str = "",
     ensembl: str = "",
@@ -483,6 +521,7 @@ def resolve_release(
 
 
 @mcp.tool()
+@_logged
 def query(sql: str, limit: int = DEFAULT_LIMIT, current: bool = False) -> dict:
     """Run one read-only SQL query against the live biocOnIce lake through icegate.
 
@@ -506,6 +545,7 @@ def query(sql: str, limit: int = DEFAULT_LIMIT, current: bool = False) -> dict:
 
 
 @mcp.tool()
+@_logged
 def recipes() -> list[dict]:
     """A fixed list of worked, runnable SQL for the catalog's common joins.
 
@@ -563,11 +603,18 @@ def docs_resource(table: str) -> str:
     return "\n".join(lines)
 
 
+@mcp.custom_route("/health/live", methods=["GET"])
+async def live(request: Request) -> JSONResponse:
+    """Liveness: the process is up and serving. Never touches the lake, so an
+    uptime check on this tells 'our container died' apart from 'icegate is down'."""
+    return JSONResponse({"status": "ok"})
+
+
 @mcp.custom_route("/health", methods=["GET"])
+@mcp.custom_route("/health/ready", methods=["GET"])
 async def health(request: Request) -> JSONResponse:
-    """Liveness probe for the docker-compose/Traefik deployment (mcp/): confirms
-    icegate is reachable and DuckDB can still resolve a release, not just that
-    the process is up."""
+    """Readiness: icegate is reachable and DuckDB can still resolve a release.
+    The compose healthcheck uses this; /health is kept as its alias."""
     try:
         release = max(r[0] for r in _provenance_rows())
     except Exception as e:
@@ -590,6 +637,8 @@ def main():
     args = parser.parse_args()
 
     if args.http:
+        # One JSON line per tool call on stdout, alongside uvicorn's access lines.
+        logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout, force=True)
         mcp.settings.host = args.host
         mcp.settings.port = args.port
         mcp.run(transport="streamable-http")
