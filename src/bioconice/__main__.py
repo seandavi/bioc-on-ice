@@ -5,6 +5,7 @@ from . import bugsigdb
 from . import catalog
 from . import cellosaurus
 from . import cellxgene
+from . import encode
 from . import ensembl
 from . import eqtlcatalogue
 from . import gwas_catalog
@@ -19,7 +20,6 @@ from . import ncbi_pubmed
 from . import obo
 from . import pubtator3
 from . import wikipathways
-from . import encode
 
 
 def _print(counts):
