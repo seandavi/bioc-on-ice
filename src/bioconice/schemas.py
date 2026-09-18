@@ -738,6 +738,93 @@ TABLES = {
                     "bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.go_id.prefix": "go"},
     ),
+    "raw.icite__metadata": TableDef(
+        schema=Schema(
+            NestedField(1, "pmid", StringType(), required=True, doc="PubMed id, as text as upstream prints it."),
+            NestedField(2, "doi", StringType(), doc="DOI if iCite has one; blank upstream reads as blank here."),
+            NestedField(3, "year", StringType(), doc="Publication year."),
+            NestedField(4, "title", StringType(), doc="Article title."),
+            NestedField(5, "authors", StringType(), doc="Author names, one comma-separated string."),
+            NestedField(6, "journal", StringType(), doc="Journal name, ISO abbreviation."),
+            NestedField(7, "is_research_article", StringType(), doc="'Yes'/'No': publication types consistent with primary research."),
+            NestedField(8, "relative_citation_ratio", StringType(), doc="RCR: field- and time-normalised citation rate, NIH R01 papers = 1.0."),
+            NestedField(9, "nih_percentile", StringType(), doc="RCR percentile among NIH-funded papers."),
+            NestedField(10, "human", StringType(), doc="Translation module: human fraction, 0-1."),
+            NestedField(11, "animal", StringType(), doc="Translation module: animal fraction, 0-1."),
+            NestedField(12, "molecular_cellular", StringType(), doc="Translation module: molecular/cellular fraction, 0-1."),
+            NestedField(13, "apt", StringType(), doc="Approximate Potential to Translate: predicted probability of citation by a clinical article."),
+            NestedField(14, "is_clinical", StringType(), doc="'Yes'/'No': the article itself is clinical."),
+            NestedField(15, "citation_count", StringType(), doc="Citations received, per the NIH Open Citation Collection."),
+            NestedField(16, "citations_per_year", StringType(), doc="citation_count over years since publication."),
+            NestedField(17, "expected_citations_per_year", StringType(), doc="Field-expected citations per year, the RCR denominator."),
+            NestedField(18, "field_citation_rate", StringType(), doc="Citation rate of the paper's co-citation network."),
+            NestedField(19, "provisional", StringType(), doc="'Yes'/'No': RCR is provisional (paper under two years old)."),
+            NestedField(20, "x_coord", StringType(), doc="Translation triangle x coordinate."),
+            NestedField(21, "y_coord", StringType(), doc="Translation triangle y coordinate."),
+            NestedField(22, "cited_by_clin", StringType(), doc="Space-separated PMIDs of clinical articles citing this one."),
+            NestedField(23, "cited_by", StringType(), doc="Space-separated PMIDs citing this one."),
+            NestedField(24, "references", StringType(), doc="Space-separated PMIDs this one cites."),
+            NestedField(25, "last_modified", StringType(), doc="Upstream last-modified timestamp of the record."),
+            NestedField(26, "snapshot", StringType(), required=True, doc="iCite snapshot label, e.g. '2026-08': the monthly Figshare release these values were read from."),
+            NestedField(27, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="The NIH iCite database snapshot landed verbatim, every column as text — the "
+                "citation lists included. Holds the LATEST snapshot only, a deliberate narrowing "
+                "of the raw layer's per-version rule: one snapshot is ~40M rows dominated by "
+                "PMID lists, older snapshots stay immutable on Figshare, and every snapshot's "
+                "metrics are kept in annotation.icite__metrics. CC BY 4.0; cite iCite.",
+        properties={"bioc.column.pmid.prefix": "pubmed"},
+    ),
+    "annotation.icite__publication": TableDef(
+        schema=Schema(
+            NestedField(1, "pmid", StringType(), required=True, doc="PubMed id (PMID) of the paper. Part of the merge key."),
+            NestedField(2, "doi", StringType(), doc="DOI, when iCite has one."),
+            NestedField(3, "title", StringType(), doc="Article title."),
+            NestedField(4, "authors", StringType(), doc="Author names as one string, as iCite prints them."),
+            NestedField(5, "journal", StringType(), doc="Journal name, ISO abbreviation."),
+            NestedField(6, "year", IntegerType(), doc="Publication year."),
+            NestedField(7, "is_research_article", BooleanType(),
+                        doc="Publication types consistent with primary research, per iCite."),
+            NestedField(8, "is_clinical", BooleanType(), doc="The article itself is a clinical article, per iCite."),
+            NestedField(9, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(10, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("pmid",),
+        comment="One row per PubMed record as iCite describes it: what the paper is, not how it "
+                "is cited — those numbers move monthly and live in annotation.icite__metrics. "
+                "Joins to annotation.ncbi__gene_pubmed on pmid. Source: NIH iCite, CC BY 4.0.",
+        properties={"bioc.column.pmid.prefix": "pubmed"},
+    ),
+    "annotation.icite__metrics": TableDef(
+        schema=Schema(
+            NestedField(1, "pmid", StringType(), required=True, doc="PubMed id (PMID) of the paper. Part of the merge key."),
+            NestedField(2, "snapshot", StringType(), required=True, doc="iCite snapshot label, e.g. '2026-08': the monthly Figshare release these values were read from. Part of the merge key."),
+            NestedField(3, "relative_citation_ratio", DoubleType(),
+                        doc="RCR: field- and time-normalised citation rate; NIH R01-funded papers average 1.0."),
+            NestedField(4, "nih_percentile", DoubleType(), doc="RCR percentile among NIH-funded papers."),
+            NestedField(5, "citation_count", LongType(), doc="Citations received per the NIH Open Citation Collection."),
+            NestedField(6, "citations_per_year", DoubleType(), doc="citation_count over years since publication."),
+            NestedField(7, "expected_citations_per_year", DoubleType(), doc="Field-expected citations per year, the RCR denominator."),
+            NestedField(8, "field_citation_rate", DoubleType(), doc="Citation rate of the paper's co-citation network."),
+            NestedField(9, "human", DoubleType(), doc="Translation module: human fraction, 0-1."),
+            NestedField(10, "animal", DoubleType(), doc="Translation module: animal fraction, 0-1."),
+            NestedField(11, "molecular_cellular", DoubleType(), doc="Translation module: molecular/cellular fraction, 0-1."),
+            NestedField(12, "apt", DoubleType(),
+                        doc="Approximate Potential to Translate: predicted probability of citation by a clinical article."),
+            NestedField(13, "provisional", BooleanType(), doc="RCR is provisional (paper under two years old)."),
+            NestedField(14, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(15, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("pmid", "snapshot"),
+        partition_by=("snapshot",),
+        comment="iCite's citation metrics for one paper as of one monthly snapshot. Keyed by "
+                "(pmid, snapshot) so a snapshot's numbers are facts that never change — the "
+                "alternative, metrics as Type 2 attributes, would open ~40M version rows a month. "
+                "For the current view take the latest snapshot; to see a paper's trajectory, "
+                "order by snapshot. Source: NIH iCite, CC BY 4.0.",
+        properties={"bioc.column.pmid.prefix": "pubmed"},
+    ),
 }
 
 

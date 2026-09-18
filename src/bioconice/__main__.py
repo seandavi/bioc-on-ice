@@ -1,6 +1,6 @@
 import argparse
 
-from . import bugsigdb, catalog, ensembl, ncbi, ncbi_go
+from . import bugsigdb, catalog, ensembl, icite, ncbi, ncbi_go
 from . import ncbi_accession, ncbi_pubmed
 
 
@@ -41,6 +41,11 @@ def main():
         c.add_argument("--taxa", help="comma-separated taxa to DERIVE annotation for "
                        "(default: every taxon in the dump); raw is always landed whole")
 
+    ic = sub.add_parser("ingest-icite", help="land the monthly iCite snapshot whole, then derive")
+    ic.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    ic.add_argument("--snapshot", help="iCite snapshot label, e.g. 2026-08 (default: latest on Figshare)")
+    ic.add_argument("--csv", help="an already-extracted icite_metadata.csv; skips download")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -55,6 +60,8 @@ def main():
     elif args.cmd == "ingest-bugsigdb":
         n = bugsigdb.land_raw(cat, args.release, args.version)
         print(f"{'raw.bugsigdb__full_dump':40} {n:>10,} rows  ({args.version})")
+    elif args.cmd == "ingest-icite":
+        _print(icite.ingest(cat, args.release, args.snapshot, args.csv))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None

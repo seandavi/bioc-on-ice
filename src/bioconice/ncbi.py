@@ -95,15 +95,22 @@ def _commit(table, arrow, first):
     raise RuntimeError(f"commit still rate-limited after {attempt + 1} waits")
 
 
-def _land(cat, release, identifier, url, columns):
-    """Stream one NCBI dump verbatim into its raw table, replacing what was there.
+def tsv(url, columns):
+    """The DuckDB read for an NCBI dump: tab-separated, '-' for null, declared columns."""
+    return (f"read_csv('{url}', sep='\\t', header=true, auto_detect=false, "
+            f"columns={columns}, nullstr='-')")
 
-    Shared by all four NCBI landings — a dump differs only in URL, raw table
-    and column spec. Replace-with-the-first-chunk then append, rather than one
-    atomic overwrite, because these do not fit in memory whole. Reads in
-    BATCH-row record batches but commits only every ROWS_PER_COMMIT rows —
-    reading is memory-bound, committing is rate-limited, and the two limits
-    want different granularities.
+
+def _land(cat, release, identifier, source):
+    """Stream one source verbatim into its raw table, replacing what was there.
+
+    `source` is any DuckDB table expression — `tsv(url, columns)` for the NCBI
+    dumps, a `read_csv(...)` with other options for iCite — so a landing differs
+    only in what it reads and where it lands. Replace-with-the-first-chunk then
+    append, rather than one atomic overwrite, because these do not fit in
+    memory whole. Reads in BATCH-row record batches but commits only every
+    ROWS_PER_COMMIT rows — reading is memory-bound, committing is
+    rate-limited, and the two limits want different granularities.
 
     ponytail: a crash between commits leaves the table partly landed. Re-running
     the ingest repairs it and raw carries no validity interval to corrupt, so the
@@ -113,11 +120,7 @@ def _land(cat, release, identifier, url, columns):
     table = schemas.create(cat, identifier)
     arrow_schema = table.schema().as_arrow()
     con = duckdb.connect()
-    reader = con.sql(f"""
-        SELECT *, '{release}' AS landed_in
-        FROM read_csv('{url}', sep='\t', header=true,
-                      auto_detect=false, columns={columns}, nullstr='-')
-    """).to_arrow_reader(BATCH)
+    reader = con.sql(f"SELECT *, '{release}' AS landed_in FROM {source}").to_arrow_reader(BATCH)
 
     n = 0
     pending = []
@@ -135,23 +138,24 @@ def _land(cat, release, identifier, url, columns):
     if not n:
         # Otherwise a bad URL silently leaves the previous landing in place and
         # reports success.
-        raise SystemExit(f"{identifier}: {url} yielded no rows")
+        raise SystemExit(f"{identifier}: {source} yielded no rows")
     return n
 
 
-def _manifest(cat, release, source, url, rows):
+def _manifest(cat, release, source, url, rows, version=None, method="retrieval_date"):
     """Record what this release was built from — ADR-0007.
 
     Shared by the NCBI ingests, each under its own `source` key: they land
     independently, and one overwriting another's manifest row would misreport
-    what either was built from.
+    what either was built from. NCBI has no version, so the retrieval date is
+    it; a source with a real release label passes `version` and `method`.
     """
     now = datetime.now(timezone.utc)
     con = duckdb.connect()
     arrow = con.sql(f"""
         SELECT '{release}' AS release, '{source}' AS source,
-               '{now.date()}' AS source_version,
-               'retrieval_date' AS version_method,
+               '{version or now.date()}' AS source_version,
+               '{method}' AS version_method,
                '{now.isoformat(timespec="seconds")}' AS retrieved_at,
                '{url}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
     """).to_arrow_table()
@@ -163,7 +167,7 @@ def land_raw(cat, release, urls=None):
     """Phase 1: all three NCBI Gene dumps, verbatim and unfiltered."""
     urls = urls or {}
     counts = {f"raw.ncbi__{name}": _land(cat, release, f"raw.ncbi__{name}",
-                                         urls.get(name, f"{DATA}{name}.gz"), COLUMNS[name])
+                                         tsv(urls.get(name, f"{DATA}{name}.gz"), COLUMNS[name]))
               for name in COLUMNS}
     # One source, three files: `url` is the directory they came from and
     # `row_count` their total, because the manifest is keyed (release, source).

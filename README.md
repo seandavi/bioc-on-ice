@@ -116,6 +116,27 @@ ORDER BY e.rank;
 Order by `rank`, never by coordinate: on the minus strand the two disagree and
 coordinate order reverses the transcript.
 
+## iCite
+
+NIH's bibliometrics for every PubMed record, from the monthly
+[iCite Database Snapshot](https://nih.figshare.com/collections/4586573)
+(CC BY 4.0). The raw table holds the latest snapshot verbatim, citation lists
+included. Two derived tables split the columns by how fast they change:
+`annotation.icite__publication` is what a paper *is* (doi, title, authors,
+journal, year, flags), Type 2 by `pmid`; `annotation.icite__metrics` is how it
+is cited as of one snapshot, keyed by `(pmid, snapshot)`, so every month's RCR
+and citation counts are kept without opening 40M version rows. Both join to
+`annotation.ncbi__gene_pubmed` on `pmid`.
+
+```sh
+BIOCONICE_SCRATCH=/data/tmp uv run bioconice ingest-icite --release 2026.09             # latest snapshot
+uv run bioconice ingest-icite --release 2026.09 --snapshot 2026-08                     # a named one
+uv run bioconice ingest-icite --release 2026.09 --snapshot 2026-08 --csv icite_metadata.csv  # already extracted
+```
+
+The zip is ~14 GB and the CSV ~40 GB; they are kept under `BIOCONICE_SCRATCH`
+(default: the system temp dir) and reused on re-run.
+
 ## Ingest it
 
 ```sh

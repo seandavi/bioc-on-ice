@@ -21,7 +21,7 @@ computing it here would bake one ontology snapshot invisibly into every row.
 import duckdb
 
 from . import merge
-from .ncbi import DATA, _derive, _land, _manifest, _where
+from .ncbi import DATA, _derive, _land, _manifest, _where, tsv
 
 URL = f"{DATA}gene2go.gz"
 
@@ -37,7 +37,7 @@ COLUMNS = (
 
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2go verbatim and whole into raw.ncbi__gene2go."""
-    n = _land(cat, release, "raw.ncbi__gene2go", url or URL, COLUMNS)
+    n = _land(cat, release, "raw.ncbi__gene2go", tsv(url or URL, COLUMNS))
     _manifest(cat, release, "ncbi_gene2go", URL, n)
     return n
 
