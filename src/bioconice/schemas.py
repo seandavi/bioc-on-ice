@@ -1030,6 +1030,7 @@ TABLES = {
                 "DuckDB-readable form.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.license": "CC-BY-4.0"},
+    ),
     **{f"raw.obo__{name}": _obo_raw(name, licence) for name, licence in _OBO_ONTOLOGIES},
     "ontology.term": TableDef(
         schema=Schema(

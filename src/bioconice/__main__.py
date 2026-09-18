@@ -1,7 +1,6 @@
 import argparse
 
-from . import bugsigdb, catalog, cellxgene, ensembl, icite, ncbi, ncbi_go
-from . import bugsigdb, catalog, ensembl, icite, ncbi, ncbi_go, obo
+from . import bugsigdb, catalog, cellxgene, ensembl, icite, ncbi, ncbi_go, obo
 from . import ncbi_accession, ncbi_pubmed
 
 
