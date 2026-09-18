@@ -101,7 +101,10 @@ def _page_urls(kind, limit=None):
 
 
 def _read_json(urls, columns):
-    return f"read_json({urls!r}, columns={ENVELOPE.format(results=columns)})"
+    # A bedset's bedfiles page can be 30 MB (ENCODE chunks, 35k records); DuckDB's
+    # default 16 MB object cap refused it on the first production landing.
+    return (f"read_json({urls!r}, columns={ENVELOPE.format(results=columns)}, "
+            f"maximum_object_size=268435456)")
 
 
 def _read_bed(urls, limit=None):
