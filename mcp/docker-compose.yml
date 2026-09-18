@@ -1,0 +1,45 @@
+# Deploy: copy this directory (mcp/) to
+# monode/infrastructure/compose/bioconice-mcp/ on onclappc02 and
+# `docker compose up -d --build` from there. See README.md.
+#
+# Follows compose/ntfy/docker-compose.yml's pattern exactly (grey-cloud
+# hostname, LE via the `cloudflare` certresolver) — see
+# monode/infrastructure/compose/README.md § "Adding a New Service".
+services:
+  bioconice-mcp:
+    build:
+      context: ..   # repo root: Dockerfile COPYs src/ and pyproject.toml from here
+      dockerfile: mcp/Dockerfile
+    image: bioconice-mcp:latest
+    container_name: bioconice-mcp
+    restart: unless-stopped
+    networks:
+      - proxy
+    environment:
+      PORT: "8000"
+    # DuckDB scans multi-hundred-MB Parquet row groups off R2 (icite__citation
+    # alone is ~930M rows); give it real headroom rather than getting OOM-killed
+    # mid-query.
+    mem_limit: 8g
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.bioconice-mcp.rule=Host(`bioconice-mcp.cancerdatasci.org`)"
+      - "traefik.http.routers.bioconice-mcp.entrypoints=websecure"
+      - "traefik.http.routers.bioconice-mcp.tls=true"
+      - "traefik.http.routers.bioconice-mcp.tls.certresolver=cloudflare"
+      - "traefik.http.services.bioconice-mcp.loadbalancer.server.port=8000"
+    # No auth in v1: every tool is read-only against data that is already
+    # anonymously public through icegate, so there is nothing a token would
+    # protect. If that changes, Cloudflare Access in front of this hostname
+    # (same DNS record, orange-cloud + an Access policy) is the platform's
+    # existing option — no application change needed.
+
+networks:
+  proxy:
+    external: true

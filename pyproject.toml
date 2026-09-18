@@ -6,13 +6,21 @@ requires-python = ">=3.11"
 dependencies = [
     "duckdb>=1.4",
     "pyiceberg[sql-sqlite,pyarrow]>=0.9",
+    # official MCP SDK (FastMCP): src/bioconice/mcp.py (issue #100) needs a stdio server
+    # and tool/resource decorators that a hand-rolled JSON-RPC loop would just reimplement.
+    "mcp>=1.2,<2",
 ]
 
 [project.scripts]
 bioconice = "bioconice.__main__:main"
+bioconice-mcp = "bioconice.mcp:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+markers = ["slow: hits the live icegate endpoint over the network; deselected by default, run with -m slow"]
+addopts = "-m 'not slow'"
 
 [build-system]
 requires = ["hatchling"]
