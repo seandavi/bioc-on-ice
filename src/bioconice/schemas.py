@@ -1380,6 +1380,183 @@ TABLES = {
                 "rollup is a join through ontology.relationship. A relationship has no attributes, so a "
                 "row is only ever asserted or withdrawn.",
     ),
+    "raw.hgnc__complete_set": TableDef(
+        schema=Schema(
+            NestedField(1, "hgnc_id", StringType(), required=True,
+                        doc="HGNC id with its prefix, e.g. 'HGNC:11998'. Stable across symbol "
+                            "changes. Unique per row within one hgnc_version, so it is the natural "
+                            "key even though raw declares none."),
+            NestedField(2, "symbol", StringType(), doc="Approved gene symbol, e.g. TP53."),
+            NestedField(3, "name", StringType(), doc="Approved gene name, e.g. 'tumor protein p53'."),
+            NestedField(4, "locus_group", StringType(),
+                        doc="Broad locus class: 'protein-coding gene', 'non-coding RNA', "
+                            "'pseudogene' or 'other'."),
+            NestedField(5, "locus_type", StringType(),
+                        doc="Specific locus class within locus_group, e.g. 'gene with protein "
+                            "product', 'RNA, long non-coding', 'immunoglobulin pseudogene'."),
+            NestedField(6, "status", StringType(),
+                        doc="Nomenclature status. 'Approved' on every row of the complete set: "
+                            "withdrawn and merged records are published in a separate file, "
+                            "withdrawn.txt, which is not landed."),
+            NestedField(7, "location", StringType(),
+                        doc="Cytogenetic location, e.g. 17p13.1. Not a coordinate."),
+            NestedField(8, "alias_symbol", StringType(),
+                        doc="Other symbols used for this gene, never approved by HGNC, "
+                            "'|'-separated as published."),
+            NestedField(9, "alias_name", StringType(),
+                        doc="Other names used for this gene, '|'-separated as published."),
+            NestedField(10, "prev_symbol", StringType(),
+                        doc="Symbols HGNC previously approved for this gene, '|'-separated as "
+                            "published. No dates are attached to the individual symbols."),
+            NestedField(11, "prev_name", StringType(),
+                        doc="Names HGNC previously approved for this gene, '|'-separated."),
+            NestedField(12, "gene_group", StringType(),
+                        doc="Names of the HGNC gene groups (families) the gene belongs to, "
+                            "'|'-separated, parallel to gene_group_id."),
+            NestedField(13, "gene_group_id", StringType(),
+                        doc="HGNC gene group ids, '|'-separated, parallel to gene_group."),
+            NestedField(14, "date_approved_reserved", StringType(),
+                        doc="Date the symbol was first approved or reserved, YYYY-MM-DD. String, "
+                            "because raw is landed unparsed."),
+            NestedField(15, "date_symbol_changed", StringType(),
+                        doc="Date of the most recent approved-symbol change, YYYY-MM-DD. NULL if "
+                            "the symbol never changed."),
+            NestedField(16, "date_name_changed", StringType(),
+                        doc="Date of the most recent approved-name change, YYYY-MM-DD."),
+            NestedField(17, "date_modified", StringType(),
+                        doc="Date HGNC last edited any field of the record, YYYY-MM-DD."),
+            NestedField(18, "entrez_id", StringType(), doc="NCBI Entrez GeneID, curated by HGNC."),
+            NestedField(19, "ensembl_gene_id", StringType(),
+                        doc="Ensembl stable gene id, curated by HGNC. Unversioned."),
+            NestedField(20, "vega_id", StringType(), doc="Vega (Havana) gene id, OTTHUMG...; Vega is archived."),
+            NestedField(21, "ucsc_id", StringType(), doc="UCSC Genome Browser gene id, e.g. uc060aur.1."),
+            NestedField(22, "ena", StringType(),
+                        doc="INSDC (ENA/GenBank/DDBJ) nucleotide accessions, '|'-separated."),
+            NestedField(23, "refseq_accession", StringType(),
+                        doc="RefSeq nucleotide accessions without version, '|'-separated."),
+            NestedField(24, "ccds_id", StringType(), doc="Consensus CDS ids, '|'-separated."),
+            NestedField(25, "uniprot_ids", StringType(), doc="UniProtKB accessions, '|'-separated."),
+            NestedField(26, "pubmed_id", StringType(),
+                        doc="PubMed ids of publications HGNC cites for the gene, '|'-separated."),
+            NestedField(27, "mgd_id", StringType(),
+                        doc="Mouse Genome Informatics ids of mouse orthologs, e.g. 'MGI:98834', "
+                            "'|'-separated."),
+            NestedField(28, "rgd_id", StringType(),
+                        doc="Rat Genome Database ids of rat orthologs, e.g. 'RGD:3889', '|'-separated."),
+            NestedField(29, "lsdb", StringType(),
+                        doc="Locus-specific mutation databases as one flat '|'-separated list that "
+                            "alternates name and URL: 'name|url|name|url'."),
+            NestedField(30, "cosmic", StringType(), doc="Symbol used by COSMIC for the gene."),
+            NestedField(31, "omim_id", StringType(),
+                        doc="OMIM ids. Usually one; '|'-separated on the few genes with several."),
+            NestedField(32, "mirbase", StringType(), doc="miRBase accession, e.g. MI0000651."),
+            NestedField(33, "homeodb", StringType(), doc="Homeobox Database id."),
+            NestedField(34, "snornabase", StringType(), doc="snoRNABase id, e.g. SR0000002."),
+            NestedField(35, "bioparadigms_slc", StringType(),
+                        doc="Symbol used by the Bioparadigms solute carrier (SLC) tables."),
+            NestedField(36, "orphanet", StringType(), doc="Orphanet gene id."),
+            NestedField(37, "pseudogene_org", StringType(),
+                        doc="Pseudogene.org id. Upstream column name 'pseudogene.org'."),
+            NestedField(38, "horde_id", StringType(),
+                        doc="Symbol used by HORDE, the human olfactory receptor database."),
+            NestedField(39, "merops", StringType(), doc="MEROPS peptidase database id, e.g. I43.950."),
+            NestedField(40, "imgt", StringType(),
+                        doc="Symbol used by IMGT, the immunogenetics information system."),
+            NestedField(41, "iuphar", StringType(),
+                        doc="IUPHAR/BPS Guide to Pharmacology link. On 2026-09-18 the cell repeats "
+                            "the row's own HGNC id rather than an IUPHAR object id; landed as "
+                            "published."),
+            NestedField(42, "kznf_gene_catalog", StringType(),
+                        doc="Human KZNF Gene Catalog id. Empty on every row on 2026-09-18."),
+            NestedField(43, "mamit_trnadb", StringType(),
+                        doc="Mamit-tRNAdb id. Upstream column name 'mamit-trnadb'."),
+            NestedField(44, "cd", StringType(),
+                        doc="Cluster-of-differentiation symbol from the HCDM database, e.g. CD243."),
+            NestedField(45, "lncrnadb", StringType(), doc="lncRNAdb id."),
+            NestedField(46, "enzyme_id", StringType(), doc="Enzyme Commission numbers, '|'-separated."),
+            NestedField(47, "intermediate_filament_db", StringType(),
+                        doc="Human Intermediate Filament Database id. Empty on every row on 2026-09-18."),
+            NestedField(48, "rna_central_id", StringType(), doc="RNAcentral id, e.g. URS00007E4F6E."),
+            NestedField(49, "lncipedia", StringType(), doc="Symbol used by LNCipedia."),
+            NestedField(50, "gtrnadb", StringType(), doc="GtRNAdb gene name, e.g. tRNA-Ala-AGC-1-1."),
+            NestedField(51, "agr", StringType(),
+                        doc="Alliance of Genome Resources id, which for human is the HGNC id itself."),
+            NestedField(52, "mane_select", StringType(),
+                        doc="The MANE Select transcript as 'Ensembl transcript|RefSeq transcript', "
+                            "both versioned, e.g. 'ENST00000269305.9|NM_000546.6'."),
+            NestedField(53, "gencc", StringType(),
+                        doc="Gene Curation Coalition link: the row's HGNC id where GenCC has a "
+                            "record for the gene, else NULL."),
+            NestedField(54, "hgnc_version", StringType(), required=True,
+                        doc="The date that versions this file: the date in a dated archive's file "
+                            "name, or the retrieval date for the rolling file, which carries no "
+                            "version of its own. provenance.release says which it was. Raw is "
+                            "replaced wholesale per value of this column."),
+            NestedField(55, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="HGNC's hgnc_complete_set.txt landed verbatim and whole: one row per approved "
+                "human gene nomenclature record, every column. Every column is a string and "
+                "nothing is split — multi-valued cells keep their '|'. An empty cell is read as "
+                "NULL. Approved records only: HGNC publishes withdrawn and merged ids in a "
+                "separate file that is not landed. Licence CC0.",
+        properties={"bioc.column.hgnc_id.prefix": "hgnc",
+                    "bioc.column.entrez_id.prefix": "ncbigene",
+                    "bioc.column.ensembl_gene_id.prefix": "ensembl",
+                    "bioc.license": "CC0-1.0"},
+    ),
+    "annotation.hgnc__gene": TableDef(
+        schema=Schema(
+            NestedField(1, "hgnc_id", StringType(), required=True,
+                        doc="HGNC id with its prefix, e.g. 'HGNC:11998'. Stable across symbol "
+                            "changes, which is why it and not the symbol is the key."),
+            NestedField(2, "taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id. Always 9606: HGNC names human genes only."),
+            NestedField(3, "symbol", StringType(),
+                        doc="The approved symbol, e.g. TP53. The authoritative one where "
+                            "annotation.gene (Ensembl) and annotation.ncbi__gene disagree."),
+            NestedField(4, "name", StringType(), doc="The approved name, e.g. 'tumor protein p53'."),
+            NestedField(5, "locus_group", StringType(),
+                        doc="Broad locus class: 'protein-coding gene', 'non-coding RNA', "
+                            "'pseudogene' or 'other'."),
+            NestedField(6, "locus_type", StringType(),
+                        doc="Specific locus class, e.g. 'gene with protein product'. HGNC's own "
+                            "vocabulary, not mapped onto Ensembl biotypes or NCBI gene types."),
+            NestedField(7, "status", StringType(),
+                        doc="Nomenclature status. Currently always 'Approved': the complete set "
+                            "excludes withdrawn records, so a withdrawn gene shows up as a row "
+                            "closed by valid_to rather than as a status value."),
+            NestedField(8, "location", StringType(), doc="Cytogenetic location, e.g. 17p13.1. Not a coordinate."),
+            NestedField(9, "alias_symbol", StringType(),
+                        doc="Symbols in use but never approved, '|'-separated as published."),
+            NestedField(10, "alias_name", StringType(),
+                        doc="Names in use but never approved, '|'-separated as published."),
+            NestedField(11, "prev_symbol", StringType(),
+                        doc="Previously approved symbols, '|'-separated as published. With "
+                            "date_symbol_changed this is HGNC's own symbol history; this table's "
+                            "valid_from/valid_to record changes seen since biocOnIce began loading it."),
+            NestedField(12, "prev_name", StringType(),
+                        doc="Previously approved names, '|'-separated as published."),
+            NestedField(13, "date_approved_reserved", StringType(),
+                        doc="Date the symbol was first approved or reserved, YYYY-MM-DD."),
+            NestedField(14, "date_symbol_changed", StringType(),
+                        doc="Date of the most recent symbol change, YYYY-MM-DD. NULL if it never changed."),
+            NestedField(15, "date_name_changed", StringType(),
+                        doc="Date of the most recent name change, YYYY-MM-DD."),
+            NestedField(16, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(17, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("hgnc_id",),
+        comment="Human gene nomenclature as HGNC approves it, keyed by HGNC id: symbol, name, "
+                "locus type, and the symbol and name history HGNC publishes. HGNC is the naming "
+                "authority, so this is the tie-breaker when Ensembl and NCBI carry different "
+                "symbols for one gene. Reach Entrez, Ensembl, UCSC and OMIM ids through "
+                "annotation.identifier_mapping (source = 'HGNC'). Gene groups and the remaining "
+                "cross-references stay in raw.hgnc__complete_set. Licence CC0.",
+        properties={"bioc.column.hgnc_id.prefix": "hgnc",
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.license": "CC0-1.0"},
+    ),
 }
 
 
