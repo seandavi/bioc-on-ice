@@ -56,6 +56,14 @@ ALPHA_DIVERSITY = (
     "or 'unchanged'. NOT a diversity value — there is no number here to plot. NULL "
     "where the study did not report the metric, which is the majority."
 )
+# CC BY 4.0 asks for credit, a licence link and an indication of changes; each
+# Cellosaurus table comment ends with this plus what was changed. The release
+# number is per load, so the comment points at the manifest that records it.
+_CELLOSAURUS_CREDIT = (
+    "Cellosaurus (release: provenance.release.source_version where source = 'cellosaurus') "
+    "© CALIPHO group, SIB Swiss Institute of Bioinformatics, CC BY 4.0 "
+    "(https://creativecommons.org/licenses/by/4.0/)"
+)
 
 
 @dataclass(frozen=True)
@@ -1819,6 +1827,136 @@ TABLES = {
                     "bioc.column.refseq_rna.prefix": "refseq",
                     "bioc.column.refseq_protein.prefix": "refseq",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
+    ),
+    "raw.cellosaurus__release": TableDef(
+        schema=Schema(
+            NestedField(1, "line_number", LongType(), required=True,
+                        doc="1-based ordinal of this line in cellosaurus.txt. Ordering by it gives "
+                            "the file back."),
+            NestedField(2, "accession", StringType(),
+                        doc="CVCL_ accession of the entry this line belongs to, taken from the "
+                            "entry's AC line and repeated on every line of the entry (the ID line "
+                            "precedes AC, the '//' terminator follows it). NULL on header lines."),
+            NestedField(3, "code", StringType(),
+                        doc="The two-letter line code: ID, AC, AS, SY, DR, RX, WW, CC, ST, DI, OX, "
+                            "HI, OI, SX, AG, CA, DT, or '//' for the entry terminator. The file's "
+                            "own header documents each. NULL on header lines."),
+            NestedField(4, "value", StringType(),
+                        doc="The line after its code and the three spaces that follow, verbatim "
+                            "and unparsed. On a header line (code IS NULL) the whole line, blank "
+                            "ones included as ''. NULL on a '//' line. The file's line is "
+                            "therefore code || '   ' || value, '//' or value."),
+            NestedField(5, "cellosaurus_version", StringType(), required=True,
+                        doc="Cellosaurus' own release, from the ' Version:' line of the file "
+                            "header, e.g. '56.0'. Raw is replaced wholesale per value of this "
+                            "column, so more than one release can coexist."),
+            NestedField(6, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="Cellosaurus' flat file (cellosaurus.txt) landed whole, one row per line in file "
+                "order, the header included: nothing is filtered and no value is parsed, so "
+                "comments (CC), STR profiles (ST), references (RX) and web links (WW) are here "
+                "although nothing derives them yet. Query annotation.cellosaurus__* instead. "
+                + _CELLOSAURUS_CREDIT + "; reformatted as rows, content unmodified.",
+        properties={"bioc.license": "CC-BY-4.0"},
+    ),
+    "annotation.cellosaurus__cell_line": TableDef(
+        schema=Schema(
+            NestedField(1, "accession", StringType(), required=True,
+                        doc="Cellosaurus accession, e.g. CVCL_0030 (HeLa). Stable, and the form "
+                            "RRIDs cite (RRID:CVCL_0030)."),
+            NestedField(2, "name", StringType(), required=True,
+                        doc="The recommended cell line name (ID line), e.g. 'HeLa'. Not unique: "
+                            "distinct lines do share names, which is why the accession is the key."),
+            NestedField(3, "synonyms", StringType(),
+                        doc="Other names and spellings in use (SY line), sorted and '|'-joined. "
+                            "NULL where there are none."),
+            NestedField(4, "secondary_accessions", StringType(),
+                        doc="Former accessions merged into this one (AS line), sorted and "
+                            "'|'-joined. Resolve a CVCL_ id that matches no accession here."),
+            NestedField(5, "taxon_ids", ListType(element_id=105, element_type=IntegerType(), element_required=False),
+                        doc="NCBI taxonomy ids of the species of origin (OX lines), sorted. A list "
+                            "because hybrid lines and hybridomas have two or three, e.g. "
+                            "[9606, 10116] for a human x rat hybrid; filter with list_contains()."),
+            NestedField(6, "sex", StringType(),
+                        doc="Sex of the cell (SX line), in Cellosaurus' words: 'Female', 'Male', "
+                            "'Mixed sex', 'Sex ambiguous' or 'Sex unspecified'. NULL where the "
+                            "entry has no SX line, which is not the same as 'Sex unspecified'."),
+            NestedField(7, "age", StringType(),
+                        doc="Age of the donor at sampling (AG line), as published and unparsed: "
+                            "'30Y6M', 'Adult', 'Fetus', 'Blastocyst stage', 'Age unspecified'."),
+            NestedField(8, "category", StringType(),
+                        doc="Cellosaurus' cell line category (CA line), e.g. 'Cancer cell line', "
+                            "'Transformed cell line', 'Induced pluripotent stem cell', 'Hybridoma', "
+                            "'Hybrid cell line', 'Finite cell line'."),
+            NestedField(9, "parent_accessions", StringType(),
+                        doc="Accessions of the lines this one was derived from (HI lines), sorted "
+                            "and '|'-joined: usually one, two for a hybrid of two established "
+                            "lines. NULL for a line established directly from a donor."),
+            NestedField(10, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(11, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("accession",),
+        comment="Cell lines as Cellosaurus registers them, one current row per CVCL_ accession: "
+                "name, synonyms, species, sex, donor age, category and parent line. Reach other "
+                "databases' ids (DepMap, ENCODE, CLO, EFO, BTO, Wikidata, GEO) through "
+                "annotation.cellosaurus__xref and diseases through annotation.cellosaurus__disease. "
+                "Comments, STR profiles, references and same-individual links stay in "
+                "raw.cellosaurus__release. " + _CELLOSAURUS_CREDIT + "; modified (normalised).",
+        properties={"bioc.column.accession.prefix": "cellosaurus",
+                    "bioc.column.taxon_ids.prefix": "ncbitaxon",
+                    "bioc.license": "CC-BY-4.0"},
+    ),
+    "annotation.cellosaurus__xref": TableDef(
+        schema=Schema(
+            NestedField(1, "accession", StringType(), required=True,
+                        doc="Cellosaurus accession, e.g. CVCL_0030."),
+            NestedField(2, "database", StringType(), required=True,
+                        doc="The cross-referenced resource, in Cellosaurus' abbreviation: 'DepMap', "
+                            "'ENCODE', 'CLO', 'EFO', 'BTO', 'Wikidata', 'GEO', 'BioSample', "
+                            "'Cell_Model_Passport', 'ATCC', ... (117 in release 56.0)."),
+            NestedField(3, "identifier", StringType(), required=True,
+                        doc="The line's id in that resource, as Cellosaurus prints it: 'ACH-001086', "
+                            "'SIDM00846', 'Q847482', 'GSM501788'. Ontology ids come with an "
+                            "underscore ('EFO_0001185', 'CLO_0003684'); replace(identifier, '_', ':') "
+                            "joins them to ontology.term.term_id."),
+            NestedField(4, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(5, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("accession", "database", "identifier"),
+        comment="Cellosaurus' cross-references (DR lines): which record in another resource is "
+                "this cell line. Many-to-many in both directions. The whole tuple is the key, so a "
+                "cross-reference is only ever asserted or withdrawn. Not in "
+                "annotation.identifier_mapping, which maps gene identifiers within one taxon: a "
+                "cell line is not a gene and a hybrid line has two taxa. "
+                + _CELLOSAURUS_CREDIT + "; modified (normalised).",
+        properties={"bioc.column.accession.prefix": "cellosaurus",
+                    "bioc.license": "CC-BY-4.0"},
+    ),
+    "annotation.cellosaurus__disease": TableDef(
+        schema=Schema(
+            NestedField(1, "accession", StringType(), required=True,
+                        doc="Cellosaurus accession, e.g. CVCL_0030."),
+            NestedField(2, "database", StringType(), required=True,
+                        doc="The disease vocabulary: 'NCIt' (NCI Thesaurus) or 'ORDO' (Orphanet "
+                            "rare disease ontology). Most lines with a disease carry one of each."),
+            NestedField(3, "disease_id", StringType(), required=True,
+                        doc="The term's id as Cellosaurus prints it: 'C27677' for NCIt (NCIT:C27677 "
+                            "as a CURIE), 'Orphanet_521' for ORDO (Orphanet:521)."),
+            NestedField(4, "disease_name", StringType(),
+                        doc="The term's label as Cellosaurus prints it, e.g. 'Human "
+                            "papillomavirus-related endocervical adenocarcinoma'."),
+            NestedField(5, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(6, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("accession", "database", "disease_id"),
+        comment="Diseases of the donor a cell line was established from (DI lines), one row per "
+                "(cell line, disease term). Kept apart from annotation.cellosaurus__xref because "
+                "it says something about the line rather than naming it elsewhere. Not mapped to "
+                "MONDO: MONDO's own NCIT and Orphanet xrefs are the bridge. "
+                + _CELLOSAURUS_CREDIT + "; modified (normalised).",
+        properties={"bioc.column.accession.prefix": "cellosaurus",
+                    "bioc.license": "CC-BY-4.0"},
     ),
 }
 

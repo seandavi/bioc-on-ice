@@ -3,6 +3,7 @@ import argparse
 from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, mane, ncbi, ncbi_go, obo
 from . import ncbi_accession, ncbi_orthologs, ncbi_pubmed
 from . import pubtator3
+from . import cellosaurus
 
 
 def _print(counts):
@@ -86,6 +87,11 @@ def main():
     mn.add_argument("--url", help="a specific release's MANE.GRCh38.vX.Y.summary.txt.gz, or a local "
                     "copy; the version is read from the file name (default: the newest release)")
 
+    cs = sub.add_parser("ingest-cellosaurus", help="land the Cellosaurus flat file whole, then derive")
+    cs.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
+    cs.add_argument("--url", help="a local or alternate cellosaurus.txt; default is the current "
+                    "release on the Expasy FTP site. The version is read from the file either way")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -115,6 +121,8 @@ def main():
         _print(hgnc.ingest(cat, args.release, args.url))
     elif args.cmd == "ingest-mane":
         _print(mane.ingest(cat, args.release, args.url))
+    elif args.cmd == "ingest-cellosaurus":
+        _print(cellosaurus.ingest(cat, args.release, args.url))
     elif args.cmd in ncbi_cmds:
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
