@@ -552,7 +552,14 @@ resource_relationship
 resource_id
 relationship
 target_id
+source          [the writer; its merge scope]
 ```
+
+The joinable form of every multi-valued field on a resource row: a
+CELLxGENE dataset's tissues, cell types, diseases and assays are rows here
+(`has_tissue`, `has_cell_type`, …) whose `target_id` joins `ontology.term`; a
+resource row may additionally carry the same ids as a sorted list column for
+`list_contains()` convenience, never as delimited text.
 
 Examples:
 

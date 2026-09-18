@@ -27,7 +27,7 @@ Two phases, as everywhere else in this catalog:
   resource.cellxgene__dataset  one row per dataset VERSION (Type 2 by
                                 dataset_version_id): organism resolved to a
                                 taxon id, the multi-valued fields exploded to
-                                paired '|'-joined term-id and label columns
+                                sorted lists of term ids, and one row per term in
                                 (issue #84 acceptance criterion 7 -- readable
                                 now, joinable to ontology.term once #83 lands),
                                 h5ad_uri, and the spatial columns added in the
@@ -172,11 +172,11 @@ def resolve_census(census_release=None):
 
 
 def _ids(col):
-    return f"array_to_string(list_transform(from_json({col}, '{_LABEL_ID}'), x -> x.ontology_term_id), '|')"
+    # Sorted, so the merge's attribute comparison is order-independent.
+    return f"list_sort(list_transform(from_json({col}, '{_LABEL_ID}'), x -> x.ontology_term_id))"
 
 
-def _labels(col):
-    return f"array_to_string(list_transform(from_json({col}, '{_LABEL_ID}'), x -> x.label), '|')"
+MULTI = ("assay", "tissue", "disease", "cell_type")
 
 
 # Assertions on the derived rows, run before any write -- the organism and
@@ -225,10 +225,10 @@ def transform(cat, release, retrieval_date, census_release):
                 len(from_json(organism, '{_LABEL_ID}')) AS n_organisms,
                 (from_json(organism, '{_LABEL_ID}'))[1].ontology_term_id AS organism_term_id,
                 (from_json(organism, '{_LABEL_ID}'))[1].label AS organism_label,
-                {_ids('assay')} AS assay_term_ids, {_labels('assay')} AS assay_labels,
-                {_ids('tissue')} AS tissue_term_ids, {_labels('tissue')} AS tissue_labels,
-                {_ids('disease')} AS disease_term_ids, {_labels('disease')} AS disease_labels,
-                {_ids('cell_type')} AS cell_type_term_ids, {_labels('cell_type')} AS cell_type_labels,
+                {_ids('assay')} AS assay_term_ids,
+                {_ids('tissue')} AS tissue_term_ids,
+                {_ids('disease')} AS disease_term_ids,
+                {_ids('cell_type')} AS cell_type_term_ids,
                 cell_count, primary_cell_count, mean_genes_per_cell, schema_version,
                 (list_filter(from_json(assets, '{_ASSET}'), a -> a.filetype = 'H5AD'))[1].url AS h5ad_uri,
                 published_at, revised_at, tombstone,
@@ -245,8 +245,7 @@ def transform(cat, release, retrieval_date, census_release):
                             || ' (n_organisms=' || n_organisms || ')')
             END AS taxon_id,
             organism_label,
-            assay_term_ids, assay_labels, tissue_term_ids, tissue_labels,
-            disease_term_ids, disease_labels, cell_type_term_ids, cell_type_labels,
+            assay_term_ids, tissue_term_ids, disease_term_ids, cell_type_term_ids,
             cell_count, primary_cell_count, mean_genes_per_cell, schema_version,
             '{LICENSE}' AS license,
             h5ad_uri,
@@ -267,8 +266,17 @@ def transform(cat, release, retrieval_date, census_release):
     _check(con)
     ds = con.sql("SELECT * FROM ds").to_arrow_table()
 
-    return {"resource.cellxgene__dataset": merge.merge(
-        cat, "resource.cellxgene__dataset", ds, release, AlwaysTrue())}
+    # The joinable form: one row per (dataset version, relationship, term id).
+    rel = con.sql(" UNION ALL ".join(
+        f"SELECT dataset_version_id AS resource_id, 'has_{f}' AS relationship, "
+        f"unnest({f}_term_ids) AS target_id, 'cellxgene' AS source FROM ds"
+        for f in MULTI)).to_arrow_table()
+    return {
+        "resource.cellxgene__dataset": merge.merge(
+            cat, "resource.cellxgene__dataset", ds, release, AlwaysTrue()),
+        "resource.resource_relationship": merge.merge(
+            cat, "resource.resource_relationship", rel, release, EqualTo("source", "cellxgene")),
+    }
 
 
 def ingest(cat, release, url=None, json_path=None, census_release=None, retrieval_date=None):

@@ -83,11 +83,15 @@ def test_multivalued_fields_are_ids_and_labels(cat):
     ingest(cat)
     ds = {r["dataset_version_id"]: r for r in rows(cat, "resource.cellxgene__dataset")}
     row = ds["d1-v1"]
-    assert row["cell_type_term_ids"] == "CL:0000084"
-    assert row["cell_type_labels"] == "T cell"
-    assert row["tissue_term_ids"] == "UBERON:0000178"
-    assert row["disease_term_ids"] == "PATO:0000461"
-    assert row["disease_labels"] == "normal"
+    assert row["cell_type_term_ids"] == ["CL:0000084"]
+    assert row["tissue_term_ids"] == ["UBERON:0000178"]
+    assert row["disease_term_ids"] == ["PATO:0000461"]
+    # the joinable form: one relationship row per term, scoped to this writer
+    rel = {(r["resource_id"], r["relationship"], r["target_id"])
+           for r in rows(cat, "resource.resource_relationship") if r["resource_id"] == row["dataset_version_id"]}
+    assert ("%s" % row["dataset_version_id"], "has_cell_type", "CL:0000084") in rel
+    assert ("%s" % row["dataset_version_id"], "has_tissue", "UBERON:0000178") in rel
+    assert all(r["source"] == "cellxgene" for r in rows(cat, "resource.resource_relationship"))
 
 
 def test_spatial_columns(cat):
