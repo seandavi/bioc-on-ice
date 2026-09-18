@@ -1,7 +1,7 @@
 import argparse
 
 from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, ncbi, ncbi_go, obo
-from . import ncbi_accession, ncbi_pubmed
+from . import ncbi_accession, ncbi_orthologs, ncbi_pubmed
 
 
 def _print(counts):
@@ -34,6 +34,8 @@ def main():
         "ingest-ncbi-accession": (ncbi_accession, "land NCBI gene2accession whole, then derive"),
         "ingest-ncbi-pubmed": (ncbi_pubmed, "land NCBI gene2pubmed whole, then derive"),
         "ingest-gene2go": (ncbi_go, "land NCBI gene2go whole, then derive GO annotations"),
+        "ingest-ncbi-orthologs": (ncbi_orthologs, "land NCBI gene_orthologs and gene_group whole, "
+                                  "then derive ortholog pairs"),
     }
     for cmd, (_, help_text) in ncbi_cmds.items():
         c = sub.add_parser(cmd, help=help_text)
