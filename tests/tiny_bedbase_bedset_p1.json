@@ -1,0 +1,55 @@
+{
+  "count": 6,
+  "limit": 3,
+  "offset": 3,
+  "results": [
+    {
+      "id": "gse170338",
+      "name": "gse170338",
+      "md5sum": "63521ec1fcf1f1074b31946ab6136254",
+      "submission_date": "2025-06-05T08:39:36.824412Z",
+      "last_update_date": "2025-06-05T08:39:36.824432Z",
+      "statistics": null,
+      "distributions": null,
+      "plots": null,
+      "description": "Data from [GEO GSE170338](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE170338)\nDNase-seq from CD8-positive, alpha-beta T cell (ENCSR321KUC)",
+      "summary": null,
+      "bed_ids": null,
+      "bedfile_count": 3,
+      "author": "ENCODE, DCC",
+      "source": "gse170338"
+    },
+    {
+      "id": "gse187099",
+      "name": "gse187099",
+      "md5sum": "bad651ecac425e6f210bbe6dee734ed1",
+      "submission_date": "2026-02-07T16:49:28.391899Z",
+      "last_update_date": "2026-02-07T16:49:28.391904Z",
+      "statistics": null,
+      "distributions": null,
+      "plots": null,
+      "description": "Data from [GEO GSE187099](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE187099)\nATAC-seq from HCT116 (ENCSR135OML)",
+      "summary": null,
+      "bed_ids": null,
+      "bedfile_count": 12,
+      "author": "ENCODE, DCC",
+      "source": "gse187099"
+    },
+    {
+      "id": "gse56700",
+      "name": "gse56700",
+      "md5sum": "05d98011b40239b31804c3a1ccf89c94",
+      "submission_date": "2025-06-05T08:28:33.440089Z",
+      "last_update_date": "2025-06-05T08:28:33.440100Z",
+      "statistics": null,
+      "distributions": null,
+      "plots": null,
+      "description": "Data from [GEO GSE56700](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE56700)\nChIP-chip data of Thp1-Flag and Sac3-Flag in wild-type cells, and Rrm3-Flag in sac3\u2206 and thp1\u2206 cells",
+      "summary": null,
+      "bed_ids": null,
+      "bedfile_count": 2,
+      "author": "Andr\u00e9s, Aguilera",
+      "source": "gse56700"
+    }
+  ]
+}

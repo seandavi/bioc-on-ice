@@ -1101,6 +1101,231 @@ TABLES = {
                 "are not required to resolve to a row in ontology.term — no foreign key is "
                 "enforced, matching every other table in this catalog.",
     ),
+    "raw.bedbase__bed": TableDef(
+        schema=Schema(
+            NestedField(1, "id", StringType(), required=True,
+                        doc="BEDbase's own id for this BED file record, e.g. "
+                            "'0000120fe8c5334bb0ce759dfcf06c3b'. Stable; carried downstream "
+                            "as resource_id."),
+            NestedField(2, "name", StringType(), doc="Record name/title as BEDbase prints it."),
+            NestedField(3, "description", StringType(),
+                        doc="Record description as BEDbase prints it. Frequently blank."),
+            NestedField(4, "genome_alias", StringType(),
+                        doc="Free-text genome label as submitted, e.g. 'hg38'. NOT a reliable "
+                            "key: BEDbase's 118 genome labels include mismatched and compound "
+                            "strings — an Arabidopsis (taxon 3702) record was found tagged "
+                            "'hg18' (verified live 2026-09-17). genome_digest is the key; this "
+                            "is a display label only."),
+            NestedField(5, "genome_digest", StringType(),
+                        doc="Sequence-collection digest identifying the exact assembly. NULL "
+                            "for a meaningful share of records (~5% in a 500-record sample "
+                            "verified live 2026-09-17) where BEDbase could not resolve one. "
+                            "The reliable genome key when present; genome_alias never is."),
+            NestedField(6, "bed_compliance", StringType(),
+                        doc="BED-standard compliance class BEDbase assigned, e.g. 'bed6+4'."),
+            NestedField(7, "data_format", StringType(),
+                        doc="Upstream data format BEDbase detected, e.g. 'encode_narrowpeak_rs'."),
+            NestedField(8, "compliant_columns", IntegerType(),
+                        doc="Columns conforming to the declared bed_compliance's core spec."),
+            NestedField(9, "non_compliant_columns", IntegerType(),
+                        doc="Columns beyond bed_compliance's core spec."),
+            NestedField(10, "is_universe", BooleanType(),
+                        doc="True for BEDbase's small curated 'universe' region sets, false "
+                            "for an ordinary submitted BED file."),
+            NestedField(11, "license_id", StringType(),
+                        doc="Licence as a DUO (Data Use Ontology) code, e.g. 'DUO:0000042' "
+                            "(general research use). Carried on every row: we reference these "
+                            "files, we do not redistribute them, so landing the licence is what "
+                            "makes that honest."),
+            NestedField(12, "processed", BooleanType(),
+                        doc="Whether BEDbase's bedstat/bedboss pipeline finished processing "
+                            "this record; false records may lack stats even at the full-detail "
+                            "endpoint."),
+            NestedField(13, "submission_date", StringType(),
+                        doc="ISO 8601 timestamp this record was submitted, kept as upstream "
+                            "prints it, unparsed."),
+            NestedField(14, "last_update_date", StringType(),
+                        doc="ISO 8601 timestamp this record last changed, kept as upstream "
+                            "prints it, unparsed."),
+            NestedField(15, "annotation_organism", StringType(),
+                        doc="annotation.organism as BEDbase prints it, e.g. 'Homo sapiens'. "
+                            "Free text; annotation_species_id is the reliable taxon join."),
+            NestedField(16, "annotation_species_id", StringType(),
+                        doc="annotation.species_id as BEDbase prints it — usually a single "
+                            "NCBI taxon id as text, e.g. '9606', but not always: a co-infection "
+                            "study was found carrying '9606, 11676' (verified live "
+                            "2026-09-17). resource.bedbase__bedfile.taxon_id is a TRY_CAST of "
+                            "this column, NULL where it does not parse as one integer."),
+            NestedField(17, "annotation_genotype", StringType(), doc="annotation.genotype as published."),
+            NestedField(18, "annotation_phenotype", StringType(), doc="annotation.phenotype as published."),
+            NestedField(19, "annotation_description", StringType(),
+                        doc="annotation.description — distinct from the record's own top-level "
+                            "`description` above. Frequently blank."),
+            NestedField(20, "annotation_cell_type", StringType(), doc="annotation.cell_type as published."),
+            NestedField(21, "annotation_cell_line", StringType(), doc="annotation.cell_line as published."),
+            NestedField(22, "annotation_tissue", StringType(), doc="annotation.tissue as published."),
+            NestedField(23, "annotation_library_source", StringType(),
+                        doc="annotation.library_source as published, e.g. 'genomic'."),
+            NestedField(24, "annotation_assay", StringType(),
+                        doc="Assay type, e.g. 'ATAC-seq', 'DNase-seq', 'PRO-cap'."),
+            NestedField(25, "annotation_antibody", StringType(), doc="annotation.antibody as published."),
+            NestedField(26, "annotation_target", StringType(), doc="annotation.target as published."),
+            NestedField(27, "annotation_treatment", StringType(), doc="annotation.treatment as published."),
+            NestedField(28, "annotation_global_sample_id", StringType(),
+                        doc="GEO/ENCODE sample ids, pipe-separated in one string as BEDbase's "
+                            "list is joined, e.g. 'geo:gsm4837486'. Pipe-joined per the "
+                            "unsplit-list convention elsewhere in this catalog "
+                            "(ncbi__gene_info.synonyms); a join key into Milestone 3's "
+                            "experimental metadata."),
+            NestedField(29, "annotation_global_experiment_id", StringType(),
+                        doc="GEO/ENCODE experiment ids, pipe-separated, e.g. 'geo:gse159673'. "
+                            "Same convention as annotation_global_sample_id."),
+            NestedField(30, "annotation_original_file_name", StringType(),
+                        doc="Original filename as submitted upstream, e.g. "
+                            "'GSM4837486_Plasma_B2_T1.ATACseq.narrowPeak.gz'."),
+            NestedField(31, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="BEDbase's /v1/bed/list landed verbatim and whole, one row per BED file "
+                "record — every field the listing endpoint returns, its nested `annotation` "
+                "object flattened with an `annotation_` prefix. Per-file DETAIL (URIs, "
+                "checksums, stats) is deliberately NOT landed here: /v1/bed/{id}/metadata"
+                "?full=true is one HTTP request per record, 663,721 of them, left to a "
+                "follow-up (issue #79) rather than paid for on every crawl. BEDbase has no "
+                "release cadence, so this table is replaced wholesale each ingest and the "
+                "manifest records retrieval_date as the version.",
+        properties={"bioc.column.annotation_species_id.prefix": "ncbitaxon",
+                    "bioc.column.license_id.prefix": "duo"},
+    ),
+    "raw.bedbase__bedset": TableDef(
+        schema=Schema(
+            NestedField(1, "id", StringType(), required=True,
+                        doc="BEDbase's own id for this bedset, e.g. 'gse33600' — often a GEO "
+                            "series accession, but not guaranteed to be one."),
+            NestedField(2, "name", StringType(), doc="Bedset name as BEDbase prints it."),
+            NestedField(3, "md5sum", StringType(),
+                        doc="BEDbase's own MD5 digest of the bedset's metadata — not a digest "
+                            "of any file."),
+            NestedField(4, "submission_date", StringType(),
+                        doc="ISO 8601 timestamp, kept as upstream prints it, unparsed."),
+            NestedField(5, "last_update_date", StringType(),
+                        doc="ISO 8601 timestamp, kept as upstream prints it, unparsed."),
+            NestedField(6, "description", StringType(),
+                        doc="Bedset description, Markdown text as BEDbase prints it."),
+            NestedField(7, "bedfile_count", IntegerType(),
+                        doc="Member BED files, per BEDbase's own count. Membership itself "
+                            "(bed_ids) is NOT landed here: it is null on this listing endpoint "
+                            "and needs a per-bedset detail request, 22,189 of them, deferred "
+                            "alongside the per-file detail issue #79 leaves for a follow-up."),
+            NestedField(8, "author", StringType(), doc="Curator/submitter name as published."),
+            NestedField(9, "bedset_source", StringType(),
+                        doc="BEDbase's own 'source' field on a bedset, e.g. 'gse33600' "
+                            "(frequently identical to `id`). Renamed from upstream's `source` "
+                            "here and on resource.bedbase__bedset because `source` elsewhere in "
+                            "this catalog names the asserting annotation provider — the same "
+                            "rename BugSigDB's `source_in_paper` makes, and for the same reason."),
+            NestedField(10, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="BEDbase's /v1/bedset/list landed verbatim and whole, one row per bedset. "
+                "Statistics, plots and membership (bed_ids) are null on this listing endpoint "
+                "and require a per-bedset detail request (22,189 of them) — deferred alongside "
+                "the per-file detail issue #79 leaves for a follow-up. Replaced wholesale each "
+                "ingest; retrieval_date is the version, per BEDbase's lack of a release cadence.",
+        properties={},
+    ),
+    "resource.bedbase__bedfile": TableDef(
+        schema=Schema(
+            NestedField(1, "resource_id", StringType(), required=True,
+                        doc="BEDbase's bed id (raw.bedbase__bed.id). Business key — one live "
+                            "row per file, Type 2 on any attribute change."),
+            NestedField(2, "title", StringType(), doc="Record name/title, from raw.bedbase__bed.name."),
+            NestedField(3, "description", StringType(), doc="Record description, from raw.bedbase__bed.description."),
+            NestedField(4, "genome_digest", StringType(),
+                        doc="Sequence-collection digest of the assembly this file's regions "
+                            "are called against — the reliable genome key; NULL where BEDbase "
+                            "could not resolve one. Joins to reference.genome once we compute "
+                            "sequence-collection digests for our own assemblies (currently "
+                            "keyed by INSDC accession only)."),
+            NestedField(5, "genome_alias", StringType(),
+                        doc="Free-text genome label, display only — never a join key. See "
+                            "raw.bedbase__bed.genome_alias for how messy this gets."),
+            NestedField(6, "taxon_id", IntegerType(),
+                        doc="NCBI taxon id, a TRY_CAST of raw.bedbase__bed.annotation_species_id; "
+                            "NULL where that text does not parse as a single integer (a "
+                            "co-infection study carrying more than one id as free text is the "
+                            "known case — see that column's doc)."),
+            NestedField(7, "organism", StringType(),
+                        doc="Free-text organism name as BEDbase prints it; taxon_id is the "
+                            "reliable join."),
+            NestedField(8, "assay", StringType(), doc="Assay type, e.g. 'ATAC-seq', 'DNase-seq'."),
+            NestedField(9, "target", StringType(), doc="ChIP/CUT&RUN target, where applicable."),
+            NestedField(10, "antibody", StringType(), doc="Antibody used, where applicable."),
+            NestedField(11, "cell_type", StringType(), doc="Cell type sampled."),
+            NestedField(12, "cell_line", StringType(), doc="Cell line sampled, where applicable."),
+            NestedField(13, "tissue", StringType(), doc="Tissue sampled."),
+            NestedField(14, "treatment", StringType(), doc="Treatment applied to the sample, free text."),
+            NestedField(15, "sample_id", StringType(),
+                        doc="GEO/ENCODE sample ids, pipe-separated, e.g. 'geo:gsm4837486'. A "
+                            "join key into Milestone 3's experimental metadata."),
+            NestedField(16, "experiment_id", StringType(),
+                        doc="GEO/ENCODE experiment ids, pipe-separated, e.g. 'geo:gse159673'."),
+            NestedField(17, "compliance", StringType(), doc="BED-standard compliance class, e.g. 'bed6+4'."),
+            NestedField(18, "format", StringType(), doc="Upstream data format BEDbase detected."),
+            NestedField(19, "license_id", StringType(),
+                        doc="Licence as a DUO code, carried on every row — we reference this "
+                            "file, we do not redistribute it, and this is what makes that "
+                            "honest. See raw.bedbase__bed.license_id."),
+            NestedField(20, "provider", StringType(), required=True,
+                        doc="Constant 'BEDbase': the catalog this resource entry was read "
+                            "from, per SPEC's Resource Metadata Layer."),
+            NestedField(21, "submitted", StringType(), doc="Submission timestamp, ISO 8601 text as published."),
+            NestedField(22, "updated", StringType(), doc="Last-update timestamp, ISO 8601 text as published."),
+            NestedField(23, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(24, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("resource_id",),
+        comment="One row per BEDbase BED file, Type 2 by resource_id: title, genome, "
+                "organism/assay-level annotation and licence, from /v1/bed/list. Objects are "
+                "REFERENCED here, never ingested: size, checksum and the http/s3/bigbed URIs "
+                "live at /v1/bed/{id}/metadata?full=true, one request per record (663,721 of "
+                "them), deferred to a follow-up (issue #79) and to be added by schema "
+                "evolution when they land — a column that is always NULL advertises a "
+                "capability this table does not yet have. Key genomes on genome_digest, never "
+                "genome_alias — see that column's doc. license_id (a DUO code) is carried on "
+                "every row because we reference these files rather than redistribute them.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.license_id.prefix": "duo"},
+    ),
+    "resource.bedbase__bedset": TableDef(
+        schema=Schema(
+            NestedField(1, "resource_id", StringType(), required=True,
+                        doc="BEDbase's bedset id (raw.bedbase__bedset.id). Business key — one "
+                            "live row per bedset, Type 2 on any attribute change."),
+            NestedField(2, "title", StringType(), doc="Bedset name, from raw.bedbase__bedset.name."),
+            NestedField(3, "description", StringType(), doc="Bedset description, Markdown text as published."),
+            NestedField(4, "bedfile_count", IntegerType(), doc="Member BED files, per BEDbase's own count."),
+            NestedField(5, "author", StringType(), doc="Curator/submitter name as published."),
+            NestedField(6, "bedset_source", StringType(),
+                        doc="BEDbase's own 'source' field on this bedset — see "
+                            "raw.bedbase__bedset.bedset_source for the rename."),
+            NestedField(7, "provider", StringType(), required=True,
+                        doc="Constant 'BEDbase': the catalog this resource entry was read "
+                            "from, per SPEC's Resource Metadata Layer."),
+            NestedField(8, "submitted", StringType(), doc="Submission timestamp, ISO 8601 text as published."),
+            NestedField(9, "updated", StringType(), doc="Last-update timestamp, ISO 8601 text as published."),
+            NestedField(10, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(11, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("resource_id",),
+        comment="One row per BEDbase bedset, Type 2 by resource_id, from /v1/bedset/list. "
+                "Membership (which BED files belong to a bedset) is deliberately NOT here: "
+                "bed_ids is null on the listing endpoint and needs a per-bedset detail "
+                "request (22,189 of them) — deferred alongside the per-file detail issue #79 "
+                "leaves for a follow-up, to land as a resource_relationship-style membership "
+                "table when it does.",
+        properties={},
+    ),
 }
 
 

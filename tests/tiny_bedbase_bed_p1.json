@@ -1,0 +1,124 @@
+{
+  "count": 6,
+  "limit": 3,
+  "offset": 3,
+  "results": [
+    {
+      "name": "encff847qcc_peaks_dm6_bed",
+      "genome_alias": "undefined",
+      "genome_digest": null,
+      "bed_compliance": "bed6+4",
+      "data_format": "encode_narrowpeak",
+      "compliant_columns": 6,
+      "non_compliant_columns": 4,
+      "header": null,
+      "id": "000b93cc61806cbbb4780be811433c37",
+      "description": "TF ChIP-seq from whole organism (ENCSR423NEB)",
+      "submission_date": "2026-02-09T18:30:54.186847Z",
+      "last_update_date": "2026-02-09T18:30:54.186852Z",
+      "is_universe": false,
+      "license_id": "DUO:0000042",
+      "annotation": {
+        "organism": "Drosophila melanogaster",
+        "species_id": "7227",
+        "genotype": "",
+        "phenotype": "",
+        "description": "",
+        "cell_type": "",
+        "cell_line": "",
+        "tissue": "",
+        "library_source": "",
+        "assay": "TF ChIP-seq",
+        "antibody": "",
+        "target": "",
+        "treatment": "",
+        "global_sample_id": [
+          ""
+        ],
+        "global_experiment_id": [
+          "geo:gse258359"
+        ],
+        "original_file_name": "GSE258359_ENCFF847QCC_peaks_dm6.bed.gz"
+      },
+      "processed": false
+    },
+    {
+      "name": "ARR14ypet_p6BA",
+      "genome_alias": "hg18",
+      "genome_digest": "ieWVCws5MC2QFRKgH9QcN3u5_Y_3hPG6",
+      "bed_compliance": "bed6+4",
+      "data_format": "encode_narrowpeak_rs",
+      "compliant_columns": 6,
+      "non_compliant_columns": 4,
+      "header": null,
+      "id": "00180b1152501a388cd4281b2d2b2c99",
+      "description": "IP",
+      "submission_date": "2025-06-03T07:57:11.913879Z",
+      "last_update_date": "2026-02-07T22:26:30.861635Z",
+      "is_universe": false,
+      "license_id": "DUO:0000042",
+      "annotation": {
+        "organism": "Arabidopsis thaliana",
+        "species_id": "3702",
+        "genotype": "",
+        "phenotype": "",
+        "description": "",
+        "cell_type": "",
+        "cell_line": "",
+        "tissue": "",
+        "library_source": "genomic",
+        "assay": "ChIP-Seq",
+        "antibody": "GFP antibody (Thermo Fisher Scientific, A11111)",
+        "target": "",
+        "treatment": "10uM 6BA, 72hours",
+        "global_sample_id": [
+          "geo:gsm2476327"
+        ],
+        "global_experiment_id": [
+          "geo:gse94486"
+        ],
+        "original_file_name": "GSM2476327_ARR14ypet_p6BA.peak.bed.gz"
+      },
+      "processed": true
+    },
+    {
+      "name": "ENCFF049UAG",
+      "genome_alias": "hg38",
+      "genome_digest": null,
+      "bed_compliance": "bed4+1",
+      "data_format": "bed_like",
+      "compliant_columns": 4,
+      "non_compliant_columns": 1,
+      "header": null,
+      "id": "00044cc1b962dfa7a47b74efcd5fb373",
+      "description": null,
+      "submission_date": "2026-04-11T05:44:34.473767Z",
+      "last_update_date": "2026-04-11T05:44:34.473778Z",
+      "is_universe": false,
+      "license_id": "DUO:0000042",
+      "annotation": {
+        "organism": "Homo sapiens",
+        "species_id": "9606",
+        "genotype": "",
+        "phenotype": "",
+        "description": "",
+        "cell_type": "effector memory CD8-positive, alpha-beta T cell",
+        "cell_line": null,
+        "tissue": "bodily fluid, blood",
+        "library_source": null,
+        "assay": "ATAC-seq",
+        "antibody": null,
+        "target": null,
+        "treatment": null,
+        "global_sample_id": [
+          "encode:ENCFF049UAG"
+        ],
+        "global_experiment_id": [
+          "encode:ENCSR162HRM"
+        ],
+        "original_file_name": "ENCFF049UAG.bed.gz"
+      },
+      "processed": false
+    }
+  ]
+}
