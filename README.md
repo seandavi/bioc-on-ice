@@ -186,6 +186,35 @@ A biocOnIce release is a point-in-time claim across the whole catalog,
 expressed by the `first_seen` / `retired_in` columns rather than by Iceberg
 time travel — see [SPEC.md](SPEC.md#versioning-model) for why.
 
+## Ask an assistant
+
+`bioconice-mcp` (issue #100) hands an MCP-capable assistant the same
+anonymous, read-only access the "Query it" section above describes by hand:
+`list_tables`, `describe_table` (live column docs, not a copy of them),
+`resolve_release`, a guarded `query`, and a fixed set of worked `recipes`
+(gene → citing literature, dataset by cell-type rollup, ...). No account, no
+token, same as the raw DuckDB `ATTACH`.
+
+**Claude Desktop** (`claude_desktop_config.json`) and **Claude Code**
+(`claude mcp add`, or `.mcp.json`) read the same shape:
+
+```json
+{"mcpServers": {"bioconice": {"command": "uvx", "args": ["--from", "git+https://github.com/seandavi/bioc-on-ice", "bioconice-mcp"]}}}
+```
+
+For Claude Code specifically, that is also one command:
+
+```sh
+claude mcp add bioconice -- uvx --from git+https://github.com/seandavi/bioc-on-ice bioconice-mcp
+```
+
+Once the docker-compose deployment in [`mcp/`](mcp/) is live, the same
+clients can instead point at the hosted URL:
+`{"mcpServers": {"bioconice": {"url": "https://bioconice-mcp.cancerdatasci.org/mcp"}}}`
+— see [`mcp/README.md`](mcp/README.md) for the deploy steps and what was
+verified locally (docker build + a live `/health` and MCP handshake) versus
+what still needs a deploy.
+
 ## Develop
 
 ```sh
