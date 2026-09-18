@@ -154,6 +154,33 @@ def _obo_raw(name, licence):
         properties={"bioc.license": licence},
     )
 
+
+def _ncbi_gene_pairs(comment, relationship):
+    """raw.ncbi__gene_orthologs and raw.ncbi__gene_group: one five-column format, per NCBI's README."""
+    return TableDef(
+        schema=Schema(
+            NestedField(1, "taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id of gene_id's organism. Upstream '#tax_id'."),
+            NestedField(2, "gene_id", StringType(), required=True,
+                        doc="NCBI Entrez GeneID of the first gene. Upstream 'GeneID'."),
+            NestedField(3, "relationship", StringType(), required=True,
+                        doc="Upstream 'relationship', read as 'gene_id has this relationship to "
+                            f"other_gene_id'. {relationship}"),
+            NestedField(4, "other_taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id of other_gene_id's organism. Upstream 'Other_tax_id'."),
+            NestedField(5, "other_gene_id", StringType(), required=True,
+                        doc="NCBI Entrez GeneID of the second gene. Upstream 'Other_GeneID'."),
+            NestedField(6, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment=comment,
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.other_taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.column.other_gene_id.prefix": "ncbigene"},
+    )
+
+
 TABLES = {
     "provenance.release": TableDef(
         schema=Schema(
@@ -1556,6 +1583,60 @@ TABLES = {
         properties={"bioc.column.hgnc_id.prefix": "hgnc",
                     "bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.license": "CC0-1.0"},
+    ),
+    "raw.ncbi__gene_orthologs": _ncbi_gene_pairs(
+        "NCBI gene_orthologs landed verbatim and whole: every ortholog pair NCBI publishes, "
+        "~19M rows. NOT symmetric: each ortholog set has one primary gene (the first two "
+        "columns; human for the vertebrates) and its other N-1 members are listed against "
+        "it once, so two non-primary members are never paired directly. Query "
+        "annotation.ortholog, which carries each pair in both directions. Regenerated "
+        "nightly upstream, so the retrieval date is the version.",
+        "Always 'Ortholog' in this file."),
+    "raw.ncbi__gene_group": _ncbi_gene_pairs(
+        "NCBI gene_group landed verbatim and whole: gene-gene relationships other than "
+        "orthology, ~51k rows, reported symmetrically where that makes sense (a 'Readthrough "
+        "parent' row has its 'Readthrough child' mirror). NCBI calls the file a non-"
+        "comprehensive subset. Nothing is derived from it yet. Orthologs are in "
+        "raw.ncbi__gene_orthologs. Regenerated nightly upstream, so the retrieval date is "
+        "the version.",
+        "How gene_id relates to other_gene_id: 'Related functional gene', 'Related "
+        "pseudogene', 'Readthrough parent', 'Readthrough child', 'Readthrough sibling', "
+        "'Potential readthrough sibling', 'Region parent' or 'Region member'."),
+    "annotation.ortholog": TableDef(
+        schema=Schema(
+            NestedField(1, "gene_id", StringType(), required=True,
+                        doc="The gene, in the provider's own id space: an Entrez GeneID such as "
+                            "7157 under source NCBI. Part of the merge key."),
+            NestedField(2, "taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id of gene_id's organism, e.g. 9606. The row belongs "
+                            "to this taxon: it is the merge scope, so filter on it to get one "
+                            "organism's orthologs. Part of the merge key."),
+            NestedField(3, "ortholog_gene_id", StringType(), required=True,
+                        doc="The orthologous gene in another organism, same id space as gene_id, "
+                            "e.g. 22059 (mouse Trp53) for 7157. Part of the merge key."),
+            NestedField(4, "ortholog_taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id of ortholog_gene_id's organism, e.g. 10090. Part of "
+                            "the merge key."),
+            NestedField(5, "source", StringType(), required=True,
+                        doc="The provider asserting the orthology: 'NCBI' now (gene_orthologs, "
+                            "from the Eukaryotic Genome Annotation Pipeline's protein similarity "
+                            "plus local synteny, and curator review); Ensembl Compara when it "
+                            "lands. Part of the business key and of every writer's merge scope, "
+                            "so providers stack and none can retire another's rows (ADR-0004)."),
+            NestedField(6, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(7, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("gene_id", "taxon_id", "ortholog_gene_id", "ortholog_taxon_id", "source"),
+        comment="Ortholog pairs, stacked across providers: Bioconductor's Orthology.eg.db. One "
+                "row per ordered pair per source, and every pair is stored in both directions, so "
+                "`WHERE gene_id = '22059' AND source = 'NCBI'` finds human TP53 as readily as the "
+                "reverse. Under source NCBI only pairs NCBI itself lists are here: each ortholog "
+                "set hangs off one primary gene (human, for vertebrates), so mouse-to-rat is two "
+                "hops through the human gene — join the table to itself on ortholog_gene_id — "
+                "and is not materialised. The whole tuple is the key: a pair has no attributes, "
+                "so it is only ever asserted or withdrawn.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.column.ortholog_taxon_id.prefix": "ncbitaxon"},
     ),
 }
 
