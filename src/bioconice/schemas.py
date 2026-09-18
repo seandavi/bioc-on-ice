@@ -1467,14 +1467,14 @@ TABLES = {
                             "resource.bedbase__bedfile.resource_id, ... Part of the merge key."),
             NestedField(2, "relationship", StringType(), required=True,
                         doc="What the target is to the resource: has_assay, has_tissue, has_disease, "
-                            "has_cell_type (CELLxGENE, targets are ontology term ids); derived_from_sample, "
+                            "has_cell_type (CELLxGENE; eQTL Catalogue the last two; targets are ontology term ids); derived_from_sample, "
                             "derived_from_experiment (BEDbase, targets are 'geo:gsm…'-style accessions). "
                             "Part of the merge key."),
             NestedField(3, "target_id", StringType(), required=True,
                         doc="The related thing, as a CURIE or accession: joins to ontology.term.term_id when it "
                             "is an ontology term, and through ontology.relationship for rollups. Part of the merge key."),
             NestedField(4, "source", StringType(), required=True,
-                        doc="The writer that asserted this row ('cellxgene', 'bedbase'): its merge scope, so one "
+                        doc="The writer that asserted this row ('cellxgene', 'bedbase', 'eqtlcatalogue'): its merge scope, so one "
                             "catalog's re-ingest never retires another's rows (ADR-0004). Part of the merge key."),
             NestedField(5, "valid_from", StringType(), required=True, doc=VALID_FROM),
             NestedField(6, "valid_to", StringType(), doc=VALID_TO),
@@ -2053,6 +2053,130 @@ TABLES = {
                     "bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.license": "CC0-1.0"},
+    ),
+    "raw.eqtlcatalogue__dataset": TableDef(
+        schema=Schema(
+            NestedField(1, "study_id", StringType(), doc="eQTL Catalogue study accession, e.g. QTS000001."),
+            NestedField(2, "dataset_id", StringType(), required=True,
+                        doc="eQTL Catalogue dataset accession, e.g. QTD000001: one study x sample group x "
+                            "quantification method. Unique per row within one eqtlcatalogue_release, so it "
+                            "is the natural key even though raw declares none."),
+            NestedField(3, "study_label", StringType(), doc="Study name, e.g. Alasoo_2018, GTEx."),
+            NestedField(4, "sample_group", StringType(),
+                        doc="The study's group of samples the QTLs were mapped in, e.g. macrophage_naive."),
+            NestedField(5, "tissue_id", StringType(),
+                        doc="Ontology id of the tissue or cell type, as published with an underscore: "
+                            "CL_0000235, UBERON_0002107, EFO_0005292 (LCL). Not a CURIE here."),
+            NestedField(6, "tissue_label", StringType(), doc="Upstream's label for tissue_id, e.g. macrophage."),
+            NestedField(7, "condition_label", StringType(), doc="Stimulation or condition, e.g. naive, IFNg."),
+            NestedField(8, "sample_size", StringType(), doc="Number of samples (donors) in the dataset, as text."),
+            NestedField(9, "quant_method", StringType(),
+                        doc="Molecular trait quantified: ge (gene expression), exon, tx (transcript usage), "
+                            "txrev (txrevise events), leafcutter (splice junctions), microarray, aptamer."),
+            NestedField(10, "pmid", StringType(), doc="PubMed id of the study's publication."),
+            NestedField(11, "study_type", StringType(), doc="'bulk' or 'single-cell' (pseudobulk eQTLs)."),
+            NestedField(12, "eqtlcatalogue_release", StringType(), required=True,
+                        doc="eQTL Catalogue release these rows describe: the N of dataset_metadata_rN.tsv, "
+                            "e.g. '7'. Raw holds every landed release; filter on this to get one."),
+            NestedField(13, "landed_in", StringType(), required=True,
+                        doc="biocOnIce release that fetched these rows."),
+        ),
+        comment="eQTL Catalogue's per-release dataset metadata (data_tables/dataset_metadata_r<N>.tsv in "
+                "github.com/eQTL-Catalogue/eQTL-Catalogue-resources), landed verbatim and whole as text. "
+                "'NA' and the empty cell read as NULL. resource.eqtlcatalogue__dataset is the interpreted "
+                "form. eQTL Catalogue release 7, CC BY 4.0; Kerimov et al. Nat Genet 2021.",
+        properties={"bioc.license": "CC-BY-4.0"},
+    ),
+    "raw.eqtlcatalogue__tabix_ftp_paths": TableDef(
+        schema=Schema(
+            NestedField(1, "study_id", StringType(), doc="eQTL Catalogue study accession, e.g. QTS000001."),
+            NestedField(2, "dataset_id", StringType(), required=True,
+                        doc="eQTL Catalogue dataset accession, e.g. QTD000001; joins to "
+                            "raw.eqtlcatalogue__dataset within one eqtlcatalogue_release."),
+            NestedField(3, "study_label", StringType(), doc="Study name, e.g. Alasoo_2018, GTEx."),
+            NestedField(4, "sample_group", StringType(),
+                        doc="The study's group of samples the QTLs were mapped in, e.g. macrophage_naive."),
+            NestedField(5, "tissue_id", StringType(),
+                        doc="Ontology id of the tissue or cell type, with an underscore: CL_0000235."),
+            NestedField(6, "tissue_label", StringType(), doc="Upstream's label for tissue_id, e.g. macrophage."),
+            NestedField(7, "condition_label", StringType(), doc="Stimulation or condition, e.g. naive, IFNg."),
+            NestedField(8, "sample_size", StringType(),
+                        doc="Number of samples, as text. STALE against raw.eqtlcatalogue__dataset, which "
+                            "upstream keeps correcting (120 of 758 differ on 2026-09-18); prefer that one."),
+            NestedField(9, "quant_method", StringType(),
+                        doc="Molecular trait quantified: ge, exon, tx, txrev, leafcutter, microarray, aptamer."),
+            NestedField(10, "ftp_path", StringType(),
+                        doc="FTP URI of the tabix-indexed summary statistics, as published."),
+            NestedField(11, "ftp_cs_path", StringType(),
+                        doc="FTP URI of the SuSiE credible sets file, as published."),
+            NestedField(12, "ftp_lbf_path", StringType(),
+                        doc="FTP URI of the SuSiE log Bayes factors file, as published."),
+            NestedField(13, "eqtlcatalogue_release", StringType(), required=True,
+                        doc="eQTL Catalogue release this table was landed with, e.g. '7'. The file itself "
+                            "carries no release; the transform checks it names exactly that release's datasets."),
+            NestedField(14, "landed_in", StringType(), required=True,
+                        doc="biocOnIce release that fetched these rows."),
+        ),
+        comment="eQTL Catalogue's table of FTP paths (tabix/tabix_ftp_paths.tsv in "
+                "github.com/eQTL-Catalogue/eQTL-Catalogue-resources), landed verbatim and whole as text: the "
+                "only place the per-dataset file URIs are published. Its metadata columns duplicate "
+                "raw.eqtlcatalogue__dataset and are the staler copy. eQTL Catalogue release 7, CC BY 4.0; "
+                "Kerimov et al. Nat Genet 2021.",
+        properties={"bioc.license": "CC-BY-4.0"},
+    ),
+    "resource.eqtlcatalogue__dataset": TableDef(
+        schema=Schema(
+            NestedField(1, "dataset_id", StringType(), required=True,
+                        doc="eQTL Catalogue dataset accession, e.g. QTD000001: one study x sample group x "
+                            "quantification method. The business key, and the resource_id of this dataset's "
+                            "rows in resource.resource_relationship."),
+            NestedField(2, "study_id", StringType(), required=True,
+                        doc="eQTL Catalogue study accession, e.g. QTS000001. One study has many datasets."),
+            NestedField(3, "study_label", StringType(), doc="Study name, e.g. Alasoo_2018, GTEx."),
+            NestedField(4, "sample_group", StringType(),
+                        doc="The study's group of samples the QTLs were mapped in, e.g. macrophage_naive."),
+            NestedField(5, "taxon_id", IntegerType(), required=True,
+                        doc="NCBI taxonomy id. Always 9606: the eQTL Catalogue is human only."),
+            NestedField(6, "tissue_term_id", StringType(),
+                        doc="Tissue or cell type as a CURIE, e.g. CL:0000235, UBERON:0002107; joins to "
+                            "ontology.term.term_id for CL, UBERON and EFO (BTO is not landed). Upstream's "
+                            "tissue_id with its underscore turned into a colon. The joinable form is "
+                            "resource.resource_relationship (has_cell_type for CL, has_tissue otherwise)."),
+            NestedField(7, "tissue_label", StringType(), doc="Upstream's label for the term, e.g. macrophage."),
+            NestedField(8, "condition_label", StringType(), doc="Stimulation or condition, e.g. naive, IFNg."),
+            NestedField(9, "sample_size", IntegerType(), doc="Number of samples (donors) the QTLs were mapped in."),
+            NestedField(10, "quant_method", StringType(),
+                        doc="Molecular trait quantified: ge (gene expression), exon, tx (transcript usage), "
+                            "txrev (txrevise events), leafcutter (splice junctions), microarray, aptamer."),
+            NestedField(11, "study_type", StringType(), doc="'bulk' or 'single-cell' (pseudobulk eQTLs)."),
+            NestedField(12, "pmid", StringType(),
+                        doc="PubMed id of the study's publication; joins to annotation.icite__publication.pmid."),
+            NestedField(13, "license", StringType(), required=True,
+                        doc="Always 'CC BY 4.0': the eQTL Catalogue's uniform licence (ebi.ac.uk/eqtl/License)."),
+            NestedField(14, "sumstats_uri", StringType(), required=True,
+                        doc="FTP URI of the dataset's tabix-indexed summary statistics, as upstream publishes "
+                            "it; the index is this plus '.tbi', and https://ftp.ebi.ac.uk serves the same "
+                            "path. Ends '.all.tsv.gz' for ge, microarray and aptamer datasets and '.cc.tsv.gz' "
+                            "for exon, tx, txrev and leafcutter ones — upstream's choice of which file to "
+                            "publish per method. Referenced, never landed (about 2 GB for one ge dataset). "
+                            "EBI's firewall blacklists bursty tabix clients: pace requests."),
+            NestedField(15, "credible_sets_uri", StringType(), required=True,
+                        doc="FTP URI of the dataset's SuSiE fine-mapped credible sets (.credible_sets.tsv.gz). "
+                            "Referenced, not landed."),
+            NestedField(16, "lbf_uri", StringType(), required=True,
+                        doc="FTP URI of the dataset's SuSiE log Bayes factors per variant "
+                            "(.lbf_variable.txt.gz). Referenced, not landed."),
+            NestedField(17, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(18, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("dataset_id",),
+        comment="One row per eQTL Catalogue dataset: what was measured, in which tissue or cell type, from "
+                "which study, and where its uniformly processed QTL summary statistics and fine-mapping "
+                "results live on the EBI FTP — never the statistics themselves. A dataset dropped from a "
+                "later release is closed by the ordinary merge rule. eQTL Catalogue release 7, CC BY 4.0; "
+                "Kerimov et al. Nat Genet 2021.",
+        properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.license": "CC-BY-4.0"},
     ),
 }
 
