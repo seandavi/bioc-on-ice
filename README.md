@@ -1,22 +1,102 @@
 # biocOnIce
 
-**Bioconductor annotation without the packages.** Gene, transcript and exon
-annotation as Apache Iceberg tables, readable from R, Python, DuckDB or
-anything else that speaks Iceberg — instead of a versioned R package per
-organism per release.
+**Bioconductor annotation without the packages.** Biological annotation and
+pointers to public data resources, published as Apache Iceberg tables that R,
+Python, DuckDB, a browser or an AI assistant can query directly. No package to
+install, no account, no token.
+
+## Why
+
+Annotation is data, but Bioconductor distributes it as software: one versioned
+R package per organism per release, and hubs whose records are serialized R
+objects. That ties the data to one language, freezes it at each six-monthly
+release, and leaves no easy way to recover the annotation a past analysis used.
+
+biocOnIce publishes the same knowledge as open tables on object storage:
+
+- **Any language.** One artifact serves R, Python, SQL and the browser through
+  stock Iceberg clients. Nothing here is R-specific.
+- **Every release stays queryable.** History lives in the rows, so the catalog
+  as it stood at release `2026.08` is a `WHERE` clause, not an archived package.
+- **Every species at once.** NCBI Gene covers 51,796 taxa and Ensembl 276 in
+  the same tables, not one package each.
+- **Sources coexist.** Each row names the provider that asserts it, so Ensembl
+  and NCBI sit side by side instead of being reconciled into one view.
+- **Self-describing.** Every column carries its documentation to the client,
+  which is what lets an assistant write correct SQL against it
+  ([Ask an assistant](#ask-an-assistant)).
+- **Joins across resources.** A gene's papers and everyone who cites them, or
+  single-cell datasets by cell-type lineage, in one query.
+- **Cheap to keep alive.** No server and no query engine: about 63 GB on object
+  storage and a small gateway for metadata. A copy of the bucket is the whole
+  resource.
 
 [SPEC.md](SPEC.md) is the design source of truth, and
 [the wayfinder map](https://github.com/seandavi/bioc-on-ice/issues/1) tracks the
-work. [icegate](https://github.com/seandavi/icegate) is the gateway that will
-front the catalog.
+work. [icegate](https://github.com/seandavi/icegate) is the gateway in front of
+the catalog.
+
+## What it replaces
+
+The data is live for each row below. The R layer that answers to the
+Bioconductor generics (`select()`, `exonsBy()`, ...) so existing scripts run
+unchanged is Milestone 2 and not built yet.
+
+| Bioconductor | biocOnIce tables | Live today |
+| --- | --- | --- |
+| `org.*.eg.db` (OrgDb), one per organism | `annotation.ncbi__gene`, `annotation.identifier_mapping`, `annotation.ncbi__gene_go`, `annotation.ncbi__gene_pubmed` | 51,796 taxa: symbols, aliases, descriptions, cross-references between Entrez, Ensembl, RefSeq, HGNC and OMIM, GO, PubMed |
+| `TxDb.*`, `EnsDb.*`, one per organism per build | `annotation.gene`, `annotation.transcript`, `annotation.exon`, `reference.genome` | Ensembl 116, 276 species: 7.4M genes, 14.1M transcripts, 143.3M exons |
+| `GO.db` | `ontology.term`, `ontology.relationship` | GO, plus CL, UBERON, MONDO, EFO, HsapDv and MmusDv: 258,393 terms, 487,920 edges |
+| AnnotationHub, ExperimentHub | `resource.*` (see below) | CELLxGENE Discover. The hubs' own 117,671 records are planned |
+| `bugsigdbr` | `raw.bugsigdb__full_dump`, `annotation.signature_taxon` | BugSigDB v1.3.1: 7,365 signatures, 59,486 signature-taxon rows |
+| nothing equivalent | `annotation.icite__publication`, `annotation.icite__metrics`, `annotation.icite__citation` | NIH iCite: every PubMed record and ~930M citation edges |
+
+Knowingly not served: KEGG pathways (redistribution is restricted) and the
+legacy protein-domain columns of OrgDb.
+
+## Pointers to data, not copies of it
+
+Large data stays where it lives. The `resource` namespace catalogs it (what
+exists, how big it is, what it contains, where to fetch it) so that finding a
+dataset is a query, and the bytes come from the original host.
+
+| Resource | In the catalog | Points at |
+| --- | --- | --- |
+| [CELLxGENE Discover](https://cellxgene.cziscience.com) | 2,228 datasets in 391 collections: 291.8M cells (171.1M primary), 10 species, 664 spatial datasets | `h5ad_uri` per dataset, and the Census `2025-11-08` SOMA build on public S3 |
+| CELLxGENE ontology links | 44,139 rows in `resource.resource_relationship`: cell type, tissue, assay, disease | terms in `ontology.term`, so a dataset search can walk the ontology |
+| [BEDbase](https://bedbase.org) | lander written, not yet landed | 663,721 BED files in 22,189 bedsets upstream |
+
+Human datasets containing any kind of T cell, largest first, with the file to
+fetch. The recursive CTE walks `is_a` so subtypes need not be listed by hand
+(`bioc` is attached as in [Query it](#query-it)):
+
+```sql
+WITH RECURSIVE descendants(term_id) AS (
+  SELECT 'CL:0000084'                      -- T cell
+  UNION
+  SELECT r.subject_id
+  FROM bioc.ontology.relationship r
+  JOIN descendants d ON r.object_id = d.term_id
+  WHERE r.predicate = 'is_a' AND r.ontology = 'cl' AND r.valid_to IS NULL
+)
+SELECT DISTINCT ds.title, ds.cell_count, ds.h5ad_uri
+FROM bioc.resource.resource_relationship rr
+JOIN descendants d ON rr.target_id = d.term_id
+JOIN bioc.resource.cellxgene__dataset ds   -- resource_id is the dataset VERSION id
+  ON ds.dataset_version_id = rr.resource_id AND ds.valid_to IS NULL
+WHERE rr.relationship = 'has_cell_type' AND rr.valid_to IS NULL
+  AND ds.taxon_id = 9606
+ORDER BY ds.cell_count DESC;
+```
 
 ## Status
 
-Ensembl 116 for human and mouse is live on Cloudflare R2:
+Ensembl 116 is live on Cloudflare R2 for 276 species. Human and mouse as an
+example of scale:
 
 | Table | Human | Mouse |
 | --- | --- | --- |
-| `raw.ensembl_gtf` | 11,248,794 | 8,417,898 |
+| `raw.ensembl__gtf` | 11,248,794 | 8,417,898 |
 | `annotation.gene` | 78,941 | 78,348 |
 | `annotation.transcript` | 646,577 | 481,956 |
 | `annotation.exon` | 5,087,789 | 3,763,037 |
@@ -35,9 +115,9 @@ own right rather than a function of what we currently derive:
 
 | Table | Rows |
 | --- | --- |
-| `raw.ncbi_gene_info` | 71,471,729 |
-| `raw.ncbi_gene_history` | 27,079,420 |
-| `raw.ncbi_gene2ensembl` | 17,859,274 |
+| `raw.ncbi__gene_info` | 71,471,729 |
+| `raw.ncbi__gene_history` | 27,079,420 |
+| `raw.ncbi__gene2ensembl` | 17,859,274 |
 
 | Derived (all 51,796 taxa) | Rows |
 | --- | --- |
@@ -61,11 +141,11 @@ Both sources coexist in `annotation.identifier_mapping` without retiring each
 other: 121,255 Ensembl-asserted rows and 846,880 NCBI-asserted rows, live
 simultaneously. That is the merge scope naming its writer, verified at scale.
 
-**BugSigDB** is landed but not yet transformed: `raw.bugsigdb_full_dump`, 7,425
-curated microbial signatures at release tag `v1.3.1`, CC BY 4.0. Landed from a
-tag rather than the hourly `devel` export, so it is immutable and citable — each
-release carries a Zenodo DOI. Turning the two nested member-list columns into a
-signature↔taxon table is the next step and wants NCBI Taxonomy (#18) first.
+**BugSigDB**: `raw.bugsigdb__full_dump`, 7,425 curated microbial signatures at
+release tag `v1.3.1`, CC BY 4.0. Landed from a tag rather than the hourly
+`devel` export, so it is immutable and citable — each release carries a Zenodo
+DOI. The two nested member-list columns are unpacked into
+`annotation.signature_taxon`, one row per signature member (59,486 rows).
 
 The release manifest now carries both version axes at once, which is the point of
 [ADR-0007](docs/adr/0007-release-manifest.md): `bugsigdb` resolves to `v1.3.1` by
@@ -164,7 +244,7 @@ version. With no `BIOCONICE_URI` set this writes a local sqlite warehouse in
 — the ingest code is identical either way.
 
 Ingest is ELT in two phases. **Land** writes the GTF verbatim into
-`raw.ensembl_gtf`, attribute blob and all. **Transform** derives the annotation
+`raw.ensembl__gtf`, attribute blob and all. **Transform** derives the annotation
 tables from it, so reinterpreting a source — a parsing fix, an attribute nobody
 needed before — is a re-run rather than a re-download. That is what
 `--transform-only` does.
