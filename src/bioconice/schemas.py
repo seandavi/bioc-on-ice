@@ -10,8 +10,10 @@ evolution when it does, rather than shipped as permanent NULLs that read as
 "we have this" when we do not.
 """
 
+import time
 from dataclasses import dataclass, field
 
+from pyiceberg.exceptions import RESTError
 from pyiceberg.partitioning import PartitionField, PartitionSpec
 from pyiceberg.schema import Schema
 from pyiceberg.transforms import IdentityTransform
@@ -1355,6 +1357,24 @@ TABLES = {
 
 
 
+def rate_limited(call):
+    """Run one catalog write, waiting out R2 Data Catalog's catalog-wide 429.
+
+    Creating a namespace or a table is a write request like any other, so with
+    two loads running it can be refused for rate alone; the retrying commit
+    paths (ncbi._commit, merge.overwrite) never see it because it fails before
+    them. Anything but a 429 is raised as it is.
+    """
+    for _ in range(8):
+        try:
+            return call()
+        except RESTError as err:
+            if "429" not in str(err) and "TooManyRequests" not in type(err).__name__:
+                raise
+            time.sleep(65)
+    return call()
+
+
 def create(cat, identifier):
     """Create the table if absent, with its declared schema, comment and properties."""
     ns = identifier.split(".")[0]
@@ -1364,7 +1384,8 @@ def create(cat, identifier):
     # catalog's "already ensured" and then hit NoSuchNamespaceError.
     ensured = cat.__dict__.setdefault("_bioconice_namespaces", set())
     if ns not in ensured:
-        cat.create_namespace_if_not_exists(ns, properties={"comment": NAMESPACES[ns]})
+        rate_limited(lambda: cat.create_namespace_if_not_exists(
+            ns, properties={"comment": NAMESPACES[ns]}))
         ensured.add(ns)
     d = TABLES[identifier]
     # An empty PartitionSpec() is Iceberg's unpartitioned spec, so this is
@@ -1373,6 +1394,6 @@ def create(cat, identifier):
         PartitionField(source_id=d.schema.find_field(n).field_id, field_id=1000 + i,
                        transform=IdentityTransform(), name=n)
         for i, n in enumerate(d.partition_by)])
-    return cat.create_table_if_not_exists(
+    return rate_limited(lambda: cat.create_table_if_not_exists(
         identifier, schema=d.iceberg_schema(), partition_spec=spec,
-        properties={"comment": d.comment, **d.properties})
+        properties={"comment": d.comment, **d.properties}))
