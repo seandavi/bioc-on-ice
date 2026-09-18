@@ -779,8 +779,12 @@ TABLES = {
     "annotation.icite__publication": TableDef(
         schema=Schema(
             NestedField(1, "pmid", StringType(), required=True, doc="PubMed id (PMID) of the paper. Part of the merge key."),
-            NestedField(2, "doi", StringType(), doc="DOI, when iCite has one."),
-            NestedField(3, "title", StringType(), doc="Article title."),
+            NestedField(2, "doi", StringType(),
+                        doc="DOI, normalised: lower-case, no resolver prefix, always '10.<registrant>/<suffix>'. "
+                            "NULL when iCite has none or its value is not a DOI (6,414 rows in the 2026-08 "
+                            "snapshot); the original text is in raw.icite__metadata.doi. Not unique: 16,521 "
+                            "DOIs map to more than one PMID."),
+            NestedField(3, "title", StringType(), doc="Article title, whitespace-trimmed."),
             NestedField(4, "authors", StringType(), doc="Author names as one string, as iCite prints them."),
             NestedField(5, "journal", StringType(), doc="Journal name, ISO abbreviation."),
             NestedField(6, "year", IntegerType(), doc="Publication year."),

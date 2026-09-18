@@ -34,6 +34,9 @@ def test_raw_is_verbatim_text_and_whole(cat):
     assert raw["2000000"]["title"] == 'A "quoted" title'
     assert raw["1000000"]["cited_by"] == "2000000 3000000"
     assert raw["3000000"]["authors"] is None
+    # verbatim: nothing is normalised on the way in
+    assert raw["1000000"]["doi"] == "https://doi.org/10.1000/ONE "
+    assert raw["3000000"]["title"] == "  Editorial note "
     assert {r["snapshot"] for r in raw.values()} == {"2026-08"}
     m = next(r for r in rows(cat, "provenance.release") if r["source"] == "icite")
     assert (m["source_version"], m["version_method"]) == ("2026-08", "release_number")
@@ -43,6 +46,10 @@ def test_publication_is_typed_and_metrics_are_per_snapshot(cat):
     icite.ingest(cat, REL, snapshot="2026-08", csv=CSV)
     pub = {r["pmid"]: r for r in rows(cat, "annotation.icite__publication")}
     assert pub["1000000"]["year"] == 2001
+    # DOI: resolver prefix and case and whitespace gone; a non-DOI is NULL, not kept
+    assert pub["1000000"]["doi"] == "10.1000/one"
+    assert pub["3000000"]["doi"] is None
+    assert pub["3000000"]["title"] == "Editorial note"
     assert pub["1000000"]["is_research_article"] is True
     assert pub["2000000"]["doi"] is None and pub["2000000"]["is_clinical"] is True
     met = {r["pmid"]: r for r in rows(cat, "annotation.icite__metrics")}
@@ -81,3 +88,12 @@ def test_unknown_flag_vocabulary_fails_loudly(cat, tmp_path):
     bad.write_text(Path(CSV).read_text().replace(",Nature,True,", ",Nature,Maybe,"))
     with pytest.raises(Exception, match="is_research_article: unexpected Maybe"):
         icite.ingest(cat, REL, snapshot="2026-08", csv=str(bad))
+
+
+def test_invariant_violation_fails_before_any_write(cat, tmp_path):
+    bad = tmp_path / "bad.csv"
+    bad.write_text(Path(CSV).read_text().replace(",Nature,True,", ",Nature,True,").replace(",2001,", ",3001,"))
+    with pytest.raises(ValueError, match=r"year is plausible \(1 rows\)"):
+        icite.ingest(cat, REL, snapshot="2026-08", csv=str(bad))
+    assert "annotation.icite__publication" not in {".".join(t) for ns in cat.list_namespaces()
+                                                   for t in cat.list_tables(ns)}
