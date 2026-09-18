@@ -6,6 +6,7 @@ from . import catalog
 from . import cellosaurus
 from . import cellxgene
 from . import ensembl
+from . import eqtlcatalogue
 from . import hgnc
 from . import icite
 from . import mane
@@ -15,8 +16,6 @@ from . import ncbi_go
 from . import ncbi_orthologs
 from . import ncbi_pubmed
 from . import obo
-from . import bedbase, bugsigdb, catalog, cellxgene, ensembl, hgnc, icite, mane, ncbi, ncbi_go, obo
-from . import eqtlcatalogue, ncbi_accession, ncbi_orthologs, ncbi_pubmed
 from . import pubtator3
 from . import wikipathways
 
