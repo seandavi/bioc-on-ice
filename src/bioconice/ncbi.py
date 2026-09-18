@@ -101,7 +101,7 @@ def tsv(url, columns):
             f"columns={columns}, nullstr='-')")
 
 
-def _land(cat, release, identifier, source):
+def _land(cat, release, identifier, source, config=None):
     """Stream one source verbatim into its raw table, replacing what was there.
 
     `source` is any DuckDB table expression — `tsv(url, columns)` for the NCBI
@@ -112,6 +112,10 @@ def _land(cat, release, identifier, source):
     ROWS_PER_COMMIT rows — reading is memory-bound, committing is
     rate-limited, and the two limits want different granularities.
 
+    `config` is passed straight to `duckdb.connect()` — DuckDB startup settings
+    (e.g. `threads`, `http_retries`) for a source whose read needs them, such as
+    bedbase.py's many-small-page HTTP crawl. Unused by every other caller.
+
     ponytail: a crash between commits leaves the table partly landed. Re-running
     the ingest repairs it and raw carries no validity interval to corrupt, so the
     exposure is a wrong row count until then. Upgrade path if that is not good
@@ -119,7 +123,7 @@ def _land(cat, release, identifier, source):
     """
     table = schemas.create(cat, identifier)
     arrow_schema = table.schema().as_arrow()
-    con = duckdb.connect()
+    con = duckdb.connect(config=config or {})
     reader = con.sql(f"SELECT *, '{release}' AS landed_in FROM {source}").to_arrow_reader(BATCH)
 
     n = 0

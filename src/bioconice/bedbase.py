@@ -35,6 +35,12 @@ run. A bounded crawl is not a claim of completeness, so it MUST NOT retire recor
 outside what it fetched: its merge scope is the fetched ids themselves rather than
 AlwaysTrue(), the same shape as `ncbi._where(taxon)` scoping a single-species run
 versus the full-dump default.
+
+**Pagination drifts under a live catalog.** BEDbase's listing is offset-paginated
+against a database that keeps changing underneath a multi-page crawl: verified
+live 2026-09-17, a 1,000-record bedset crawl saw 33 ids twice (an insert ahead of
+the offset cursor shifts every later page by one). Raw lands every page verbatim,
+duplicates included, per ADR-0002; `transform` dedupes on id before merging.
 """
 
 import json
@@ -144,18 +150,29 @@ def _read_bedset(urls, limit=None):
     )"""
 
 
+# DuckDB's default thread count (one per CPU core, 64 on the ingest host) opens
+# that many concurrent HTTP connections to bedbase.org's Cloudflare edge, which
+# 503s under that burst mid-crawl (verified live: a --limit 5000 crawl at 64
+# threads failed at offset 3700; the same crawl at 8 completed clean). Capped
+# here rather than globally: every other source's `_land` call is a single
+# large file, not thousands of small ones, so this cost is bedbase-specific.
+# http_retries/backoff ride out the rarer one-off blip within a single request.
+DUCKDB_CONFIG = {"threads": "8", "http_retries": "6", "http_retry_wait_ms": "2000",
+                  "http_retry_backoff": "2", "http_timeout": "60"}
+
+
 def _land_retrying(cat, release, identifier, source):
     """`_land`, riding out the transient 5xx a several-thousand-page crawl hits.
 
-    A full crawl is thousands of individual page fetches multiplexed inside one
-    DuckDB read_json call; unlike ncbi._commit's 429 (one rate limit, waited out
-    once), a mid-crawl 503 from bedbase.org's own edge means restarting the whole
-    read — DuckDB does not expose a per-page retry — so this retries `_land`
-    itself rather than the fetch beneath it.
+    DUCKDB_CONFIG's http_retries covers a single request's blip. A crawl is
+    thousands of page fetches multiplexed inside one DuckDB read_json call
+    though, and DuckDB exposes no per-page retry hook to this caller — so if a
+    503 still escapes that, this retries `_land` itself, restarting the whole
+    (idempotent, replace-wholesale) read rather than one page.
     """
     for attempt in range(5):
         try:
-            return _land(cat, release, identifier, source)
+            return _land(cat, release, identifier, source, config=DUCKDB_CONFIG)
         except duckdb.HTTPException:
             if attempt == 4:
                 raise
@@ -208,6 +225,12 @@ def transform(cat, release, limit=None):
     con.register("raw_bed", cat.load_table("raw.bedbase__bed").scan().to_arrow())
     con.register("raw_bedset", cat.load_table("raw.bedbase__bedset").scan().to_arrow())
 
+    # QUALIFY dedupes on id, keeping the most-recently-updated row: BEDbase's
+    # listing is offset-paginated against a live, mutating catalog, so a crawl
+    # spanning many pages can see the same record twice (an insert ahead of the
+    # cursor shifts every later page by one) — verified live 2026-09-17, 33
+    # duplicate bedset ids in one 1,000-record crawl. This is landed as-is in
+    # raw (verbatim, per-page); only the derived resource tables dedupe.
     bedfile = con.sql("""
         SELECT id AS resource_id, name AS title, description, genome_digest, genome_alias,
                TRY_CAST(NULLIF(annotation_species_id, '') AS INTEGER) AS taxon_id,
@@ -225,6 +248,7 @@ def transform(cat, release, limit=None):
                license_id, 'BEDbase' AS provider,
                submission_date AS submitted, last_update_date AS updated
         FROM raw_bed
+        QUALIFY row_number() OVER (PARTITION BY id ORDER BY last_update_date DESC) = 1
     """).to_arrow_table()
 
     bedset = con.sql("""
@@ -232,6 +256,7 @@ def transform(cat, release, limit=None):
                bedset_source, 'BEDbase' AS provider,
                submission_date AS submitted, last_update_date AS updated
         FROM raw_bedset
+        QUALIFY row_number() OVER (PARTITION BY id ORDER BY last_update_date DESC) = 1
     """).to_arrow_table()
 
     con.register("bedfile", bedfile)

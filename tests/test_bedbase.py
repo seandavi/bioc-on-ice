@@ -8,6 +8,7 @@ built from the first by hand: one record's cell_type changes, one record vanishe
 one new record appears — the three transitions merge.merge has to get right.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -130,6 +131,25 @@ def test_bounded_crawl_never_retires_outside_the_slice_it_saw(cat):
     assert "retired" not in counts["resource.bedbase__bedfile"]
     live = [r for r in rows(cat, "resource.bedbase__bedfile") if r["valid_to"] is None]
     assert len(live) == 6
+
+
+def test_pagination_drift_duplicate_is_deduped_not_a_merge_error(cat, tmp_path):
+    """BEDbase's listing is offset-paginated against a live, mutating catalog: a
+    record can land twice across two pages of the same crawl (verified live
+    2026-09-17, see the module docstring). Raw keeps both rows verbatim; the
+    derived resource table must still produce exactly one, not fail the
+    uniqueness CHECK.
+    """
+    p0 = json.loads(Path(BEDSET_P0).read_text())
+    dup = p0["results"][0]
+    drifted_p1 = {"count": 4, "limit": 3, "offset": 3, "results": [dup]}
+    drifted_p1_path = tmp_path / "drifted_p1.json"
+    drifted_p1_path.write_text(json.dumps(drifted_p1))
+
+    counts = ingest(cat, REL, bedset=(BEDSET_P0, str(drifted_p1_path)))
+    assert counts["raw.bedbase__bedset"] == 4  # both copies landed verbatim
+    live = [r for r in rows(cat, "resource.bedbase__bedset") if r["resource_id"] == dup["id"]]
+    assert len(live) == 1
 
 
 def test_every_column_is_documented(cat):
