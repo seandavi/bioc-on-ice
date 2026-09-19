@@ -123,13 +123,18 @@ def _land(cat, release, identifier, source, config=None):
     arrow_schema = table.schema().as_arrow()
     con = duckdb.connect(config=config or {})
     reader = con.sql(f"SELECT *, '{release}' AS landed_in FROM {source}").to_arrow_reader(BATCH)
+    # A column added by schema evolution sits after landed_in in the live table, so
+    # batches are reordered by name below; the name sets must still agree exactly.
+    if set(reader.schema.names) != set(arrow_schema.names):
+        raise ValueError(f"{identifier}: source columns {sorted(reader.schema.names)} != "
+                         f"declared {sorted(arrow_schema.names)}")
 
     n = 0
     pending = []
     for batch in reader:
         # Casting to the declared schema is the check: a null in an identifier
         # field fails here rather than landing quietly.
-        pending.append(pa.Table.from_batches([batch]).cast(arrow_schema))
+        pending.append(pa.Table.from_batches([batch]).select(arrow_schema.names).cast(arrow_schema))
         if sum(t.num_rows for t in pending) >= ROWS_PER_COMMIT:
             _commit(table, pa.concat_tables(pending), first=not n)
             n += sum(t.num_rows for t in pending)

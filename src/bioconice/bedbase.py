@@ -1,26 +1,32 @@
 """BEDbase -> Iceberg: the resource-layer catalog of referenced BED files and bedsets.
 
-BEDbase (api.bedbase.org) catalogs 663,721 BED files across 22,189 bedsets, mostly
-GEO/ENCODE peak and region calls processed through its bedboss pipeline. The SPEC's
-`resource` namespace exists for exactly this: catalog entries with a URI, size,
-checksum and licence, objects **referenced, never ingested** — the interval data
-itself (~20 billion rows) is out of scope.
+BEDbase (bedbase.org) catalogs ~664k BED files across ~22k bedsets, mostly GEO/ENCODE
+peak and region calls processed through its bedboss pipeline. The SPEC's `resource`
+namespace exists for exactly this: catalog entries with a licence and provenance,
+objects **referenced, never ingested** — the interval data itself (~20 billion rows)
+is out of scope.
 
-There is no bulk dump, so landing is a paging crawl of `/v1/bed/list` and
-`/v1/bedset/list` (`count`/`limit`/`offset`, up to 100 records a page). DuckDB's
-`read_json` fetches the pages directly over HTTP — no urllib download loop needed —
-given the list of page URLs; `_count` makes the one request that determines how many
-pages that list has to be. version = retrieval date: BEDbase publishes no release
-number, same unversioned shape as NCBI (ncbi.py).
+**Landing is BEDbase's own monthly Parquet snapshot, never an API crawl.** The index at
+`/v1/exports` lists each snapshot's files with sha256 and record count; the files sit
+on data2.bedbase.org, so pulling them costs the API and its database nothing. Three
+files: `metadata` (the `bed` table joined with `bed_metadata`), `bedsets`, and
+`bedset_membership`. The first production landing (2026-09-18) predates our knowing
+the snapshot existed: it paged `/v1/bed/list`, whose offset listing stops answering
+past ~70k, reached 81% of the files and took the API down for ~95 minutes on the way
+(databio/bedhost#287). Do not bring the crawl back.
 
-**v1 lands the listings only.** Per-record detail (`/v1/bed/{id}/metadata?full=true`
-for size/checksum/http_uri/s3_uri/bigbed_uri/stats, and `/v1/bedset/{id}?full=true`
-for bedset membership) is one HTTP request per record — 663,721 and 22,189 of them.
-The listing endpoints already carry everything else the issue's shape asks for
-(genome_digest, taxon, assay-level annotation, the DUO licence), so v1 pays ~6,637
-+ ~222 requests total rather than ~686,000, and the URIs/stats/membership are left
-as columns to add by schema evolution in a follow-up. See issue #79 for the
-tradeoff; #80 is the companion genomic-partition enrichment, not implemented here.
+version = the snapshot's date, the label BEDbase itself publishes it under.
+
+**Raw column names predate the snapshot.** The listing API nested the sample-level
+fields under `annotation`, landed flattened as `annotation_*`; the snapshot prints them
+bare (and `organism` as `species_name`). The raw tables keep the names they were
+created with rather than being rebuilt; `_read_bed` is the whole mapping. Timestamps
+are landed as the ISO 8601 text the API printed, so a file's row is byte-identical
+whichever route landed it.
+
+Still not here (issue #115): per-file size, checksum, http/s3/bigbed URIs and the
+bedstat statistics — not in the snapshot, and one `/v1/bed/{id}/metadata?full=true`
+request per record otherwise.
 
 **Key genomes on `genome_digest`, never `genome_alias`.** The alias is free text —
 verified live 2026-09-17, one Arabidopsis (taxon 3702) record carries the alias
@@ -29,175 +35,129 @@ joined on. `annotation_species_id` has the same shape of problem: usually a sing
 NCBI taxon id as text but occasionally a comma-separated pair for a co-infection
 study ('9606, 11676', also verified live), so the taxon_id join is a TRY_CAST that
 becomes NULL rather than an error on the exceptions.
-
-`--limit N` bounds a crawl to (approximately) N records per endpoint, for a partial
-run. A bounded crawl is not a claim of completeness, so it MUST NOT retire records
-outside what it fetched: its merge scope is the fetched ids themselves rather than
-AlwaysTrue(), the same shape as `ncbi._where(taxon)` scoping a single-species run
-versus the full-dump default.
-
-**Pagination drifts under a live catalog.** BEDbase's listing is offset-paginated
-against a database that keeps changing underneath a multi-page crawl: verified
-live 2026-09-17, a 1,000-record bedset crawl saw 33 ids twice (an insert ahead of
-the offset cursor shifts every later page by one). Raw lands every page verbatim,
-duplicates included, per ADR-0002; `transform` dedupes on id before merging.
 """
 
+import hashlib
 import json
-import time
+import tempfile
 import urllib.request
+from pathlib import Path
 
 import duckdb
-from pyiceberg.expressions import And, AlwaysTrue, EqualTo, In
+from pyiceberg.expressions import AlwaysTrue, EqualTo
 
 from . import merge
 from .ncbi import _land
 
-BASE = "https://api.bedbase.org/v1"
-PAGE = 100
-
-# Explicit column specs for read_json, in the spirit of ncbi.tsv()'s auto_detect=false:
-# a renamed or removed upstream field then fails loudly in DuckDB's binder rather than
-# silently vanishing, and dates stay VARCHAR (verbatim text) instead of being parsed
-# and reformatted by DuckDB's own type inference.
-BED_COLUMNS = (
-    "STRUCT(name VARCHAR, genome_alias VARCHAR, genome_digest VARCHAR, "
-    "bed_compliance VARCHAR, data_format VARCHAR, compliant_columns BIGINT, "
-    "non_compliant_columns BIGINT, id VARCHAR, description VARCHAR, "
-    "submission_date VARCHAR, last_update_date VARCHAR, is_universe BOOLEAN, "
-    "license_id VARCHAR, processed BOOLEAN, "
-    "annotation STRUCT(organism VARCHAR, species_id VARCHAR, genotype VARCHAR, "
-    "phenotype VARCHAR, description VARCHAR, cell_type VARCHAR, cell_line VARCHAR, "
-    "tissue VARCHAR, library_source VARCHAR, assay VARCHAR, antibody VARCHAR, "
-    "target VARCHAR, treatment VARCHAR, global_sample_id VARCHAR[], "
-    "global_experiment_id VARCHAR[], original_file_name VARCHAR))[]"
-)
-BEDSET_COLUMNS = (
-    "STRUCT(id VARCHAR, name VARCHAR, md5sum VARCHAR, submission_date VARCHAR, "
-    "last_update_date VARCHAR, description VARCHAR, bedfile_count BIGINT, "
-    "author VARCHAR, source VARCHAR)[]"
-)
-ENVELOPE = "{{'count':'BIGINT','limit':'BIGINT','offset':'BIGINT','results':'{results}'}}"
+EXPORTS = "https://api.bedbase.org/v1/exports"
+# file_type in the exports index -> (raw table, manifest source key)
+FILES = {
+    "metadata": ("raw.bedbase__bed", "bedbase_bed"),
+    "bedsets": ("raw.bedbase__bedset", "bedbase_bedset"),
+    "bedset_membership": ("raw.bedbase__bedset_membership", "bedbase_bedset_membership"),
+}
 
 
-def _count(kind):
-    """The endpoint's total record count, from one un-paged request.
-
-    A User-Agent is required: bedbase.org sits behind Cloudflare, which 403s
-    urllib's default 'Python-urllib/x.y' UA. DuckDB's own HTTP client (used for
-    the paged reads themselves) is unaffected, so only this one request needs it.
-    """
-    req = urllib.request.Request(f"{BASE}/{kind}/list?limit=1&offset=0",
-                                  headers={"User-Agent": "bioc-on-ice"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)["count"]
+def _get(url):
+    # bedbase.org sits behind Cloudflare, which 403s urllib's default UA.
+    req = urllib.request.Request(url, headers={"User-Agent": "bioc-on-ice"})
+    return urllib.request.urlopen(req, timeout=300)
 
 
-def _page_urls(kind, limit=None):
-    """Every page URL for `kind` ('bed' or 'bedset'), bounded to `limit` records."""
-    count = _count(kind)
-    total = min(count, limit) if limit else count
-    return [f"{BASE}/{kind}/list?limit={PAGE}&offset={o}" for o in range(0, max(total, 1), PAGE)]
+def latest_snapshot():
+    """The newest snapshot's index entries, keyed by file_type."""
+    with _get(EXPORTS) as r:
+        entries = [e for e in json.load(r)["results"] if e["file_type"] in FILES]
+    newest = max(e["creation_date"] for e in entries)
+    snapshot = {e["file_type"]: e for e in entries if e["creation_date"] == newest}
+    if set(snapshot) != set(FILES):
+        raise ValueError(f"bedbase: snapshot {newest} lists {sorted(snapshot)}, expected {sorted(FILES)}")
+    return snapshot
 
 
-def _read_json(urls, columns):
-    # A bedset's bedfiles page can be 30 MB (ENCODE chunks, 35k records); DuckDB's
-    # default 16 MB object cap refused it on the first production landing.
-    return (f"read_json({urls!r}, columns={ENVELOPE.format(results=columns)}, "
-            f"maximum_object_size=268435456)")
+def _download(entry, directory):
+    """One snapshot file to disk, refused unless it matches the index's sha256."""
+    path = Path(directory) / entry["file_path"].rsplit("/", 1)[1]
+    digest = hashlib.sha256()
+    with _get(entry["file_path"]) as r, open(path, "wb") as out:
+        while chunk := r.read(1 << 20):
+            digest.update(chunk)
+            out.write(chunk)
+    if digest.hexdigest() != entry["checksum"]:
+        raise ValueError(f"bedbase: {entry['file_path']} sha256 {digest.hexdigest()} != "
+                         f"index {entry['checksum']}")
+    return str(path)
 
 
-def _read_bed(urls, limit=None):
-    lim = f" LIMIT {limit}" if limit else ""
+def _iso(col):
+    # The snapshot types these TIMESTAMPTZ; the raw columns are the text the API printed.
+    return f"strftime({col} AT TIME ZONE 'UTC', '%Y-%m-%dT%H:%M:%S.%fZ') AS {col}"
+
+
+def _read_bed(path):
     return f"""(
-        SELECT
-            r.id AS id, r.name AS name, r.description AS description,
-            r.genome_alias AS genome_alias, r.genome_digest AS genome_digest,
-            r.bed_compliance AS bed_compliance, r.data_format AS data_format,
-            r.compliant_columns::INTEGER AS compliant_columns,
-            r.non_compliant_columns::INTEGER AS non_compliant_columns,
-            r.is_universe AS is_universe, r.license_id AS license_id,
-            r.processed AS processed,
-            r.submission_date AS submission_date, r.last_update_date AS last_update_date,
-            r.annotation.organism AS annotation_organism,
-            r.annotation.species_id AS annotation_species_id,
-            r.annotation.genotype AS annotation_genotype,
-            r.annotation.phenotype AS annotation_phenotype,
-            r.annotation.description AS annotation_description,
-            r.annotation.cell_type AS annotation_cell_type,
-            r.annotation.cell_line AS annotation_cell_line,
-            r.annotation.tissue AS annotation_tissue,
-            r.annotation.library_source AS annotation_library_source,
-            r.annotation.assay AS annotation_assay,
-            r.annotation.antibody AS annotation_antibody,
-            r.annotation.target AS annotation_target,
-            r.annotation.treatment AS annotation_treatment,
-            array_to_string(r.annotation.global_sample_id, '|') AS annotation_global_sample_id,
-            array_to_string(r.annotation.global_experiment_id, '|') AS annotation_global_experiment_id,
-            r.annotation.original_file_name AS annotation_original_file_name
-        FROM (SELECT UNNEST(results) AS r FROM {_read_json(urls, BED_COLUMNS)})
-        {lim}
+        SELECT id, name, description, genome_alias, genome_digest, bed_compliance, data_format,
+               compliant_columns::INTEGER AS compliant_columns,
+               non_compliant_columns::INTEGER AS non_compliant_columns,
+               is_universe, license_id, processed,
+               {_iso('submission_date')}, {_iso('last_update_date')},
+               species_name AS annotation_organism, species_id AS annotation_species_id,
+               genotype AS annotation_genotype, phenotype AS annotation_phenotype,
+               cell_type AS annotation_cell_type, cell_line AS annotation_cell_line,
+               tissue AS annotation_tissue, library_source AS annotation_library_source,
+               assay AS annotation_assay, antibody AS annotation_antibody,
+               target AS annotation_target, treatment AS annotation_treatment,
+               array_to_string(global_sample_id, '|') AS annotation_global_sample_id,
+               array_to_string(global_experiment_id, '|') AS annotation_global_experiment_id,
+               original_file_name AS annotation_original_file_name,
+               NULL::VARCHAR AS annotation_description,  -- listing-API only, see schemas.py
+               header, indexed, file_indexed
+        FROM read_parquet({path!r})
     )"""
 
 
-def _read_bedset(urls, limit=None):
-    lim = f" LIMIT {limit}" if limit else ""
+def _read_bedset(path):
     return f"""(
-        SELECT
-            r.id AS id, r.name AS name, r.md5sum AS md5sum,
-            r.submission_date AS submission_date, r.last_update_date AS last_update_date,
-            r.description AS description, r.bedfile_count::INTEGER AS bedfile_count,
-            r.author AS author, r.source AS bedset_source
-        FROM (SELECT UNNEST(results) AS r FROM {_read_json(urls, BEDSET_COLUMNS)})
-        {lim}
+        SELECT id, name, md5sum, {_iso('submission_date')}, {_iso('last_update_date')},
+               description, bedfile_count::INTEGER AS bedfile_count, author,
+               source AS bedset_source, summary, bedset_means, bedset_standard_deviation,
+               bedset_stats, processed
+        FROM read_parquet({path!r})
     )"""
 
 
-# DuckDB's default thread count (one per CPU core, 64 on the ingest host) opens
-# that many concurrent HTTP connections to bedbase.org's Cloudflare edge, which
-# 503s under that burst mid-crawl (verified live: a --limit 5000 crawl at 64
-# threads failed at offset 3700; the same crawl at 8 completed clean). Capped
-# here rather than globally: every other source's `_land` call is a single
-# large file, not thousands of small ones, so this cost is bedbase-specific.
-# http_retries/backoff ride out the rarer one-off blip within a single request.
-DUCKDB_CONFIG = {"threads": "8", "http_retries": "6", "http_retry_wait_ms": "2000",
-                  "http_retry_backoff": "2", "http_timeout": "60"}
+def _read_membership(path):
+    return f"(SELECT bedset_id, bedfile_id FROM read_parquet({path!r}))"
 
 
-def _land_retrying(cat, release, identifier, source):
-    """`_land`, riding out the transient 5xx a several-thousand-page crawl hits.
+READERS = {"metadata": _read_bed, "bedsets": _read_bedset, "bedset_membership": _read_membership}
 
-    DUCKDB_CONFIG's http_retries covers a single request's blip. A crawl is
-    thousands of page fetches multiplexed inside one DuckDB read_json call
-    though, and DuckDB exposes no per-page retry hook to this caller — so if a
-    503 still escapes that, this retries `_land` itself, restarting the whole
-    (idempotent, replace-wholesale) read rather than one page.
+
+def land_raw(cat, release, paths=None):
+    """Phase 1: the snapshot's three files, whole, replacing what was there.
+
+    `paths` ({file_type: local parquet}) stands in for the download, for offline tests;
+    it skips the index, so nothing is verified and the version is the retrieval date.
     """
-    for attempt in range(5):
-        try:
-            return _land(cat, release, identifier, source, config=DUCKDB_CONFIG)
-        except duckdb.HTTPException:
-            if attempt == 4:
-                raise
-            time.sleep(10 * (attempt + 1))
-
-
-def land_raw(cat, release, limit=None, bed_urls=None, bedset_urls=None):
-    """Phase 1: both listings, verbatim, replacing what was there.
-
-    `bed_urls`/`bedset_urls` override the live paging crawl with explicit page
-    URLs (or local fixture paths) for offline tests.
-    """
-    bed_urls = bed_urls if bed_urls is not None else _page_urls("bed", limit)
-    bedset_urls = bedset_urls if bedset_urls is not None else _page_urls("bedset", limit)
-
-    n_bed = _land_retrying(cat, release, "raw.bedbase__bed", _read_bed(bed_urls, limit))
-    merge.manifest(cat, release, "bedbase_bed", f"{BASE}/bed/list", n_bed)
-
-    n_bedset = _land_retrying(cat, release, "raw.bedbase__bedset", _read_bedset(bedset_urls, limit))
-    merge.manifest(cat, release, "bedbase_bedset", f"{BASE}/bedset/list", n_bedset)
-
-    return n_bed, n_bedset
+    with tempfile.TemporaryDirectory() as tmp:
+        snapshot = {} if paths else latest_snapshot()
+        counts = {}
+        for kind, (identifier, source) in FILES.items():
+            entry = snapshot.get(kind)
+            path = paths[kind] if paths else _download(entry, tmp)
+            # SET TimeZone: _iso's AT TIME ZONE reads the session zone, not the host's.
+            n = counts[identifier] = _land(cat, release, identifier, READERS[kind](path),
+                                           config={"TimeZone": "UTC"})
+            if entry and n != entry["record_count"]:
+                raise ValueError(f"bedbase: {identifier} landed {n:,} rows, index says "
+                                 f"{entry['record_count']:,}")
+            if entry:
+                merge.manifest(cat, release, source, entry["file_path"], n,
+                               version=entry["creation_date"][:10], method="release_number",
+                               checksum=entry["checksum"])
+            else:
+                merge.manifest(cat, release, source, path, n)
+    return counts
 
 
 # Assertions on the derived rows, in icite.py's style: each SQL counts violations,
@@ -216,26 +176,19 @@ def _check(con):
                           + "; ".join(f"{k} ({v:,} rows)" for k, v in failed.items()))
 
 
-def transform(cat, release, limit=None):
-    """Phase 2: the bedfile and bedset resource entries, read back from raw.
+def transform(cat, release):
+    """Phase 2: the bedfile and bedset resource entries and their relationships, from raw.
 
-    Scope is AlwaysTrue() for a full crawl (limit=None), reproducing the retire
-    leg of merge.merge for records that vanished upstream. For a bounded --limit
-    crawl, scope narrows to the ids just fetched, so a partial run can never
-    retire records outside the slice it saw — see the module docstring.
+    A snapshot is the whole catalog, so every merge scope is everything BEDbase
+    asserts: a record absent from the snapshot is retired.
     """
     con = duckdb.connect()
-    con.register("raw_bed", cat.load_table("raw.bedbase__bed").scan().to_arrow())
-    con.register("raw_bedset", cat.load_table("raw.bedbase__bedset").scan().to_arrow())
+    for name in ("bed", "bedset", "bedset_membership"):
+        con.register(f"raw_{name}", cat.load_table(f"raw.bedbase__{name}").scan().to_arrow())
 
-    # QUALIFY dedupes on id, keeping the most-recently-updated row: BEDbase's
-    # listing is offset-paginated against a live, mutating catalog, so a crawl
-    # spanning many pages can see the same record twice (an insert ahead of the
-    # cursor shifts every later page by one) — verified live 2026-09-17, 33
-    # duplicate bedset ids in one 1,000-record crawl. This is landed as-is in
-    # raw (verbatim, per-page); only the derived resource tables dedupe.
     bedfile = con.sql("""
-        SELECT id AS resource_id, name AS title, description, genome_digest, genome_alias,
+        SELECT id AS resource_id, name AS title, description,
+               genome_digest, genome_alias,
                TRY_CAST(NULLIF(annotation_species_id, '') AS INTEGER) AS taxon_id,
                NULLIF(annotation_organism, '') AS organism,
                NULLIF(annotation_assay, '') AS assay,
@@ -251,51 +204,39 @@ def transform(cat, release, limit=None):
                license_id, 'BEDbase' AS provider,
                submission_date AS submitted, last_update_date AS updated
         FROM raw_bed
-        QUALIFY row_number() OVER (PARTITION BY id ORDER BY last_update_date DESC) = 1
     """).to_arrow_table()
 
     bedset = con.sql("""
-        SELECT id AS resource_id, name AS title, description, bedfile_count, author,
-               bedset_source, 'BEDbase' AS provider,
+        SELECT id AS resource_id, name AS title, description,
+               bedfile_count, author, bedset_source, 'BEDbase' AS provider,
                submission_date AS submitted, last_update_date AS updated
         FROM raw_bedset
-        QUALIFY row_number() OVER (PARTITION BY id ORDER BY last_update_date DESC) = 1
     """).to_arrow_table()
 
     con.register("bedfile", bedfile)
     con.register("bedset", bedset)
     _check(con)
 
-    def scope(table):
-        # A bounded crawl only saw these ids, so it is only authoritative over
-        # them: scoping to In(...) rather than AlwaysTrue() means nothing outside
-        # the slice can be retired by a partial run (module docstring).
-        if not limit:
-            return AlwaysTrue()
-        ids = [r[0] for r in con.sql(f"SELECT resource_id FROM {table}").fetchall()]
-        return In("resource_id", ids)
-
-    # The joinable form of the accession lists: one row per (bed file, derived_from_*, accession).
+    # The joinable form of the accession lists and of bedset membership: one row per
+    # (bed file, relationship, target).
     rel = con.sql("""
         SELECT DISTINCT * FROM (
             SELECT resource_id, 'derived_from_sample' AS relationship, unnest(sample_id) AS target_id,
                    'bedbase' AS source FROM bedfile
             UNION ALL
-            SELECT resource_id, 'derived_from_experiment', unnest(experiment_id), 'bedbase' FROM bedfile)
+            SELECT resource_id, 'derived_from_experiment', unnest(experiment_id), 'bedbase' FROM bedfile
+            UNION ALL
+            SELECT bedfile_id, 'member_of_bedset', bedset_id, 'bedbase' FROM raw_bedset_membership)
     """).to_arrow_table()
-    rel_scope = (EqualTo("source", "bedbase") if not limit
-                 else And(EqualTo("source", "bedbase"), scope("bedfile")))
     return {
         "resource.bedbase__bedfile": merge.merge(
-            cat, "resource.bedbase__bedfile", bedfile, release, scope("bedfile")),
+            cat, "resource.bedbase__bedfile", bedfile, release, AlwaysTrue()),
         "resource.bedbase__bedset": merge.merge(
-            cat, "resource.bedbase__bedset", bedset, release, scope("bedset")),
+            cat, "resource.bedbase__bedset", bedset, release, AlwaysTrue()),
         "resource.resource_relationship": merge.merge(
-            cat, "resource.resource_relationship", rel, release, rel_scope),
+            cat, "resource.resource_relationship", rel, release, EqualTo("source", "bedbase")),
     }
 
 
-def ingest(cat, release, limit=None, bed_urls=None, bedset_urls=None):
-    n_bed, n_bedset = land_raw(cat, release, limit, bed_urls, bedset_urls)
-    return {"raw.bedbase__bed": n_bed, "raw.bedbase__bedset": n_bedset,
-            **transform(cat, release, limit)}
+def ingest(cat, release, paths=None):
+    return {**land_raw(cat, release, paths), **transform(cat, release)}
