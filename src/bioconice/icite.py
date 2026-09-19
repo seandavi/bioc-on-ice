@@ -126,7 +126,7 @@ def land_raw(cat, release, snapshot=None, csv=None):
         csv = fetch(label, url, size)
     n = _land(cat, release, "raw.icite__metadata",
               f"(SELECT *, '{label}' AS snapshot FROM {_read(csv)})")
-    merge.manifest(cat, release, "icite", url, n, version=label, method="release_number")
+    merge.manifest(cat, release, "icite", "metadata", url, n, version=label, method="release_number")
     return label, n
 
 

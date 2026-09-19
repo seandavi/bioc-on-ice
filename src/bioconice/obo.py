@@ -139,7 +139,7 @@ def land_raw(cat, release, name, url=None):
         raise SystemExit(f"obo {name}: {url} carries no graphs[0].meta.version")
 
     n = merge.write(cat, f"raw.obo__{name}", arrow, EqualTo("release_version", version))
-    merge.manifest(cat, release, f"obo_{name}", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "obo", name, url, n, version=version, method="release_number")
     return version, n
 
 

@@ -27,16 +27,16 @@ def declare(monkeypatch, *extra):
 
 
 def test_a_new_optional_column_is_added_and_old_rows_read_null(cat, monkeypatch):
-    merge.manifest(cat, "2026.09", "old", "http://x", 1)
+    merge.manifest(cat, "2026.09", "old", "file", "http://x", 1)
 
-    declare(monkeypatch, NestedField(99, "artifact", StringType(), doc="Added later."))
+    declare(monkeypatch, NestedField(99, "licence", StringType(), doc="Added later."))
     old = cat.load_table(ID).scan().to_arrow().to_pylist()[0]
-    new = pa.Table.from_pylist([{**old, "source": "new", "artifact": "homo_sapiens"}])
+    new = pa.Table.from_pylist([{**old, "source": "new", "licence": "CC0-1.0"}])
     merge.write(cat, ID, new, EqualTo("source", "new"))   # create evolves, then the cast holds
 
     rows = {r["source"]: r for r in cat.load_table(ID).scan().to_arrow().to_pylist()}
-    assert rows["old"]["artifact"] is None and rows["new"]["artifact"] == "homo_sapiens"
-    assert cat.load_table(ID).schema().find_field("artifact").doc == "Added later."
+    assert rows["old"]["licence"] is None and rows["new"]["licence"] == "CC0-1.0"
+    assert cat.load_table(ID).schema().find_field("licence").doc == "Added later."
     # and it is idempotent: a second create changes nothing
     before = cat.load_table(ID).metadata.current_schema_id
     schemas.create(cat, ID)

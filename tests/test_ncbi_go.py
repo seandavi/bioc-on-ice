@@ -108,7 +108,8 @@ def test_all_taxa_is_one_merge_and_coexists_with_per_taxon(cat):
 
 def test_manifest_uses_retrieval_date(cat):
     load(cat)
-    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "ncbi_gene2go")
+    m = next(r for r in rows(cat, "provenance.release") 
+             if (r["source"], r["artifact"]) == ("ncbi_gene", "gene2go"))
     assert m["version_method"] == "retrieval_date"
     assert m["row_count"] == 8
     assert m["url"].endswith("gene2go.gz")

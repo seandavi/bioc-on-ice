@@ -90,9 +90,12 @@ def test_raw_is_verbatim_and_whole(cat, r7):
 
 def test_manifest_records_the_release_number(cat, r7):
     eqtlcatalogue.land_raw(cat, REL, url=r7)
-    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "eqtlcatalogue")
-    assert (m["version_method"], m["source_version"], m["row_count"], m["url"]) == (
-        "release_number", "7", 3, r7)
+    m = {r["artifact"]: r for r in rows(cat, "provenance.release")
+         if r["source"] == "eqtlcatalogue"}
+    assert {a: (r["version_method"], r["source_version"], r["row_count"], r["url"])
+            for a, r in m.items()} == {
+        "dataset": ("release_number", "7", 3, f"{r7}/data_tables/dataset_metadata_r7.tsv"),
+        "tabix_ftp_paths": ("release_number", "7", 3, f"{r7}/tabix/tabix_ftp_paths.tsv")}
 
 
 def test_a_changed_header_fails_before_landing(cat, tmp_path):

@@ -191,7 +191,7 @@ def land_raw(cat, release, experiments=None, files=None):
             _download(url, local)
         retrieval_date = _verify(local, fields, total)
         n = _land(cat, release, f"raw.encode__{name}", _source(local, fields, retrieval_date))
-        merge.manifest(cat, release, f"encode_{name}", url, n, version=retrieval_date)
+        merge.manifest(cat, release, "encode", name, url, n, version=retrieval_date)
         counts[f"raw.encode__{name}"] = n
     return counts
 

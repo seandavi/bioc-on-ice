@@ -102,7 +102,7 @@ def land_raw(cat, release, url=None):
         raise SystemExit(f"mane: {url} yielded no rows")
 
     n = merge.write(cat, "raw.ncbi__mane_summary", arrow, EqualTo("mane_version", version))
-    merge.manifest(cat, release, "mane", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "mane", "mane_summary", url, n, version=version, method="release_number")
     return version, n
 
 

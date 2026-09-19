@@ -76,7 +76,7 @@ def land_raw(cat, release, base=None):
     for kind in KINDS:
         url = f"{base or BASE}{kind}2pubtator3.gz"
         n = _land(cat, release, f"raw.pubtator3__{kind}", _read(url))
-        merge.manifest(cat, release, f"pubtator3_{kind}", url, n)
+        merge.manifest(cat, release, "pubtator3", kind, url, n)
         counts[f"raw.pubtator3__{kind}"] = n
     return counts
 

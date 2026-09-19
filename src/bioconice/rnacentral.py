@@ -121,7 +121,7 @@ def land_raw(cat, release, number=None, url=None):
     source = (f"(SELECT *, '{number}' AS rnacentral_release FROM read_csv('{url}', sep='\\t', "
               f"header=false, auto_detect=false, columns={COLUMNS}, nullstr='', quote='', escape=''))")
     n = _land(cat, release, RAW, source)
-    merge.manifest(cat, release, "rnacentral", url, n, version=number, method="release_number")
+    merge.manifest(cat, release, "rnacentral", "id_mapping", url, n, version=number, method="release_number")
     return str(number), n
 
 

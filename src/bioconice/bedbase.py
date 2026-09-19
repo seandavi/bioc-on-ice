@@ -50,11 +50,11 @@ from . import merge
 from .ncbi import _land
 
 EXPORTS = "https://api.bedbase.org/v1/exports"
-# file_type in the exports index -> (raw table, manifest source key)
+# file_type in the exports index -> raw table. The file_type is also the manifest artifact.
 FILES = {
-    "metadata": ("raw.bedbase__bed", "bedbase_bed"),
-    "bedsets": ("raw.bedbase__bedset", "bedbase_bedset"),
-    "bedset_membership": ("raw.bedbase__bedset_membership", "bedbase_bedset_membership"),
+    "metadata": "raw.bedbase__bed",
+    "bedsets": "raw.bedbase__bedset",
+    "bedset_membership": "raw.bedbase__bedset_membership",
 }
 
 
@@ -144,7 +144,7 @@ def land_raw(cat, release, paths=None):
     with tempfile.TemporaryDirectory() as tmp:
         snapshot = {} if paths else latest_snapshot()
         counts = {}
-        for kind, (identifier, source) in FILES.items():
+        for kind, identifier in FILES.items():
             entry = snapshot.get(kind)
             path = paths[kind] if paths else _download(entry, tmp)
             # SET TimeZone: _iso's AT TIME ZONE reads the session zone, not the host's.
@@ -154,11 +154,11 @@ def land_raw(cat, release, paths=None):
                 raise ValueError(f"bedbase: {identifier} landed {n:,} rows, index says "
                                  f"{entry['record_count']:,}")
             if entry:
-                merge.manifest(cat, release, source, entry["file_path"], n,
+                merge.manifest(cat, release, "bedbase", kind, entry["file_path"], n,
                                version=entry["creation_date"][:10], method="release_number",
                                checksum=entry["checksum"])
             else:
-                merge.manifest(cat, release, source, path, n)
+                merge.manifest(cat, release, "bedbase", kind, path, n)
     return counts
 
 

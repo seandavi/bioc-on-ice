@@ -97,7 +97,7 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
     n = merge.write(cat, "raw.ensembl__gtf", arrow,
                     And(EqualTo("taxon_id", info["taxon_id"]),
                         EqualTo("ensembl_release", str(ensembl_release))))
-    merge.manifest(cat, release, "ensembl", url or gtf_url(ensembl_release, species), n,
+    merge.manifest(cat, release, "ensembl", species, url or gtf_url(ensembl_release, species), n,
                    version=ensembl_release, method="release_number")
     return info, n
 

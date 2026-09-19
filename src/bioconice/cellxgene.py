@@ -150,7 +150,7 @@ def land_raw(cat, release, url=None, json_path=None, retrieval_date=None):
     retrieval_date = retrieval_date or datetime.now(timezone.utc).date().isoformat()
     _check_keys(path)
     n = _land(cat, release, "raw.cellxgene__dataset", _source(path, retrieval_date))
-    merge.manifest(cat, release, "cellxgene", url, n, version=retrieval_date, method="retrieval_date")
+    merge.manifest(cat, release, "cellxgene", "dataset", url, n, version=retrieval_date, method="retrieval_date")
     return retrieval_date, n
 
 
@@ -288,5 +288,5 @@ def ingest(cat, release, url=None, json_path=None, census_release=None, retrieva
     # row_count here is "datasets in this release referencing this Census build",
     # the closest cheap integrity number available -- the Census release itself is
     # never landed (matrices stay referenced), so there is no row count of its own.
-    merge.manifest(cat, release, "cellxgene_census", soma_uri, n, version=build, method="release_number")
+    merge.manifest(cat, release, "cellxgene", "census", soma_uri, n, version=build, method="release_number")
     return {f"raw.cellxgene__dataset [{retrieval_date}]": n, **counts}

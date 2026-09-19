@@ -96,11 +96,11 @@ def test_raw_is_landed_whole_and_verbatim(cat, tmp_path):
 
 def test_manifest_rows(cat, tmp_path):
     ingest(cat, tmp_path)
-    m = {r["source"]: r for r in rows(cat, "provenance.release")}
-    assert (m["encode_experiment"]["source_version"], m["encode_experiment"]["version_method"],
-            m["encode_experiment"]["row_count"]) == ("2026-09-18", "retrieval_date", 3)
-    assert m["encode_file"]["row_count"] == 4
-    assert m["encode_file"]["url"] == encode.report_url("File", encode.FILE_FIELDS)
+    m = {r["artifact"]: r for r in rows(cat, "provenance.release") if r["source"] == "encode"}
+    assert (m["experiment"]["source_version"], m["experiment"]["version_method"],
+            m["experiment"]["row_count"]) == ("2026-09-18", "retrieval_date", 3)
+    assert m["file"]["row_count"] == 4
+    assert m["file"]["url"] == encode.report_url("File", encode.FILE_FIELDS)
 
 
 def test_experiment_rows(cat, tmp_path):

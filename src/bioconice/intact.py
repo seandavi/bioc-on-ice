@@ -144,7 +144,7 @@ def land_raw(cat, release, version=None, url=None):
               f"(SELECT *, '{version}' AS intact_version FROM read_csv({[str(m) for m in members]}, "
               f"delim='\\t', header=true, auto_detect=false, columns={spec}, quote='', escape='', "
               f"nullstr='-', max_line_size=268435456))")
-    merge.manifest(cat, release, "intact", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "intact", "mitab", url, n, version=version, method="release_number")
     return version, n
 
 

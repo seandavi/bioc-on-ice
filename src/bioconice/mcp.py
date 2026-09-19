@@ -229,7 +229,8 @@ def _point_in_time_predicate(release):
 def _provenance_rows():
     con = _duck()
     return con.execute(
-        "SELECT release, source, source_version, version_method FROM b.provenance.release ORDER BY release"
+        "SELECT release, source, source_version, version_method, artifact "
+        "FROM b.provenance.release ORDER BY release, source, artifact"
     ).fetchall()
 
 
@@ -255,8 +256,11 @@ def resolve_release_impl(release=None, ensembl=None, icite=None, ncbi_date=None,
         return {
             "release": release,
             "predicate": _point_in_time_predicate(release),
+            # One row per (source, artifact): a source read file by file, or
+            # species by species (ensembl), has several at one release.
             "provenance": [
-                {"source": r[1], "source_version": r[2], "version_method": r[3]} for r in matches
+                {"source": r[1], "artifact": r[4], "source_version": r[2], "version_method": r[3]}
+                for r in matches
             ],
         }
 
@@ -515,7 +519,9 @@ def resolve_release(
     exactly one of: `release` (a biocOnIce id to validate and get the
     predicate for), one of `ensembl=`/`icite=`/`ncbi_date=` (shortcuts for the
     common sources), or `source=`+`source_version=` for any other row of
-    `provenance.release` (obo_cl, cellxgene, bugsigdb, ...). An unknown
+    `provenance.release` (obo, cellxgene, bugsigdb, ...). `source` is the
+    provider; which ontology, species or file a row is about is that table's
+    `artifact` column, which resolving by `release` lists. An unknown
     version errors back with the list of ones that exist.
     The one mistake to avoid: `valid_to IS NULL` alone means CURRENT, not "at
     this release" — use the predicate this tool returns for a past release,

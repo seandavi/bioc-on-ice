@@ -145,5 +145,5 @@ def land_raw(cat, release, version=DEFAULT_VERSION, url=None):
 
     n = merge.write(cat, "raw.bugsigdb__full_dump", arrow, EqualTo("bugsigdb_version", version))
     # release_number: BugSigDB publishes real, citable release tags.
-    merge.manifest(cat, release, "bugsigdb", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "bugsigdb", "full_dump", url, n, version=version, method="release_number")
     return n

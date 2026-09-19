@@ -41,7 +41,8 @@ def test_raw_is_landed_whole_as_nodes_and_edges(cat):
     assert sum(r["kind"] == "edge" for r in raw) == 4
     assert {r["release_version"] for r in raw} == {
         "http://purl.obolibrary.org/obo/cl/releases/2024-01-01/cl.json"}
-    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "obo_cl")
+    m = next(r for r in rows(cat, "provenance.release") 
+             if (r["source"], r["artifact"]) == ("obo", "cl"))
     assert m["version_method"] == "release_number"
     assert m["source_version"] == "http://purl.obolibrary.org/obo/cl/releases/2024-01-01/cl.json"
 

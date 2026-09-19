@@ -65,12 +65,12 @@ def test_raw_lands_whole_and_verbatim_with_a_manifest_row_per_file(cat, tmp_path
             if r["pmid"] == "100"] == ["-"]
     mut = {r["pmid"]: r for r in rows(cat, "raw.pubtator3__mutation")}
     assert mut["200"]["mentions"] is None and mut["200"]["resource"] == "ClinVar|dbSNP"
-    man = {r["source"]: r for r in rows(cat, "provenance.release")}
-    assert {s: man[s]["row_count"] for s in man} == {
-        "pubtator3_gene": 4, "pubtator3_disease": 1, "pubtator3_chemical": 2,
-        "pubtator3_species": 1, "pubtator3_mutation": 2}
-    assert man["pubtator3_gene"]["version_method"] == "retrieval_date"
-    assert man["pubtator3_gene"]["url"].endswith("gene2pubtator3.gz")
+    man = {r["artifact"]: r for r in rows(cat, "provenance.release")}
+    assert {r["source"] for r in man.values()} == {"pubtator3"}
+    assert {a: man[a]["row_count"] for a in man} == {
+        "gene": 4, "disease": 1, "chemical": 2, "species": 1, "mutation": 2}
+    assert man["gene"]["version_method"] == "retrieval_date"
+    assert man["gene"]["url"].endswith("gene2pubtator3.gz")
 
 
 def test_mentions_are_exploded_by_resource_and_concept_and_sharded(cat, tmp_path):

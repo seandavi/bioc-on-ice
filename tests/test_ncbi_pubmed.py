@@ -70,7 +70,8 @@ def test_rerun_is_idempotent_and_taxa_are_independent(cat, g2p):
 
 def test_manifest_and_column_docs(cat, g2p):
     ncbi_pubmed.ingest(cat, REL, [9606], url=g2p)
-    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "ncbi_gene2pubmed")
+    m = next(r for r in rows(cat, "provenance.release") 
+             if (r["source"], r["artifact"]) == ("ncbi_gene", "gene2pubmed"))
     assert m["version_method"] == "retrieval_date"
     assert m["row_count"] == 5 and m["retrieved_at"].startswith("20")
 

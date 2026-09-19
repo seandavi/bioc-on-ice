@@ -112,9 +112,10 @@ def test_another_writer_is_neither_retired_nor_retires(cat, tmp_path):
 
 def test_manifest_has_a_row_per_file(cat, tmp_path):
     load(cat, tmp_path)
-    m = {r["source"]: r for r in rows(cat, "provenance.release")}
-    assert m["ncbi_gene_orthologs"]["row_count"] == 5 and m["ncbi_gene_group"]["row_count"] == 2
-    assert m["ncbi_gene_group"]["url"].endswith("gene_group.gz")
+    m = {r["artifact"]: r for r in rows(cat, "provenance.release")}
+    assert {r["source"] for r in m.values()} == {"ncbi_gene"}
+    assert m["gene_orthologs"]["row_count"] == 5 and m["gene_group"]["row_count"] == 2
+    assert m["gene_group"]["url"].endswith("gene_group.gz")
     assert {r["version_method"] for r in m.values()} == {"retrieval_date"}
 
 

@@ -82,7 +82,8 @@ def test_snapshot_lands_whole(cat, tmp_path):
     # TIMESTAMPTZ lands as exactly the text the API printed, so a re-land is no change
     assert one["submission_date"] == "2025-05-22T12:02:50.145308Z"
     assert one["indexed"] is True
-    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "bedbase_bed")
+    m = next(r for r in rows(cat, "provenance.release") 
+             if (r["source"], r["artifact"]) == ("bedbase", "metadata"))
     assert m["version_method"] == "retrieval_date"  # local paths: no index, no snapshot date
 
 

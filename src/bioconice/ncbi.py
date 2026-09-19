@@ -155,10 +155,11 @@ def land_raw(cat, release, urls=None):
     counts = {f"raw.ncbi__{name}": _land(cat, release, f"raw.ncbi__{name}",
                                          tsv(urls.get(name, f"{DATA}{name}.gz"), COLUMNS[name]))
               for name in COLUMNS}
-    # One source, three files: `url` is the directory they came from and
-    # `row_count` their total, because the manifest is keyed (release, source).
-    # Per-file provenance needs a third key column — issue #8.
-    merge.manifest(cat, release, "ncbi_gene", DATA, sum(counts.values()))
+    # One source, three files, a manifest row each (#96): the recorded URL is
+    # the canonical one even when `urls` points a test at a fixture.
+    for name in COLUMNS:
+        merge.manifest(cat, release, "ncbi_gene", name, f"{DATA}{name}.gz",
+                       counts[f"raw.ncbi__{name}"])
     return counts
 
 

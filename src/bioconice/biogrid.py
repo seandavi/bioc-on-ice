@@ -175,7 +175,7 @@ def land_raw(cat, release, version=None, url=None):
     n = _land(cat, release, "raw.biogrid__interactions",
               f"(SELECT *, '{version}' AS biogrid_version FROM read_csv('{txt}', delim='\\t', "
               f"header=true, auto_detect=false, columns={spec}, quote='', escape='', nullstr='-'))")
-    merge.manifest(cat, release, "biogrid", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "biogrid", "interactions", url, n, version=version, method="release_number")
     return version, n
 
 

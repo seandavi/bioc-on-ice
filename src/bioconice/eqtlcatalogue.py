@@ -96,12 +96,13 @@ def land_raw(cat, release, url=None, version=None):
     checkout. Returns (version, {table: rows}).
     """
     url, version = (url or URL).rstrip("/"), version or RELEASE
-    raw = {
-        "raw.eqtlcatalogue__dataset": _read(
-            f"{url}/data_tables/dataset_metadata_r{version}.tsv", DATASET_COLUMNS, version, release),
-        "raw.eqtlcatalogue__tabix_ftp_paths": _read(
-            f"{url}/tabix/tabix_ftp_paths.tsv", PATH_COLUMNS, version, release),
+    files = {
+        "raw.eqtlcatalogue__dataset": (
+            f"{url}/data_tables/dataset_metadata_r{version}.tsv", DATASET_COLUMNS),
+        "raw.eqtlcatalogue__tabix_ftp_paths": (f"{url}/tabix/tabix_ftp_paths.tsv", PATH_COLUMNS),
     }
+    raw = {identifier: _read(file, columns, version, release)
+           for identifier, (file, columns) in files.items()}
     # The path table names no release, so it is about to be labelled with the
     # metadata file's. That label is only true if the two name the same
     # datasets, no more, no fewer — checked before either is written.
@@ -114,8 +115,9 @@ def land_raw(cat, release, url=None, version=None):
     counts = {identifier: merge.write(cat, identifier, arrow,
                                       EqualTo("eqtlcatalogue_release", version))
               for identifier, arrow in raw.items()}
-    merge.manifest(cat, release, "eqtlcatalogue", url, counts["raw.eqtlcatalogue__dataset"],
-                   version=version, method="release_number")
+    for identifier, (file, _) in files.items():
+        merge.manifest(cat, release, "eqtlcatalogue", identifier.split("__")[1], file,
+                       counts[identifier], version=version, method="release_number")
     return version, counts
 
 

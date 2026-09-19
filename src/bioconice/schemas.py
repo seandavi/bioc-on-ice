@@ -116,6 +116,11 @@ class TableDef:
         names = list(self.business_key)
         if any(f.name == "valid_from" for f in self.schema.fields):
             names.append("valid_from")
+        # Iceberg accepts only required columns as identifier fields. A key with
+        # an optional column (the manifest's `artifact`, added by evolution, #96)
+        # declares none: a partial key would assert a uniqueness the rows lack.
+        if not all(self.schema.find_field(n).required for n in names):
+            return self.schema
         ids = [self.schema.find_field(n).field_id for n in names]
         return Schema(*self.schema.fields, identifier_field_ids=ids)
 
@@ -350,7 +355,8 @@ TABLES = {
                             "YYYY.MM.NN. Zero-padded because '2026.10.10' sorts before "
                             "'2026.10.2' and release ordering would otherwise invert."),
             NestedField(2, "source", StringType(), required=True,
-                        doc="Source key, e.g. ensembl, ncbi_gene, go."),
+                        doc="The provider, e.g. ensembl, ncbi_gene, obo. Which of its files or "
+                            "species a row describes is `artifact`."),
             NestedField(3, "source_version", StringType(),
                         doc="The upstream version in the SOURCE'S OWN vocabulary, never "
                             "normalised: '116' for Ensembl, '2026-08-06' for a source that "
@@ -366,10 +372,20 @@ TABLES = {
             NestedField(6, "url", StringType(), doc="Canonical URL fetched."),
             NestedField(7, "checksum", StringType(), doc="SHA-256 of the retrieved bytes, where computed."),
             NestedField(8, "row_count", LongType(),
-                        doc="Rows landed from this source, as a cheap integrity check."),
+                        doc="Rows landed from this artifact, as a cheap integrity check."),
+            # Optional only because Iceberg cannot add a required column to a live
+            # table (_evolve); every writer has set it since #96.
+            NestedField(9, "artifact", StringType(),
+                        doc="What of the source this row describes, in the source's own naming: "
+                            "the species for ensembl ('homo_sapiens'), the ontology for obo "
+                            "('cl'), otherwise the file ('gene_info', 'gene2go', 'studies'). "
+                            "Part of the key. Always written since 2026-09; NULL only on an "
+                            "earlier row that summarised several files at once (ncbi_gene, "
+                            "gwas_catalog, eqtlcatalogue) — its row_count is their total."),
         ),
-        business_key=("release", "source"),
-        comment="One row per (biocOnIce release, source): what this release was built from. "
+        business_key=("release", "source", "artifact"),
+        comment="One row per (biocOnIce release, source, artifact): what this release was built "
+                "from, file by file. "
                 "This is what makes a release reproducible — resolve it here to each "
                 "source's own version, then query each table at that release. Durable "
                 "by design: unlike Iceberg snapshot summaries it does not expire.",

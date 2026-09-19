@@ -214,10 +214,12 @@ def land_raw(cat, release, url=None):
             counts[identifier] = merge.write(cat, identifier, arrow,
                                              EqualTo("gwas_catalog_release", version))
 
-    # One source, two files: `url` is the directory they came from and
-    # `row_count` their total, as for ncbi_gene (per-file provenance is issue #8).
-    merge.manifest(cat, release, "gwas_catalog", url, sum(counts.values()), version=version,
-                   method="release_number" if dated else "retrieval_date")
+    # One source, two files, a manifest row each (#96), written only once both
+    # have landed so a half-finished release is never recorded.
+    for identifier, (name, _) in FILES.items():
+        merge.manifest(cat, release, "gwas_catalog", identifier.split("__")[1], url + name,
+                       counts[identifier], version=version,
+                       method="release_number" if dated else "retrieval_date")
     return version, counts
 
 
