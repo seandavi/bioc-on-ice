@@ -87,6 +87,8 @@ def resolve(snapshot=None):
 def fetch(label, url, size):
     """Download and extract the snapshot CSV, once: re-running reuses what is on disk.
 
+    Returns (the zip, the CSV): the zip is what was retrieved, so it is what is hashed.
+
     The zip is ~14 GB and the CSV ~40 GB, so they go under BIOCONICE_SCRATCH
     (default: the system temp dir) rather than through memory.
     """
@@ -102,7 +104,7 @@ def fetch(label, url, size):
         csv = scratch / names[0]
         if not csv.exists():
             z.extract(names[0], scratch)
-    return csv
+    return zpath, csv
 
 
 def _read(csv):
@@ -119,14 +121,19 @@ def _read(csv):
 
 def land_raw(cat, release, snapshot=None, csv=None):
     """Phase 1: the snapshot CSV, verbatim and whole, replacing the previous snapshot."""
+    checksum = None
     if csv:
         label, url = snapshot or "local", str(csv)
     else:
         label, url, size = resolve(snapshot)
-        csv = fetch(label, url, size)
+    facts = merge.reading(release, "icite", "metadata", url)
+    if not csv:
+        zpath, csv = fetch(label, url, size)
+        checksum = merge.sha256(zpath)   # 14 GB: about a minute, against an hours-long landing
     n = _land(cat, release, "raw.icite__metadata",
               f"(SELECT *, '{label}' AS snapshot FROM {_read(csv)})")
-    merge.manifest(cat, release, "icite", "metadata", url, n, version=label, method="release_number")
+    merge.manifest(cat, release, "icite", "metadata", url, n, version=label, method="release_number",
+                   checksum=checksum, **facts)
     return label, n
 
 

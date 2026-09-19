@@ -54,7 +54,7 @@ def test_manifest_has_a_row_per_ncbi_dump(cat):
 def seed_legacy(cat, rows):
     """The table as it was before #96: no artifact column, keyed (release, source)."""
     d = schemas.TABLES[ID]
-    old = Schema(*[f for f in d.schema.fields if f.name != "artifact"], identifier_field_ids=[1, 2])
+    old = Schema(*[f for f in d.schema.fields if f.field_id <= 8], identifier_field_ids=[1, 2])
     cat.create_namespace("provenance")
     table = cat.create_table(ID, schema=old)
     base = {"version_method": "retrieval_date", "retrieved_at": "2026-09-01T00:00:00+00:00",
@@ -92,7 +92,7 @@ def test_migrate_manifest_backfills_once_and_leaves_the_rest_alone(cat):
         ("2026.09", "cellxgene", "census"), ("2026.09", "hgnc", "complete_set"),
         ("2026.09", "gwas_catalog", None)}
     # nothing but source and artifact moved on any row
-    keep = lambda r: {k: v for k, v in r.items() if k not in ("source", "artifact")}  # noqa: E731
+    keep = lambda r: {k: r[k] for k in before[0] if k != "source"}  # noqa: E731
     assert sorted(map(str, map(keep, m.values()))) == sorted(map(str, map(keep, before)))
     assert cat.load_table(ID).schema().identifier_field_ids == []
 
@@ -108,3 +108,65 @@ def test_migrate_manifest_drops_a_legacy_row_an_ingest_has_already_replaced(cat)
     stats = merge.migrate_manifest(cat)
     assert (stats["rows_before"], stats["dropped_superseded"], stats["rows_after"]) == (2, 1, 1)
     assert manifest(cat)["2026.09", "obo", "cl"]["url"] == "http://new"
+
+
+# --- issue #117: checksum, HTTP validators, snapshot properties
+
+def test_head_asks_nothing_of_a_local_path_and_survives_a_refusal(monkeypatch):
+    def offline(*a, **kw):
+        raise AssertionError("a local path must not reach the network")
+    monkeypatch.setattr(merge.urllib.request, "urlopen", offline)
+    none = {"etag": None, "last_modified": None}
+    assert merge.head(str(HERE / "tiny.gtf")) == none == merge.head("s3://bucket/soma/")
+
+    class Response:
+        headers = {"ETag": '"5f3-abc"', "Last-Modified": "Thu, 04 Dec 2025 17:02:11 GMT"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    seen = []
+    monkeypatch.setattr(merge.urllib.request, "urlopen",
+                        lambda req, timeout: seen.append(req.get_method()) or Response())
+    assert merge.head("https://example.org/f.gz") == {
+        "etag": '"5f3-abc"', "last_modified": "Thu, 04 Dec 2025 17:02:11 GMT"}
+    assert seen == ["HEAD"]
+
+    def refused(req, timeout):
+        raise OSError("405")
+    monkeypatch.setattr(merge.urllib.request, "urlopen", refused)
+    assert merge.head("https://example.org/f.gz") == none
+
+
+def test_manifest_records_the_validators_verbatim(cat):
+    merge.manifest(cat, "2026.09", "mane", "mane_summary", "https://x/f", 1,
+                   etag='W/"it\'s"', last_modified="Thu, 04 Dec 2025 17:02:11 GMT")
+    m = manifest(cat)["2026.09", "mane", "mane_summary"]
+    assert (m["etag"], m["last_modified"], m["checksum"]) == (
+        'W/"it\'s"', "Thu, 04 Dec 2025 17:02:11 GMT", None)
+
+
+def test_sha256_is_of_the_file(tmp_path):
+    (tmp_path / "f").write_bytes(b"abc")
+    assert merge.sha256(tmp_path / "f") == (
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+
+
+def test_every_snapshot_says_what_it_was_built_from(cat):
+    gtf = str(HERE / "tiny.gtf")
+    ensembl.land_raw(cat, "2026.09", "homo_sapiens", "116", url=gtf, info=HUMAN)
+    ensembl.transform(cat, "2026.09", HUMAN, "116")
+
+    raw = cat.load_table("raw.ensembl__gtf").current_snapshot()
+    fetched = {"bioc.release": "2026.09", "bioc.source": "ensembl",
+               "bioc.artifact": "homo_sapiens", "bioc.url": gtf}
+    props = lambda s: {k: v for k, v in s.summary.additional_properties.items()  # noqa: E731
+                       if k.startswith("bioc.")}
+    assert props(raw) == fetched == props(cat.load_table(ID).current_snapshot())
+    # a derived table names its input snapshot rather than a url: follow it to the raw one
+    assert props(cat.load_table("annotation.gene").current_snapshot()) == {
+        "bioc.release": "2026.09", "bioc.source": "ensembl",
+        "bioc.input.raw.ensembl__gtf": str(raw.snapshot_id)}

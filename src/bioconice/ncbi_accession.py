@@ -56,8 +56,9 @@ def land_raw(cat, release, url=None):
     source = ("(SELECT * REPLACE (CASE WHEN start_position_on_the_genomic_accession IS NOT NULL "
               f"THEN coalesce(orientation, '-') ELSE orientation END AS orientation) "
               f"FROM {tsv(url or URL, COLUMNS)})")
+    facts = merge.reading(release, "ncbi_gene", "gene2accession", url or URL)
     n = _land(cat, release, "raw.ncbi__gene2accession", source)
-    merge.manifest(cat, release, "ncbi_gene", "gene2accession", URL, n)
+    merge.manifest(cat, release, "ncbi_gene", "gene2accession", URL, n, **facts)
     return n
 
 

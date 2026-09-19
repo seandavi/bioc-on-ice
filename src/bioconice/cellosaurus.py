@@ -73,6 +73,7 @@ def land_raw(cat, release, url=None):
     Returns (version, rows). `url` is a local copy, for tests and pinned reruns.
     """
     url = url or URL
+    facts = merge.reading(release, "cellosaurus", "release", url)
     con = duckdb.connect()
     # The file is read as one string and split on newlines, rather than through
     # read_csv: the split keeps blank header lines and gives every line its
@@ -115,7 +116,8 @@ def land_raw(cat, release, url=None):
 
     n = merge.write(cat, "raw.cellosaurus__release", arrow.drop_columns(["malformed"]),
                     EqualTo("cellosaurus_version", version))
-    merge.manifest(cat, release, "cellosaurus", "release", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "cellosaurus", "release", url, n, version=version, method="release_number",
+                   **facts)
     return version, n
 
 

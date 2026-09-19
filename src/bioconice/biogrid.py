@@ -115,7 +115,7 @@ def latest():
 
 
 def fetch(source, version, url):
-    """Download a zip and extract every member, once; returns the members' paths.
+    """Download a zip and extract every member, once; returns (the zip, the members' paths).
 
     Streamed to disk at both steps — the zip is 0.2 GB (BioGRID) to 1.3 GB
     (IntAct) and the text 1.5 to 11 GB — under BIOCONICE_SCRATCH (default: the
@@ -135,7 +135,7 @@ def fetch(source, version, url):
             out = scratch / info.filename
             if not (out.exists() and out.stat().st_size == info.file_size):
                 z.extract(info, scratch)
-        return [scratch / n for n in sorted(z.namelist())]
+        return zpath, [scratch / n for n in sorted(z.namelist())]
 
 
 def check_header(path, columns):
@@ -162,7 +162,8 @@ def land_raw(cat, release, version=None, url=None):
     else:
         version = version or latest()
         url = DOWNLOAD.format(v=version)
-    members = fetch("biogrid", version, url)
+    facts = merge.reading(release, "biogrid", "interactions", url)
+    zpath, members = fetch("biogrid", version, url)
     if len(members) != 1:
         raise SystemExit(f"biogrid: {url} should hold one text file, found {[m.name for m in members]}")
     txt = members[0]
@@ -175,7 +176,8 @@ def land_raw(cat, release, version=None, url=None):
     n = _land(cat, release, "raw.biogrid__interactions",
               f"(SELECT *, '{version}' AS biogrid_version FROM read_csv('{txt}', delim='\\t', "
               f"header=true, auto_detect=false, columns={spec}, quote='', escape='', nullstr='-'))")
-    merge.manifest(cat, release, "biogrid", "interactions", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "biogrid", "interactions", url, n, version=version,
+                   method="release_number", checksum=merge.sha256(zpath), **facts)
     return version, n
 
 

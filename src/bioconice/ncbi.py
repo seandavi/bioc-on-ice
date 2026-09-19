@@ -76,7 +76,7 @@ BATCH = 1_000_000
 ROWS_PER_COMMIT = 5_000_000
 
 
-def _commit(table, arrow, first):
+def _commit(table, arrow, first, properties):
     """One overwrite-or-append, riding out the catalog's commit rate limit.
 
     pyiceberg's own retry gives up within seconds; the 429 window is longer
@@ -84,7 +84,7 @@ def _commit(table, arrow, first):
     """
     for attempt in range(10):
         try:
-            (table.overwrite if first else table.append)(arrow)
+            (table.overwrite if first else table.append)(arrow, snapshot_properties=properties)
             return
         except RESTError as err:
             if not schemas.is_rate_limit(err):
@@ -131,35 +131,38 @@ def _land(cat, release, identifier, source, config=None):
 
     n = 0
     pending = []
+    properties = merge.snapshot_properties(identifier, release)
     for batch in reader:
         # Casting to the declared schema is the check: a null in an identifier
         # field fails here rather than landing quietly.
         pending.append(pa.Table.from_batches([batch]).select(arrow_schema.names).cast(arrow_schema))
         if sum(t.num_rows for t in pending) >= ROWS_PER_COMMIT:
-            _commit(table, pa.concat_tables(pending), first=not n)
+            _commit(table, pa.concat_tables(pending), not n, properties)
             n += sum(t.num_rows for t in pending)
             pending = []
     if pending:
-        _commit(table, pa.concat_tables(pending), first=not n)
+        _commit(table, pa.concat_tables(pending), not n, properties)
         n += sum(t.num_rows for t in pending)
     if not n:
         # Otherwise a bad URL silently leaves the previous landing in place and
         # reports success.
         raise SystemExit(f"{identifier}: {source} yielded no rows")
+    merge.landed(identifier, table)
     return n
 
 
 def land_raw(cat, release, urls=None):
     """Phase 1: all three NCBI Gene dumps, verbatim and unfiltered."""
     urls = urls or {}
-    counts = {f"raw.ncbi__{name}": _land(cat, release, f"raw.ncbi__{name}",
-                                         tsv(urls.get(name, f"{DATA}{name}.gz"), COLUMNS[name]))
-              for name in COLUMNS}
+    counts = {}
     # One source, three files, a manifest row each (#96): the recorded URL is
     # the canonical one even when `urls` points a test at a fixture.
     for name in COLUMNS:
-        merge.manifest(cat, release, "ncbi_gene", name, f"{DATA}{name}.gz",
-                       counts[f"raw.ncbi__{name}"])
+        url = urls.get(name, f"{DATA}{name}.gz")
+        facts = merge.reading(release, "ncbi_gene", name, url)
+        n = counts[f"raw.ncbi__{name}"] = _land(cat, release, f"raw.ncbi__{name}",
+                                                tsv(url, COLUMNS[name]))
+        merge.manifest(cat, release, "ncbi_gene", name, f"{DATA}{name}.gz", n, **facts)
     return counts
 
 

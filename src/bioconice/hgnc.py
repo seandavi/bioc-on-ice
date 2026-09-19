@@ -82,6 +82,7 @@ def land_raw(cat, release, url=None):
     dated = re.search(r"hgnc_complete_set_(\d{4}-\d{2}-\d{2})\.", url)
     version = dated.group(1) if dated else str(datetime.now(timezone.utc).date())
 
+    facts = merge.reading(release, "hgnc", "complete_set", url)
     con = duckdb.connect()
     select = ", ".join(f'"{c}" AS {c.replace(".", "_").replace("-", "_")}' for c in COLUMNS)
     # The dialect is stated rather than sniffed. HGNC quotes the cells that hold
@@ -98,7 +99,7 @@ def land_raw(cat, release, url=None):
 
     n = merge.write(cat, "raw.hgnc__complete_set", arrow, EqualTo("hgnc_version", version))
     merge.manifest(cat, release, "hgnc", "complete_set", url, n, version=version,
-                   method="release_number" if dated else "retrieval_date")
+                   method="release_number" if dated else "retrieval_date", **facts)
     return version, n
 
 

@@ -39,8 +39,10 @@ go insert-only and compute `valid_to` as a `LEAD()` window in a view, which
 is where Data Vault has moved.
 """
 
+import hashlib
 import re
 import time
+import urllib.request
 from datetime import datetime, timezone
 
 import duckdb
@@ -51,7 +53,84 @@ from pyiceberg.expressions import AlwaysTrue, And, EqualTo, IsNull
 from . import schemas
 
 
-def overwrite(cat, identifier, table, arrow, overwrite_filter):
+# What this process is reading, as Iceberg snapshot properties. ADR-0007 puts
+# per-table fetch facts on the snapshot and the durable record in the manifest;
+# this is the snapshot half, and `snapshot_properties` is the one place either
+# write path (overwrite here, ncbi._commit) gets it from.
+# ponytail: module state, not an argument threaded through every lander and
+# transform — the CLI runs one ingest per process, and `reading` starts afresh
+# when the source changes. Its ceiling is a process that interleaves two
+# sources' landing and deriving, or derives without landing (--transform-only:
+# release only, no inputs). Pass the properties explicitly if that ever matters.
+_reading = {}
+
+
+def head(url):
+    """ETag and Last-Modified of `url`, by HEAD; both None for anything not http(s).
+
+    For a lander that hands the URL straight to DuckDB there are no local bytes
+    to hash, and a second full download only to hash it is not worth a 40 GB
+    dump: the server's validators say which bytes were on offer. A local path
+    (every offline test) or s3:// asks nothing. A server that refuses HEAD, or
+    is down, yields None rather than failing an ingest — the data matters more
+    than this note about it.
+    """
+    facts = {"etag": None, "last_modified": None}
+    if not str(url).startswith(("http://", "https://")):
+        return facts
+    # A User-Agent because Cloudflare-fronted sources 403 urllib's default.
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "bioc-on-ice"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return {"etag": r.headers.get("ETag"), "last_modified": r.headers.get("Last-Modified")}
+    except OSError:
+        return facts
+
+
+def sha256(path):
+    """SHA-256 of a file a lander downloaded: the manifest `checksum` of the retrieved bytes."""
+    with open(path, "rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def reading(release, source, artifact, url):
+    """Declare what is about to be read; returns `head(url)` for the manifest.
+
+    Called before the read, so every snapshot committed from here on says what
+    it was built from, and so the validators are those of the bytes about to be
+    read rather than of a file regenerated meanwhile (NCBI's are, nightly).
+    `url` is where the bytes really come from — a fixture in tests.
+    """
+    if _reading.get("bioc.source") != source:
+        _reading.clear()  # another source's ingest: its raw snapshots are not this one's inputs
+    for key, value in (("release", release), ("source", source), ("artifact", artifact),
+                       ("url", url)):
+        _reading[f"bioc.{key}"] = str(value)
+    return head(url)
+
+
+def snapshot_properties(identifier, release=None):
+    """The properties for one commit to `identifier`.
+
+    A raw table (and the manifest) says what was fetched: release, source,
+    artifact, url. A derived table says release, source and the raw snapshots it
+    was built from (`bioc.input.<raw table>`, those landed by this process) —
+    not an artifact or url, because after three dumps the last one declared is
+    not what it was derived from; follow the input snapshot for those.
+    """
+    fetched = identifier.startswith(("raw.", "provenance."))
+    drop = "bioc.input." if fetched else ("bioc.artifact", "bioc.url")
+    return {**{k: v for k, v in _reading.items() if not k.startswith(drop)},
+            **({"bioc.release": release} if release else {})}
+
+
+def landed(identifier, table):
+    """Note a raw table's new snapshot, so what is derived next can name its input."""
+    if identifier.startswith("raw.") and (snapshot := table.current_snapshot()):
+        _reading[f"bioc.input.{identifier}"] = str(snapshot.snapshot_id)
+
+
+def overwrite(cat, identifier, table, arrow, overwrite_filter, release=None):
     """One filtered overwrite, riding out the two transient commit failures.
 
     Two production loads commit to the same R2 Data Catalog at once — every
@@ -64,7 +143,9 @@ def overwrite(cat, identifier, table, arrow, overwrite_filter):
     """
     for attempt in range(8):
         try:
-            table.overwrite(arrow, overwrite_filter=overwrite_filter)
+            table.overwrite(arrow, overwrite_filter=overwrite_filter,
+                            snapshot_properties=snapshot_properties(identifier, release))
+            landed(identifier, table)
             return
         except CommitFailedException:
             time.sleep(2 ** attempt)
@@ -206,7 +287,7 @@ def merge(cat, identifier, incoming, release, scope):
     stats = dict(con.sql("SELECT _state, count(*) FROM merged GROUP BY 1").fetchall())
     cols = ", ".join(f'"{f.name}"' for f in schema.fields)
     final = con.sql(f"SELECT {cols} FROM merged").to_arrow_table()
-    overwrite(cat, identifier, table, final.cast(table.schema().as_arrow()), scope)
+    overwrite(cat, identifier, table, final.cast(table.schema().as_arrow()), scope, release)
 
     return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "reopened", "superseded", "retired")),
             "unchanged": stats.get("unchanged", 0),
@@ -218,12 +299,18 @@ def write(cat, identifier, arrow, overwrite_filter):
     table = schemas.create(cat, identifier)
     # Casting to the declared schema is the check: a column we failed to produce,
     # or a null in an identifier field, fails here rather than landing quietly.
-    overwrite(cat, identifier, table, arrow.cast(table.schema().as_arrow()), overwrite_filter)
+    # Selected by name first, as ncbi._land does: a column added by evolution sits
+    # last in the live table, wherever the declaration puts it.
+    target = table.schema().as_arrow()
+    if set(arrow.column_names) != set(target.names):  # select() alone would drop an extra
+        raise ValueError(f"{identifier}: columns {sorted(arrow.column_names)} != "
+                         f"declared {sorted(target.names)}")
+    overwrite(cat, identifier, table, arrow.select(target.names).cast(target), overwrite_filter)
     return arrow.num_rows
 
 
 def manifest(cat, release, source, artifact, url, rows, version=None, method="retrieval_date",
-             checksum=None):
+             checksum=None, etag=None, last_modified=None):
     """Record what this release was built from — ADR-0007.
 
     `source` is the provider and `artifact` the one thing of its that was read:
@@ -234,17 +321,19 @@ def manifest(cat, release, source, artifact, url, rows, version=None, method="re
     versioned by the retrieval date; one with a real, citable release label
     passes `version` and method="release_number", so the version the source
     itself uses is kept.
+
+    `checksum` is the sha256 of the bytes retrieved (`sha256`), or the one the
+    source publishes; `etag` / `last_modified` come from `reading`, for a URL
+    read without a local copy. Any of them may be unknown, and is then NULL.
     """
     now = datetime.now(timezone.utc)
-    con = duckdb.connect()
-    arrow = con.sql(f"""
-        SELECT '{release}' AS release, '{source}' AS source,
-               '{version or now.date()}' AS source_version,
-               '{method}' AS version_method,
-               '{now.isoformat(timespec="seconds")}' AS retrieved_at,
-               '{url}' AS url, {repr(checksum) if checksum else 'NULL'}::VARCHAR AS checksum, {rows}::BIGINT AS row_count,
-               {repr(artifact) if artifact else 'NULL'}::VARCHAR AS artifact
-    """).to_arrow_table()
+    # Built as values, not SQL text: an ETag is a quoted string.
+    arrow = pa.Table.from_pylist([{
+        "release": release, "source": source, "source_version": str(version or now.date()),
+        "version_method": method, "retrieved_at": now.isoformat(timespec="seconds"),
+        "url": str(url), "checksum": checksum, "row_count": rows, "artifact": artifact,
+        "etag": etag, "last_modified": last_modified,
+    }], schema=schemas.TABLES["provenance.release"].schema.as_arrow())
     # A manifest row states what a completed ingest used; it is not versioned,
     # so it is replaced wholesale for its key rather than merged. The match is
     # null-safe because rows from before #96 have no artifact and `=` never

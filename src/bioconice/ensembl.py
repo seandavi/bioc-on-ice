@@ -129,6 +129,8 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
     """Phase 1: the GTF, verbatim, into raw.ensembl__gtf."""
     _migrated(cat)
     info = info or species_info(ensembl_release, species)
+    url = url or gtf_url(ensembl_release, species)
+    facts = merge.reading(release, "ensembl", species, url)
     con = duckdb.connect()
     arrow = con.sql(f"""
         SELECT seqname, source, feature, "start", "end", score, strand, frame, attribute,
@@ -141,7 +143,7 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
     """).to_arrow_table()
     n = merge.write(cat, "raw.ensembl__gtf", arrow, _raw_scope(info, ensembl_release))
     merge.manifest(cat, release, "ensembl", species, url or gtf_url(ensembl_release, species), n,
-                   version=ensembl_release, method="release_number")
+                   version=ensembl_release, method="release_number", **facts)
     return info, n
 
 

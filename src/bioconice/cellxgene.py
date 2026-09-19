@@ -148,9 +148,11 @@ def land_raw(cat, release, url=None, json_path=None, retrieval_date=None):
     url = url or DATASETS_URL
     path = json_path or url
     retrieval_date = retrieval_date or datetime.now(timezone.utc).date().isoformat()
+    facts = merge.reading(release, "cellxgene", "dataset", path)
     _check_keys(path)
     n = _land(cat, release, "raw.cellxgene__dataset", _source(path, retrieval_date))
-    merge.manifest(cat, release, "cellxgene", "dataset", url, n, version=retrieval_date, method="retrieval_date")
+    merge.manifest(cat, release, "cellxgene", "dataset", url, n, version=retrieval_date, method="retrieval_date",
+                   **facts)
     return retrieval_date, n
 
 

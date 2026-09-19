@@ -146,6 +146,7 @@ def land_raw(cat, release, paths=None):
         counts = {}
         for kind, identifier in FILES.items():
             entry = snapshot.get(kind)
+            facts = merge.reading(release, "bedbase", kind, entry["file_path"] if entry else paths[kind])
             path = paths[kind] if paths else _download(entry, tmp)
             # SET TimeZone: _iso's AT TIME ZONE reads the session zone, not the host's.
             n = counts[identifier] = _land(cat, release, identifier, READERS[kind](path),
@@ -156,9 +157,9 @@ def land_raw(cat, release, paths=None):
             if entry:
                 merge.manifest(cat, release, "bedbase", kind, entry["file_path"], n,
                                version=entry["creation_date"][:10], method="release_number",
-                               checksum=entry["checksum"])
+                               checksum=entry["checksum"], **facts)
             else:
-                merge.manifest(cat, release, "bedbase", kind, path, n)
+                merge.manifest(cat, release, "bedbase", kind, path, n, **facts)
     return counts
 
 
