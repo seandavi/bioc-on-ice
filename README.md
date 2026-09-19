@@ -72,7 +72,7 @@ dataset is a query, and the bytes come from the original host.
 | --- | --- | --- |
 | [CELLxGENE Discover](https://cellxgene.cziscience.com) | 2,228 datasets in 391 collections: 291.8M cells (171.1M primary), 10 species, 664 spatial datasets | `h5ad_uri` per dataset, and the Census `2025-11-08` SOMA build on public S3 |
 | CELLxGENE ontology links | 44,139 rows in `resource.resource_relationship`: cell type, tissue, assay, disease | terms in `ontology.term`, so a dataset search can walk the ontology |
-| [BEDbase](https://bedbase.org) | landed 2026-09-18: 537,557 of 663,721 BED files (81%), all 22,189 bedsets, 1.17M `resource_relationship` rows to GEO/ENCODE accessions | every genome complete except hg38 (421,384 of 546,706): the API's offset listing stops answering past ~70k, so hg38 files in no bedset are unreachable — see #115 |
+| [BEDbase](https://bedbase.org) | BEDbase's own monthly Parquet snapshot (2026-09-01), landed whole: all 663,721 BED files and 22,188 bedsets, 2.0M `resource_relationship` rows — 1.43M to GEO/ENCODE accessions, 578,552 `member_of_bedset` | every genome complete, hg38 included (546,706); per-file URIs, size and statistics are not in the snapshot — see #115 |
 | [ENCODE](https://www.encodeproject.org) | 28,642 experiments and 1,659,000 files, 1.71M `resource_relationship` rows (file → dataset, experiment → biosample term and target gene) | `href` and public S3 URI per file; every one of BEDbase's 405,210 ENCODE file targets now resolves |
 | [eQTL Catalogue](https://www.ebi.ac.uk/eqtl/) | release 7: 758 datasets from 42 studies, tissue and cell type as UBERON/CL/EFO terms | summary statistics and credible sets on the EBI FTP, by URI |
 
