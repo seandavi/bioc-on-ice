@@ -207,3 +207,15 @@ def test_iso_text_matches_the_api_when_microseconds_are_zero():
            "TIMESTAMPTZ '2025-05-22 12:02:50.145300+00' AS frac)")
     assert con.sql(sql.format(bedbase._iso("whole"))).fetchone()[0] == "2026-04-09T07:03:09Z"
     assert con.sql(sql.format(bedbase._iso("frac"))).fetchone()[0] == "2025-05-22T12:02:50.145300Z"
+
+
+def test_a_relationship_target_is_a_curie_not_a_bare_tag(cat, tmp_path):
+    # Upstream's accession lists carry bare tags ('encode') and blanks beside the real ids
+    # (issue #158). The fixture record below has one of each, as the real catalog does.
+    ingest(cat, REL, tmp_path)
+    bf = {r["resource_id"]: r for r in rows(cat, "resource.bedbase__bedfile")}
+    assert "encode" in bf["0000e6a889395d78ab9bf667326d8cff"]["experiment_id"]  # as published
+    targets = {r["target_id"] for r in rows(cat, "resource.resource_relationship")
+               if r["resource_id"] == "0000e6a889395d78ab9bf667326d8cff"
+               and r["relationship"].startswith("derived_from")}
+    assert targets == {"geo:gsm3258890", "geo:gse116712", "geo:gse116707"}

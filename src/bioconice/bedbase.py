@@ -220,15 +220,20 @@ def transform(cat, release):
     _check(con)
 
     # The joinable form of the accession lists and of bedset membership: one row per
-    # (bed file, relationship, target).
+    # (bed file, relationship, target). An accession target must be 'prefix:accession':
+    # upstream's lists also carry bare tags and blanks that name nothing — 'encode' beside
+    # the real 'encode:ENCSR…' on 15,749 files, 'excluderanges', 'GLOBAL_EXP', and a
+    # trailing '' on 41,969 sample lists (2026-09-01 snapshot, issue #158). They stay in
+    # raw and in the list columns, as published; they are not relationships.
     rel = con.sql("""
         SELECT DISTINCT * FROM (
             SELECT resource_id, 'derived_from_sample' AS relationship, unnest(sample_id) AS target_id,
                    'bedbase' AS source FROM bedfile
             UNION ALL
-            SELECT resource_id, 'derived_from_experiment', unnest(experiment_id), 'bedbase' FROM bedfile
-            UNION ALL
-            SELECT bedfile_id, 'member_of_bedset', bedset_id, 'bedbase' FROM raw_bedset_membership)
+            SELECT resource_id, 'derived_from_experiment', unnest(experiment_id), 'bedbase' FROM bedfile)
+        WHERE regexp_matches(target_id, '^[^:]+:.+')
+        UNION ALL
+        SELECT DISTINCT bedfile_id, 'member_of_bedset', bedset_id, 'bedbase' FROM raw_bedset_membership
     """).to_arrow_table()
     return {
         "resource.bedbase__bedfile": merge.merge(
