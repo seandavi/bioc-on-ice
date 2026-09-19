@@ -73,9 +73,11 @@
         "target": "",
         "treatment": "",
         "global_sample_id": [
-          "geo:gsm3258890"
+          "geo:gsm3258890",
+          ""
         ],
         "global_experiment_id": [
+          "encode",
           "geo:gse116712",
           "geo:gse116707"
         ],
