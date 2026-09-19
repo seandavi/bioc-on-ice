@@ -202,7 +202,17 @@ assembly_name
 assembly_accession
 release
 checksum
+is_canonical   -- one true per (taxon_id, source)
 ```
+
+A taxon id is not an assembly. Ensembl 116 lists 359 assemblies over 276 taxa:
+13 under 10090 (GRCm39 and 12 mouse strains), 28 under 9823 (pig breeds), 12
+under 9940 (sheep). `is_canonical` names the one that stands for the organism
+when a query names none — for Ensembl, the species entry with the unsuffixed
+name (`mus_musculus`, `canis_lupus_familiaris`, `bos_taurus`) where there is
+one, else the first alphabetically, computed from Ensembl's own species list at
+ingest. `genome_id` is the INSDC accession, or the assembly name for the 13 old
+assemblies Ensembl publishes no accession for.
 
 Examples:
 
@@ -262,10 +272,11 @@ gene
 ----
 gene_id        -- stable, unversioned: ENSG00000141510   [identifier]
 taxon_id                                                 [identifier]
+source         -- asserting provider: ENSEMBL              [identifier]
+genome_id      -- reference.genome.genome_id               [identifier]
 version        -- upstream record version, changes over releases
 symbol
 gene_type
-source
 valid_from     -- biocOnIce release
 valid_to     -- biocOnIce release, NULL while current
 ```
@@ -276,6 +287,15 @@ update to an existing row, not a new one. `valid_from` / `valid_to` are
 explained under [Versioning Model](#versioning-model).
 
 This is the gene as **Ensembl** defines it, keyed by Ensembl stable id.
+
+`genome_id` is in the key, and in the merge scope `(taxon_id, source,
+genome_id)`, of `gene`, `transcript` and `exon` — every table that carries
+coordinates — and in the replace scope of `raw.ensembl__gtf`. Each assembly of a
+taxon has its own GTF with its own gene ids (`MGP_129S1SvImJ_G…` for a mouse
+strain), so under a `(taxon_id, source)` scope loading one assembly retired the
+previous one's rows (issue #94). A query that names only `taxon_id` returns
+every loaded assembly; for the reference one, join `reference.genome` on
+`(genome_id, taxon_id, source)` and filter `is_canonical`.
 
 ---
 
@@ -322,6 +342,8 @@ transcript
 -----------
 transcript_id  -- stable, unversioned                      [identifier]
 taxon_id                                                   [identifier]
+source                                                     [identifier]
+genome_id                                                  [identifier]
 gene_id
 version
 biotype
@@ -340,6 +362,8 @@ exon
 exon_id        -- stable, unversioned                      [identifier]
 transcript_id  -- an exon is shared across transcripts     [identifier]
 taxon_id                                                   [identifier]
+source                                                     [identifier]
+genome_id                                                  [identifier]
 sequence_name
 start
 end
@@ -411,6 +435,10 @@ target_id, taxon_id)` is the identifier — a mapping has no attributes that can
 change, so it is only ever asserted or withdrawn, never updated. That makes
 `valid_to` the only signal that a cross-reference went away, and the reason
 retirement has to be modelled rather than left implicit.
+
+`identifier_mapping` carries no assembly. Ensembl's rows (`source = 'ENSEMBL'`)
+are written for the taxon's canonical assembly only; an alternate assembly's
+gene ids get no rows here, and their symbols are on `gene`.
 
 `taxon_id` appears on `transcript`, `exon` and `identifier_mapping` beyond what
 the entity itself strictly needs, because it is part of every merge key: it

@@ -1,0 +1,6 @@
+#!genome-build 129S1_SvImJ_v1
+#!fixture: a second assembly of taxon 10090; ids follow the MGP strain pattern, numbers invented
+11	ensembl	gene	69471185	69482698	.	+	.	gene_id "MGP_129S1SvImJ_G0017566"; gene_version "1"; gene_name "Trp53"; gene_source "ensembl"; gene_biotype "protein_coding";
+11	ensembl	transcript	69471185	69482698	.	+	.	gene_id "MGP_129S1SvImJ_G0017566"; gene_version "1"; transcript_id "MGP_129S1SvImJ_T0039931"; transcript_version "1"; gene_name "Trp53"; transcript_biotype "protein_coding"; tag "Ensembl_canonical";
+11	ensembl	exon	69471185	69471291	.	+	.	gene_id "MGP_129S1SvImJ_G0017566"; gene_version "1"; transcript_id "MGP_129S1SvImJ_T0039931"; transcript_version "1"; exon_number "1"; exon_id "MGP_129S1SvImJ_E0257380"; exon_version "1";
+11	ensembl	exon	69477101	69477202	.	+	.	gene_id "MGP_129S1SvImJ_G0017566"; gene_version "1"; transcript_id "MGP_129S1SvImJ_T0039931"; transcript_version "1"; exon_number "2"; exon_id "MGP_129S1SvImJ_E0257381"; exon_version "1";

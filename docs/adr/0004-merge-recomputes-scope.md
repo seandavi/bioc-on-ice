@@ -13,6 +13,24 @@ classifying every record as new, changed, unchanged or retired. PyIceberg ships
 `merge.merge` computes the scope's complete post-merge state in DuckDB and
 writes it with `overwrite(final, overwrite_filter=scope)`.
 
+## What a scope must name
+
+The scope is what the merge is entitled to retire, so it must name everything
+that makes the incoming state *complete*: a record in scope and absent from
+`incoming` is closed. Two levels have been learned the hard way. The writer: a
+`taxon_id` scope let NCBI and Ensembl retire each other's identifier_mapping
+rows on alternate ingests, so every scope names its `source`. The assembly
+(issue #94, 2026-09-18): Ensembl ships 359 assemblies over 276 taxa, each with
+its own gene ids, and under `(taxon_id, source)` the first mouse strain retired
+GRCm39's genes. The genome-feature tables (`reference.genome`,
+`annotation.gene`, `transcript`, `exon`) are therefore scoped
+`And(taxon_id, source, genome_id)`, with `genome_id` in the business key, and
+`raw.ensembl__gtf` is replaced per `(taxon_id, genome_id, ensembl_release)`.
+`annotation.identifier_mapping` has no assembly and keeps `(taxon_id, source)`;
+only a taxon's canonical assembly writes Ensembl's rows there, and an alternate
+assembly's ingest does not merge into it at all — an empty merge would retire
+them.
+
 ## Why not upsert
 
 Two reasons, one fatal. Upsert has no not-matched-by-source leg, so retirement

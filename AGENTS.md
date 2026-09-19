@@ -33,8 +33,8 @@ routing, credential vending) — that boundary is deliberate.
 - Non-trivial logic lands with a test, and tests stay offline: fixtures over
   network calls (`tests/tiny.gtf`). Before pushing: `uv run pytest`.
 - Ingest must stay idempotent and scoped — overwrite filtered on the merge
-  scope (`taxon_id`, or every taxon plus the writer's `source`), never blind
-  append.
+  scope (`taxon_id`, or every taxon plus the writer's `source`; plus `genome_id`
+  on the tables that carry coordinates — ADR-0004), never blind append.
 - **PyIceberg is the only writer to the lake.** Never `DELETE`/`UPDATE`/`MERGE`
   a live table through DuckDB or any other engine, even to test. A DuckDB
   write on 2026-08-11 left position-delete files and manifest entries with

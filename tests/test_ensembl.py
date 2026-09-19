@@ -87,6 +87,49 @@ def test_species_are_independent(cat):
     assert len(rows(cat, "raw.ensembl__gtf")) == 22
 
 
+STRAIN_GTF = Path(__file__).parent / "tiny_strain.gtf"
+GRCM39 = {**MOUSE, "canonical": True}
+STRAIN = {"taxon_id": 10090, "assembly": "129S1_SvImJ_v1", "accession": "GCA_001624185.1",
+          "canonical": False}
+
+
+def test_assemblies_of_one_taxon_do_not_retire_each_other(cat):
+    """Issue #94: mus_musculus, then mus_musculus_129s1svimj, then mus_musculus again at
+    the same release. Under a (taxon_id, source) scope each load retired the last one's rows."""
+    tables = ("reference.genome", "annotation.gene", "annotation.transcript", "annotation.exon")
+    for species, info, gtf in (("mus_musculus", GRCM39, GTF),
+                               ("mus_musculus_129s1svimj", STRAIN, STRAIN_GTF),
+                               ("mus_musculus", GRCM39, GTF)):
+        ensembl.land_raw(cat, REL, species, ENS, url=str(gtf), info=info)
+        counts = ensembl.transform(cat, REL, info, ENS)
+        assert not any(c.get("retired") or c.get("superseded") for c in counts.values())
+        assert all(r["valid_to"] is None for t in tables for r in rows(cat, t))
+
+    per_genome = {}
+    for g in rows(cat, "annotation.gene"):
+        per_genome.setdefault(g["genome_id"], []).append(g["gene_id"])
+    # each assembly has the gene count of its own GTF
+    assert {k: len(v) for k, v in per_genome.items()} == {
+        MOUSE["accession"]: 2, STRAIN["accession"]: 1}
+    assert len(rows(cat, "annotation.exon")) == 4 + 2
+    assert len(rows(cat, "raw.ensembl__gtf")) == 11 + 4        # raw holds both GTFs too
+    assert {g["genome_id"]: g["is_canonical"] for g in rows(cat, "reference.genome")} == {
+        MOUSE["accession"]: True, STRAIN["accession"]: False}
+    # identifier_mapping has no assembly: the canonical one's rows only, so the
+    # strain's Trp53 is on annotation.gene and not here
+    assert [i["source_id"] for i in rows(cat, "annotation.identifier_mapping")] == ["ENSG00000141510"]
+    assert "Trp53" in {g["symbol"] for g in rows(cat, "annotation.gene")}
+
+
+def test_canonical_species_entry():
+    """The unsuffixed name where there is one, else the first alphabetically."""
+    assert ensembl._canonical(["mus_musculus_aj", "mus_musculus", "mus_musculus_129s1svimj"]) == "mus_musculus"
+    assert ensembl._canonical(["canis_lupus_familiarisboxer", "canis_lupus_familiaris"]) == "canis_lupus_familiaris"
+    assert ensembl._canonical(["cricetulus_griseus_picr", "cricetulus_griseus_chok1gshd",
+                               "cricetulus_griseus_crigri"]) == "cricetulus_griseus_chok1gshd"
+    assert ensembl._canonical(["homo_sapiens"]) == "homo_sapiens"
+
+
 def test_every_column_is_documented(cat):
     """SPEC.md section B1: a table whose columns lack doc does not ship."""
     load(cat, HUMAN)
@@ -230,8 +273,8 @@ def test_two_sources_share_a_table_without_retiring_each_other(cat):
     by_source = {}
     for r in live:
         by_source.setdefault(r["source"], []).append(r)
-    assert sorted(by_source) == ["Ensembl", "NCBI"]
-    assert [r["target_id"] for r in by_source["Ensembl"]] == ["TP53"]
+    assert sorted(by_source) == ["ENSEMBL", "NCBI"]
+    assert [r["target_id"] for r in by_source["ENSEMBL"]] == ["TP53"]
     assert maps(cat)[("ENSEMBL", "ENTREZ")] == ["100302278", "7157"]
 
     # re-running Ensembl must not retire NCBI's rows either — the other direction
@@ -261,9 +304,9 @@ def test_stacked_gene_table_writers_do_not_retire_each_other(cat):
             if f.name not in ("valid_from", "valid_to")]
     refseq = pa.Table.from_pylist([
         {"gene_id": "GeneID:7157", "taxon_id": 9606, "source": "REFSEQ",
-         "symbol": "TP53", "gene_type": "protein-coding"},
+         "genome_id": "GCF_000001405.40", "symbol": "TP53", "gene_type": "protein-coding"},
         {"gene_id": "GeneID:100302278", "taxon_id": 9606, "source": "REFSEQ",
-         "symbol": "MIR1244-1", "gene_type": "ncRNA"},
+         "genome_id": "GCF_000001405.40", "symbol": "MIR1244-1", "gene_type": "ncRNA"},
     ], schema=pa.schema(cols))
     scope = And(EqualTo("taxon_id", 9606), EqualTo("source", "REFSEQ"))
     counts = merge.merge(cat, "annotation.gene", refseq, "2026.09", scope)

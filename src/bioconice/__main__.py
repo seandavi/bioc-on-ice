@@ -16,6 +16,7 @@ from . import icite
 from . import intact
 from . import mane
 from . import merge
+from . import migrate
 from . import ncbi
 from . import ncbi_accession
 from . import ncbi_go
@@ -166,6 +167,14 @@ def main():
     sub.add_parser("migrate-manifest",
                    help="one-off for #96: give provenance.release rows written before the "
                         "artifact key their artifact; safe to rerun")
+    mg = sub.add_parser("migrate-assembly-scope",
+                        help="one-off (issue #94): rebuild gene/transcript/exon with genome_id in "
+                             "the key, fill raw.ensembl__gtf.genome_id and reference.genome."
+                             "is_canonical, respell identifier_mapping's 'Ensembl'; re-runnable")
+    mg.add_argument("--copy-swap", action="store_true",
+                    help="for a catalog that cannot rename a table: drop, recreate and copy "
+                         "<table>__v2 back instead of renaming it into place")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -177,6 +186,8 @@ def main():
         else:
             counts = ensembl.ingest(cat, args.release, args.species, args.ensembl_release)
         _print(counts)
+    elif args.cmd == "migrate-assembly-scope":
+        migrate.assembly_scope(cat, args.copy_swap)
     elif args.cmd == "ingest-bugsigdb":
         n = bugsigdb.land_raw(cat, args.release, args.version)
         print(f"{'raw.bugsigdb__full_dump':40} {n:>10,} rows  ({args.version})")

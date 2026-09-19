@@ -50,6 +50,16 @@ SOURCE = (
     "and of every writer's merge scope, so providers stack in one table and none "
     "can retire another's rows (ADR-0004)."
 )
+GENOME = (
+    "Assembly these coordinates and ids belong to: reference.genome.genome_id, the INSDC "
+    "accession (e.g. GCA_000001635.9), or Ensembl's assembly name for the 13 old assemblies "
+    "it publishes no accession for. Part of the business key and of the merge scope: "
+    "Ensembl ships several assemblies under one taxon id — 13 for mouse (10090), 28 for pig "
+    "(9823), 12 for sheep (9940) in release 116 — each with its own gene ids, and a scope "
+    "without the assembly lets each load retire the last one's rows (issue #94). A query "
+    "that names only taxon_id returns every loaded assembly; join reference.genome on "
+    "(genome_id, taxon_id, source) and filter is_canonical for the reference one."
+)
 COORD = "1-based-inclusive"
 ALPHA_DIVERSITY = (
     "Direction this alpha-diversity metric moved in group 1: 'increased', 'decreased' "
@@ -633,13 +643,20 @@ TABLES = {
                         doc="Ensembl release this file came from, e.g. 116."),
             NestedField(12, "landed_in", StringType(), required=True,
                         doc="The biocOnIce release whose ingest landed these rows. Not a validity interval: raw is replaced per source version, not versioned."),
+            NestedField(13, "genome_id", StringType(),
+                        doc="Assembly this GTF annotates, as reference.genome.genome_id. Part of "
+                            "the replace scope: one taxon id covers several Ensembl species "
+                            "entries (13 mouse assemblies under 10090), each with its own GTF. "
+                            "Optional only because Iceberg adds no required column to existing "
+                            "rows; every lander writes it and `bioconice migrate-assembly-scope` "
+                            "filled the rows landed before it existed."),
         ),
         comment="Ensembl GTF landed verbatim, one row per feature line. Deliberately has no "
                 "merge key and no validity interval: a GTF line has no natural identity, "
                 "and an "
                 "Ensembl release is immutable, so this table is replaced wholesale per "
-                "(taxon_id, ensembl_release) and is idempotent under re-ingest. History here "
-                "is the accumulation of releases, not a validity interval.",
+                "(taxon_id, genome_id, ensembl_release) and is idempotent under re-ingest. "
+                "History here is the accumulation of releases, not a validity interval.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.start.coordinate_system": COORD,
                     "bioc.column.end.coordinate_system": COORD},
@@ -647,19 +664,30 @@ TABLES = {
     "reference.genome": TableDef(
         schema=Schema(
             NestedField(1, "genome_id", StringType(), required=True,
-                        doc="Assembly accession, e.g. GCA_000001405.29. Stable across releases."),
+                        doc="Assembly accession, e.g. GCA_000001405.29. Stable across releases. "
+                            "Ensembl publishes no accession for 13 old assemblies (turTru1, "
+                            "TETRAODON 8.0, ...); those carry the assembly name here instead."),
             NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(3, "source", StringType(), required=True, doc=SOURCE),
             NestedField(4, "assembly_name", StringType(),
                         doc="Provider's assembly name, e.g. GRCh38.p14."),
             NestedField(5, "valid_from", StringType(), required=True, doc=VALID_FROM),
             NestedField(6, "valid_to", StringType(), doc=VALID_TO),
+            NestedField(7, "is_canonical", BooleanType(),
+                        doc="True on the one assembly per (taxon_id, source) that stands for the "
+                            "organism when none is named — GRCm39 among Ensembl's 13 mouse "
+                            "assemblies. For Ensembl: the species entry whose name is a prefix "
+                            "of every other entry sharing its taxon id (mus_musculus, "
+                            "canis_lupus_familiaris, bos_taurus), else the first "
+                            "alphabetically; computed from Ensembl's species list at ingest. "
+                            "Ensembl's identifier_mapping rows exist for this assembly only."),
         ),
         business_key=("genome_id", "taxon_id", "source"),
         partition_by=("source", "taxon_id"),
         comment="Genome assemblies. One row per assembly per organism per source: two "
                 "providers may describe the same assembly, and neither may retire the "
-                "other's row.",
+                "other's row. A taxon can have many (Ensembl 116: 359 assemblies over 276 "
+                "taxa); is_canonical names the default one.",
         properties={"bioc.column.genome_id.prefix": "insdc.gca",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
@@ -672,6 +700,7 @@ TABLES = {
                             "rather than creating a new one."),
             NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(9, "source", StringType(), required=True, doc=SOURCE),
+            NestedField(10, "genome_id", StringType(), required=True, doc=GENOME),
             NestedField(3, "version", StringType(),
                         doc="Upstream record version at this release, e.g. 21. Changes over time."),
             NestedField(4, "symbol", StringType(),
@@ -686,13 +715,16 @@ TABLES = {
             NestedField(7, "valid_from", StringType(), required=True, doc=VALID_FROM),
             NestedField(8, "valid_to", StringType(), doc=VALID_TO),
         ),
-        business_key=("gene_id", "taxon_id", "source"),
-        partition_by=("source", "taxon_id"),
+        business_key=("gene_id", "taxon_id", "source", "genome_id"),
+        partition_by=("source", "taxon_id", "genome_id"),
         comment="Genes, stacked across annotation providers: one row per gene per organism "
-                "per source, in the provider's own id space. Join to annotation.transcript "
-                "on (gene_id, taxon_id, source). Descriptions and cytogenetic bands are not "
+                "per source per assembly, in the provider's own id space. Join to "
+                "annotation.transcript on (gene_id, taxon_id, source, genome_id). A taxon "
+                "with several assemblies loaded (mouse strains, pig breeds) has one set of "
+                "rows per assembly — see genome_id. Descriptions and cytogenetic bands are not "
                 "here: they come from NCBI, keyed by Entrez id, in annotation.ncbi__gene.",
         properties={"bioc.column.gene_id.prefix": "ensembl",
+                    "bioc.column.genome_id.prefix": "insdc.gca",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
     "annotation.ncbi__gene": TableDef(
@@ -744,9 +776,10 @@ TABLES = {
                             "ENST00000269305 under source ENSEMBL."),
             NestedField(2, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(9, "source", StringType(), required=True, doc=SOURCE),
+            NestedField(10, "genome_id", StringType(), required=True, doc=GENOME),
             NestedField(3, "gene_id", StringType(),
                         doc="Stable gene id of the parent gene, in the same provider's id "
-                            "space. Joins to annotation.gene on (gene_id, taxon_id, source)."),
+                            "space. Joins to annotation.gene on (gene_id, taxon_id, source, genome_id)."),
             NestedField(4, "version", StringType(), doc="Upstream record version at this release."),
             NestedField(5, "biotype", StringType(),
                         doc="Transcript biotype, e.g. protein_coding, retained_intron."),
@@ -755,12 +788,13 @@ TABLES = {
             NestedField(7, "valid_from", StringType(), required=True, doc=VALID_FROM),
             NestedField(8, "valid_to", StringType(), doc=VALID_TO),
         ),
-        business_key=("transcript_id", "taxon_id", "source"),
-        partition_by=("source", "taxon_id"),
+        business_key=("transcript_id", "taxon_id", "source", "genome_id"),
+        partition_by=("source", "taxon_id", "genome_id"),
         comment="Transcripts, stacked across annotation providers. One row per transcript "
-                "per source; a gene has many.",
+                "per source per assembly; a gene has many.",
         properties={"bioc.column.transcript_id.prefix": "ensembl",
                     "bioc.column.gene_id.prefix": "ensembl",
+                    "bioc.column.genome_id.prefix": "insdc.gca",
                     "bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
     "annotation.exon": TableDef(
@@ -769,12 +803,13 @@ TABLES = {
                         doc="The provider's stable exon id without version, e.g. "
                             "ENSE00002064269 under source ENSEMBL. NOT unique on its own: one "
                             "exon is shared by every transcript containing it, so the key is "
-                            "(exon_id, transcript_id, taxon_id, source)."),
+                            "(exon_id, transcript_id, taxon_id, source, genome_id)."),
             NestedField(2, "transcript_id", StringType(), required=True,
                         doc="Transcript this row places the exon in. Joins to "
-                            "annotation.transcript on (transcript_id, taxon_id, source)."),
+                            "annotation.transcript on (transcript_id, taxon_id, source, genome_id)."),
             NestedField(3, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(14, "source", StringType(), required=True, doc=SOURCE),
+            NestedField(15, "genome_id", StringType(), required=True, doc=GENOME),
             NestedField(4, "sequence_name", StringType(),
                         doc="Sequence the exon lies on, as named by Ensembl, e.g. 17 — not chr17."),
             NestedField(5, "start", LongType(),
@@ -796,8 +831,8 @@ TABLES = {
             NestedField(12, "valid_from", StringType(), required=True, doc=VALID_FROM),
             NestedField(13, "valid_to", StringType(), doc=VALID_TO),
         ),
-        business_key=("exon_id", "transcript_id", "taxon_id", "source"),
-        partition_by=("source", "taxon_id"),
+        business_key=("exon_id", "transcript_id", "taxon_id", "source", "genome_id"),
+        partition_by=("source", "taxon_id", "genome_id"),
         comment="Exons in transcript context, carrying coding bounds, stacked across "
                 "annotation providers. Stands in for TxDb's "
                 "exon, cds and splicing tables: a row is already keyed by exon and transcript, "
@@ -805,6 +840,7 @@ TABLES = {
                 "exon of the same transcript. UTRs are derived from cds bounds, not stored.",
         properties={"bioc.column.exon_id.prefix": "ensembl",
                     "bioc.column.transcript_id.prefix": "ensembl",
+                    "bioc.column.genome_id.prefix": "insdc.gca",
                     "bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.start.coordinate_system": COORD,
                     "bioc.column.end.coordinate_system": COORD,
@@ -821,7 +857,7 @@ TABLES = {
             NestedField(4, "target_id", StringType(), required=True, doc="Identifier in target_namespace."),
             NestedField(5, "taxon_id", IntegerType(), required=True, doc=TAXON),
             NestedField(6, "source", StringType(), required=True,
-                        doc="Who asserts this mapping, e.g. Ensembl. Part of the business key, so that one source cannot retire another's cross-references."),
+                        doc="Who asserts this mapping, e.g. ENSEMBL, NCBI. Part of the business key, so that one source cannot retire another's cross-references."),
             NestedField(7, "confidence", DoubleType(),
                         doc="Asserter's confidence where one is published; NULL where none is."),
             NestedField(8, "valid_from", StringType(), required=True, doc=VALID_FROM),
@@ -831,7 +867,10 @@ TABLES = {
                       "target_id", "taxon_id", "source"),
         comment="Cross-references between identifier authorities. Mappings are many-to-many in "
                 "both directions. The whole tuple is the key: a mapping has no attributes that "
-                "can change, so it is only ever asserted or withdrawn, never updated.",
+                "can change, so it is only ever asserted or withdrawn, never updated. Carries no "
+                "assembly: source = 'ENSEMBL' rows are written for a taxon's canonical assembly "
+                "only (reference.genome.is_canonical), so alternate-strain gene ids such as "
+                "MGP_129S1SvImJ_G… have no rows here — their symbols are on annotation.gene.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon"},
     ),
     "raw.ncbi__gene2pubmed": TableDef(
@@ -3299,8 +3338,11 @@ def rate_limited(call):
     return call()
 
 
-def create(cat, identifier):
-    """Create the table if absent, with its declared schema, comment and properties."""
+def create(cat, identifier, name=None):
+    """Create the table if absent, with its declared schema, comment and properties.
+
+    `name` creates it under another catalog name — a rebuild's `<table>__v2`.
+    """
     ns = identifier.split(".")[0]
     # Remembered on the catalog object itself, not in a module-level set keyed by
     # id(cat): ids are recycled once a catalog is garbage-collected, so a fresh
@@ -3319,7 +3361,7 @@ def create(cat, identifier):
                        transform=IdentityTransform(), name=n)
         for i, n in enumerate(d.partition_by)])
     table = rate_limited(lambda: cat.create_table_if_not_exists(
-        identifier, schema=d.iceberg_schema(), partition_spec=spec,
+        name or identifier, schema=d.iceberg_schema(), partition_spec=spec,
         properties={"comment": d.comment, **d.properties}))
     return _evolve(table, d, identifier)
 
@@ -3330,8 +3372,8 @@ def _evolve(table, d, identifier):
     Without this a new column in a TableDef never reaches a live table, and the
     cast in merge.write fails on it. Only optional columns can be added: existing
     rows read NULL for them. A new *required* column (a row-key change, as in
-    issue #94) has no value for the rows already there, so that is a rebuild and
-    this refuses it rather than guessing.
+    issue #94) has no value for the rows already there, so that is a rebuild
+    (migrate.py did #94's) and this refuses it rather than guessing.
 
     ponytail: additions only. A changed type, a dropped column or a changed doc
     string is left alone — handle those when one actually happens.

@@ -117,7 +117,16 @@ Ingest takes under a minute per species. The genome-feature tables
 (`annotation.gene`, `annotation.transcript`, `annotation.exon`,
 `reference.genome`) are stacked multi-writer tables: every row names its
 asserting provider in a `source` column — `'ENSEMBL'` today — so RefSeq or
-GENCODE later land as new rows, not new tables.
+GENCODE later land as new rows, not new tables. They are keyed by assembly too
+(`genome_id`): Ensembl ships 13 mouse, 28 pig and 12 sheep assemblies under one
+taxon id each, so for a taxon with more than one loaded, pick one —
+`reference.genome.is_canonical` marks the reference assembly:
+
+```sql
+SELECT count(*) FROM bioc.annotation.gene g
+JOIN bioc.reference.genome r USING (genome_id, taxon_id, source)
+WHERE g.taxon_id = 10090 AND r.is_canonical AND g.valid_to IS NULL AND r.valid_to IS NULL;
+```
 
 NCBI Gene adds the attributes a GTF cannot carry — descriptions, aliases,
 cytogenetic bands, Entrez cross-references. Its raw tables are landed **whole**,
