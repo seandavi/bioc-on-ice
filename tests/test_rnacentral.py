@@ -170,7 +170,7 @@ def test_does_not_retire_the_other_writers_rows(cat, tsv, tmp_path):
     path.write_text("\t".join(hgnc.COLUMNS) + "\n" + HGNC_LINE + "\n")
     hgnc.ingest(cat, REL, str(path))
 
-    others = {s: len(live(cat, s)) for s in ("Ensembl", "NCBI", "HGNC")}
+    others = {s: len(live(cat, s)) for s in ("ENSEMBL", "NCBI", "HGNC")}
     assert all(others.values())
 
     rnacentral.land_raw(cat, REL, "27", tsv)

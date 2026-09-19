@@ -8,14 +8,27 @@ somebody does.
 
 The phases want different write semantics, which is why they are separate
 functions rather than one pipeline. An Ensembl release is immutable, so raw is
-replaced wholesale per (taxon_id, ensembl_release) and is idempotent under
-re-ingest. The derived tables have real keys and a maintained current state, so
+replaced wholesale per (taxon_id, genome_id, ensembl_release) and is idempotent
+under re-ingest. The derived tables have real keys and a maintained current state, so
 they are the ones that carry valid_from/valid_to and merge.
 
 The derived genome-feature tables are stacked multi-writer tables discriminated
 by a `source` column; this module is the SOURCE = 'ENSEMBL' writer, stamping
 that into every derived row and into every merge scope. See ncbi.py's module
 docstring for why a scope that fails to name its writer flip-flops.
+
+The same goes one level down for the assembly (issue #94). A taxon id is not an
+assembly: release 116 lists 359 species entries over 276 taxa — 13 share 10090
+(GRCm39 and 12 MGP strains), 28 share 9823 (pig), 12 share 9940 (sheep) — and
+each has its own GTF with its own gene ids. So `genome_id` is in the business
+key and the merge scope of every table carrying coordinates, and in raw's
+replace scope; under (taxon_id, source) alone, loading a second assembly
+retired the first one's rows (2026-09-18, stopped at the first mouse strain).
+
+annotation.identifier_mapping has no assembly column, so its ENSEMBL rows are
+written for the taxon's canonical assembly only, and an alternate assembly's
+ingest leaves the table alone: MGP_129S1SvImJ_G… ids get no rows there, and
+their symbols are on annotation.gene.
 """
 
 import re
@@ -44,14 +57,33 @@ def _attr(key):
     return f"""nullif(regexp_extract(attribute, '{key} "([^"]*)"', 1), '')"""
 
 
+def _canonical(names):
+    """The one species entry, of those sharing a taxon id, that stands for the taxon.
+
+    The unsuffixed name where there is one — the entry every other is an
+    extension of (mus_musculus, canis_lupus_familiaris beside
+    canis_lupus_familiarisboxer) — else the first alphabetically
+    (cricetulus_griseus_chok1gshd). Release 116: 20 of 276 taxa have more than
+    one entry, 14 of them with an unsuffixed name.
+    """
+    return next((n for n in names if all(m.startswith(n) for m in names)), min(names))
+
+
 def species_info(ensembl_release, species):
-    """taxonomy_id / assembly / accession for a species, from Ensembl itself."""
+    """taxonomy_id / assembly / accession / canonical for a species, from Ensembl itself."""
     url = f"{FTP.format(release=ensembl_release)}/species_EnsemblVertebrates.txt"
     with urllib.request.urlopen(url) as r:
-        for line in r.read().decode().splitlines():
-            f = line.split("\t")
-            if len(f) > 5 and f[1] == species:
-                return {"taxon_id": int(f[3]), "assembly": f[4], "accession": f[5]}
+        rows = [f for f in (line.split("\t") for line in r.read().decode().splitlines())
+                if len(f) > 5]
+    for f in rows:
+        if f[1] == species:
+            # 13 old assemblies (turTru1, TETRAODON 8.0, ...) have no INSDC
+            # accession; the assembly name is their genome_id, since '' names
+            # nothing and is no partition value.
+            # ponytail: is_canonical is refreshed only when an assembly is
+            # (re-)ingested, so load all of a taxon's assemblies in one release.
+            return {"taxon_id": int(f[3]), "assembly": f[4], "accession": f[5] or f[4],
+                    "canonical": _canonical([g[1] for g in rows if g[3] == f[3]]) == species}
     raise SystemExit(f"{species} not in Ensembl release {ensembl_release} vertebrates")
 
 
@@ -90,13 +122,12 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
         SELECT seqname, source, feature, "start", "end", score, strand, frame, attribute,
                {info['taxon_id']}::INTEGER AS taxon_id,
                '{ensembl_release}' AS ensembl_release,
-               '{release}' AS landed_in
+               '{release}' AS landed_in,
+               '{info['accession']}' AS genome_id
         FROM read_csv('{url or gtf_url(ensembl_release, species)}', sep='\t', header=false,
                       comment='#', auto_detect=false, columns={GTF_COLUMNS})
     """).to_arrow_table()
-    n = merge.write(cat, "raw.ensembl__gtf", arrow,
-                    And(EqualTo("taxon_id", info["taxon_id"]),
-                        EqualTo("ensembl_release", str(ensembl_release))))
+    n = merge.write(cat, "raw.ensembl__gtf", arrow, _raw_scope(info, ensembl_release))
     merge.manifest(cat, release, "ensembl", species, url or gtf_url(ensembl_release, species), n,
                    version=ensembl_release, method="release_number")
     return info, n
@@ -107,25 +138,32 @@ def land_raw(cat, release, species, ensembl_release, url=None, info=None):
 # a second writer into the same taxon — NCBI in identifier_mapping today, RefSeq
 # or GENCODE in the genome-feature tables tomorrow — and Ensembl retire each
 # other's rows on alternating ingests: silently, and forever, because the
-# "current" view is never empty. identifier_mapping predates the controlled
-# vocabulary and keeps its 'Ensembl' spelling; migrating it is a data op.
-WRITER = {"reference.genome": EqualTo("source", SOURCE),
-          "annotation.gene": EqualTo("source", SOURCE),
-          "annotation.transcript": EqualTo("source", SOURCE),
-          "annotation.exon": EqualTo("source", SOURCE),
-          "annotation.identifier_mapping": EqualTo("source", "Ensembl")}
+# "current" view is never empty. (identifier_mapping said 'Ensembl' until
+# `bioconice migrate-assembly-scope` respelled its 4,232,653 rows.)
+WRITER = EqualTo("source", SOURCE)
 
 
-def _scope(identifier, taxon):
-    return And(EqualTo("taxon_id", taxon), WRITER[identifier])
+def _raw_scope(info, ensembl_release):
+    return And(EqualTo("taxon_id", info["taxon_id"]), EqualTo("genome_id", info["accession"]),
+               EqualTo("ensembl_release", str(ensembl_release)))
+
+
+def _scope(identifier, info):
+    """(taxon, writer), and the assembly on every table that has one — all but
+    identifier_mapping, which only the canonical assembly writes."""
+    scope = And(EqualTo("taxon_id", info["taxon_id"]), WRITER)
+    if identifier == "annotation.identifier_mapping":
+        return scope
+    return And(scope, EqualTo("genome_id", info["accession"]))
 
 
 def transform(cat, release, info, ensembl_release):
     """Phase 2: derive the annotation tables from landed raw rows."""
-    taxon = info["taxon_id"]
+    taxon, genome = info["taxon_id"], info["accession"]
+    # An info dict without the flag is a taxon's only assembly.
+    canonical = info.get("canonical", True)
     raw = cat.load_table("raw.ensembl__gtf").scan(
-        row_filter=And(EqualTo("taxon_id", taxon),
-                       EqualTo("ensembl_release", str(ensembl_release)))).to_arrow()
+        row_filter=_raw_scope(info, ensembl_release)).to_arrow()
 
     con = duckdb.connect()
     con.register("raw", raw)
@@ -152,18 +190,19 @@ def transform(cat, release, info, ensembl_release):
     q = lambda sql: con.sql(sql).to_arrow_table()
     out = {
         "reference.genome": q(f"""
-            SELECT '{info['accession']}' AS genome_id, {taxon}::INTEGER AS taxon_id,
-                   '{SOURCE}' AS source, '{info['assembly']}' AS assembly_name
+            SELECT '{genome}' AS genome_id, {taxon}::INTEGER AS taxon_id,
+                   '{SOURCE}' AS source, '{info['assembly']}' AS assembly_name,
+                   {canonical} AS is_canonical
         """),
         "annotation.gene": q(f"""
             SELECT gene_id, {taxon}::INTEGER AS taxon_id, '{SOURCE}' AS source,
-                   gene_version AS version, gene_name AS symbol,
+                   '{genome}' AS genome_id, gene_version AS version, gene_name AS symbol,
                    gene_biotype AS gene_type, gene_source AS curation_source
             FROM feat WHERE feature = 'gene'
         """),
         "annotation.transcript": q(f"""
             SELECT transcript_id, {taxon}::INTEGER AS taxon_id, '{SOURCE}' AS source,
-                   gene_id, transcript_version AS version,
+                   '{genome}' AS genome_id, gene_id, transcript_version AS version,
                    transcript_biotype AS biotype, canonical
             FROM feat WHERE feature = 'transcript'
         """),
@@ -171,7 +210,7 @@ def transform(cat, release, info, ensembl_release):
         # lies in, which is what lets coding bounds and phase ride on the exon row.
         "annotation.exon": q(f"""
             SELECT e.exon_id, e.transcript_id, {taxon}::INTEGER AS taxon_id,
-                   '{SOURCE}' AS source,
+                   '{SOURCE}' AS source, '{genome}' AS genome_id,
                    e.seqname AS sequence_name, e."start", e."end", e.strand,
                    e.exon_number::INTEGER AS rank,
                    c."start" AS cds_start, c."end" AS cds_end,
@@ -187,12 +226,15 @@ def transform(cat, release, info, ensembl_release):
         "annotation.identifier_mapping": q(f"""
             SELECT 'ENSEMBL' AS source_namespace, gene_id AS source_id,
                    'SYMBOL' AS target_namespace, gene_name AS target_id,
-                   {taxon}::INTEGER AS taxon_id, 'Ensembl' AS source,
+                   {taxon}::INTEGER AS taxon_id, '{SOURCE}' AS source,
                    NULL::DOUBLE AS confidence
             FROM feat WHERE feature = 'gene' AND gene_name IS NOT NULL
         """),
     }
-    return {k: merge.merge(cat, k, a, release, _scope(k, taxon)) for k, a in out.items()}
+    if not canonical:
+        # Not merged empty: that would retire the canonical assembly's rows.
+        del out["annotation.identifier_mapping"]
+    return {k: merge.merge(cat, k, a, release, _scope(k, info)) for k, a in out.items()}
 
 
 def ingest(cat, release, species, ensembl_release):
