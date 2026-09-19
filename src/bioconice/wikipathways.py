@@ -108,7 +108,7 @@ def land_raw(cat, release, url=None):
 
     n = merge.write(cat, "raw.wikipathways__gmt", arrow,
                     EqualTo("wikipathways_version", version))
-    merge.manifest(cat, release, "wikipathways", url, n, version=version,
+    merge.manifest(cat, release, "wikipathways", "gmt", url, n, version=version,
                    method="release_number")
     return version, n
 

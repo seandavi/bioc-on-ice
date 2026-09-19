@@ -2,8 +2,8 @@
 
 Same FTP directory and the same unversioned nightly regeneration as ncbi.py,
 so the version is the retrieval date. Two files in one five-column format, both
-landed **whole** and verbatim; each gets its own manifest row (`ncbi_gene_orthologs`,
-`ncbi_gene_group`), so url and row_count are per file. No column of either can
+landed **whole** and verbatim; each gets its own manifest row (source `ncbi_gene`,
+artifact the file name), so url and row_count are per file. No column of either can
 hold a real '-' (taxon ids, GeneIDs, a relationship label; checked 2026-09-18,
 no bare '-' cell in either file), so `ncbi.tsv`'s nullstr is harmless here.
 
@@ -56,7 +56,7 @@ def land_raw(cat, release, urls=None):
     counts = {}
     for name in FILES:
         n = _land(cat, release, f"raw.ncbi__{name}", tsv(urls.get(name, f"{DATA}{name}.gz"), COLUMNS))
-        merge.manifest(cat, release, f"ncbi_{name}", f"{DATA}{name}.gz", n)
+        merge.manifest(cat, release, "ncbi_gene", name, f"{DATA}{name}.gz", n)
         counts[f"raw.ncbi__{name}"] = n
     return counts
 

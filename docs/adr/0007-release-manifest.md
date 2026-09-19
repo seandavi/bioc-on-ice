@@ -19,11 +19,12 @@ learned, and a willingness to record `version: unknown`.
 
 ## Decision
 
-A `provenance.release` table, one row per (biocOnIce release, source):
+A `provenance.release` table, one row per (biocOnIce release, source, artifact):
 
 ```
 release            -- 2026.10
-source             -- ensembl, ncbi_gene, go
+source             -- the provider: ensembl, ncbi_gene, obo
+artifact           -- what of it was read: homo_sapiens, gene_info, cl
 source_version     -- '116', or '2026-08-06' where the source has no version
 version_method     -- how we learned it: release_number, http_last_modified,
                    --   ftp_index_probe, retrieval_date, unavailable
@@ -32,6 +33,14 @@ url
 checksum
 row_count          -- free integrity check, per InterPro's entry_count
 ```
+
+`artifact` was added on 2026-09-19 (issue #96). Keyed by source alone, 276
+Ensembl species overwrote one another's row, the three NCBI Gene dumps shared
+one row with a summed count, and the ontologies escaped only by minting a
+source per ontology (`obo_cl`). The source is the provider; the artifact is the
+file, species or ontology an ingest actually read, and each ingest replaces
+only its own row. Rows written before then that summarised several files keep a
+NULL artifact.
 
 `source_version` is recorded **in the source's own vocabulary**, never
 normalised. `version_method` is mandatory, and `unavailable` is a legitimate

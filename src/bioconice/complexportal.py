@@ -125,7 +125,7 @@ def land_raw(cat, release, version=None, url=None):
 
     n = merge.write(cat, "raw.complexportal__complex", arrow,
                     EqualTo("complexportal_version", version))
-    merge.manifest(cat, release, "complexportal", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "complexportal", "complex", url, n, version=version, method="release_number")
     return version, n
 
 

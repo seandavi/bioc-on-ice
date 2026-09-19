@@ -65,11 +65,12 @@ def test_guard_sql_rejects_forbidden_keyword_inside_a_with():
 # --------------------------------------------------------------------------
 
 PROVENANCE_ROWS = [
-    ("2026.08", "ensembl", "116", "release_number"),
-    ("2026.08", "ncbi_gene", "2026-08-07", "retrieval_date"),
-    ("2026.09", "ensembl", "116", "release_number"),
-    ("2026.09", "icite", "2026-08", "release_number"),
-    ("2026.09", "ncbi_gene", "2026-09-12", "retrieval_date"),
+    ("2026.08", "ensembl", "116", "release_number", "homo_sapiens"),
+    ("2026.08", "ncbi_gene", "2026-08-07", "retrieval_date", None),   # a pre-#96 summed row
+    ("2026.09", "ensembl", "116", "release_number", "homo_sapiens"),
+    ("2026.09", "ensembl", "116", "release_number", "mus_musculus"),
+    ("2026.09", "icite", "2026-08", "release_number", "metadata"),
+    ("2026.09", "ncbi_gene", "2026-09-12", "retrieval_date", "gene_info"),
 ]
 
 
@@ -98,6 +99,9 @@ def test_resolve_release_by_explicit_release_id():
     result = mcp.resolve_release_impl(release="2026.08", rows=PROVENANCE_ROWS)
     assert result["release"] == "2026.08"
     assert len(result["provenance"]) == 2  # ensembl + ncbi_gene rows at that release
+    # a source read species by species is one row per artifact, each named
+    now = mcp.resolve_release_impl(release="2026.09", rows=PROVENANCE_ROWS)["provenance"]
+    assert [p["artifact"] for p in now if p["source"] == "ensembl"] == ["homo_sapiens", "mus_musculus"]
 
 
 def test_resolve_release_unknown_release_id():
@@ -234,10 +238,11 @@ def _fake_lake_con():
     con.execute("CREATE SCHEMA b.provenance")
     con.execute(
         "CREATE TABLE b.provenance.release "
-        "(release VARCHAR, source VARCHAR, source_version VARCHAR, version_method VARCHAR)"
+        "(release VARCHAR, source VARCHAR, source_version VARCHAR, version_method VARCHAR, "
+        "artifact VARCHAR)"
     )
     con.execute("INSERT INTO b.provenance.release VALUES "
-                "('2026.09', 'ensembl', '116', 'release_number')")
+                "('2026.09', 'ensembl', '116', 'release_number', 'homo_sapiens')")
     con.execute("CREATE SCHEMA b.annotation")
     con.execute(
         "CREATE TABLE b.annotation.ncbi__gene_pubmed "

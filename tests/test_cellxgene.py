@@ -48,13 +48,15 @@ def test_raw_is_landed_whole_with_nested_fields_unexploded(cat):
     assert json.loads(raw["d3-v1"]["spatial"]) == {"has_fullres": False, "is_single": True}
     assert raw["d1-v1"]["spatial"] is None
     assert raw["d1-v1"]["retrieval_date"] == "2026-09-18"
-    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "cellxgene")
+    m = next(r for r in rows(cat, "provenance.release") 
+             if (r["source"], r["artifact"]) == ("cellxgene", "dataset"))
     assert (m["source_version"], m["version_method"]) == ("2026-09-18", "retrieval_date")
 
 
 def test_census_manifest_is_recorded(cat):
     ingest(cat)
-    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "cellxgene_census")
+    m = next(r for r in rows(cat, "provenance.release") 
+             if (r["source"], r["artifact"]) == ("cellxgene", "census"))
     assert (m["source_version"], m["version_method"]) == (CENSUS, "release_number")
     assert m["url"] == f"s3://cellxgene-census-public-us-west-2/cell-census/{CENSUS}/soma/"
 

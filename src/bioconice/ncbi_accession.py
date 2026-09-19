@@ -57,7 +57,7 @@ def land_raw(cat, release, url=None):
               f"THEN coalesce(orientation, '-') ELSE orientation END AS orientation) "
               f"FROM {tsv(url or URL, COLUMNS)})")
     n = _land(cat, release, "raw.ncbi__gene2accession", source)
-    merge.manifest(cat, release, "ncbi_gene2accession", URL, n)
+    merge.manifest(cat, release, "ncbi_gene", "gene2accession", URL, n)
     return n
 
 

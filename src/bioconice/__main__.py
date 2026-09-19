@@ -15,6 +15,7 @@ from . import hgnc
 from . import icite
 from . import intact
 from . import mane
+from . import merge
 from . import ncbi
 from . import ncbi_accession
 from . import ncbi_go
@@ -162,6 +163,9 @@ def main():
     ia.add_argument("--url", help="an intact.zip elsewhere (file:// for a local copy) under a "
                     "<YYYY-MM-DD>/psimitab/ path; the dated directory states the version")
 
+    sub.add_parser("migrate-manifest",
+                   help="one-off for #96: give provenance.release rows written before the "
+                        "artifact key their artifact; safe to rerun")
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -214,6 +218,8 @@ def main():
         module = ncbi_cmds[args.cmd][0]
         taxa = [int(t) for t in args.taxa.split(",")] if args.taxa else None
         _print(module.ingest(cat, args.release, taxa))
+    elif args.cmd == "migrate-manifest":
+        _print(merge.migrate_manifest(cat))
     else:
         for ns in cat.list_namespaces():
             for t in cat.list_tables(ns):

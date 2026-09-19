@@ -159,7 +159,15 @@ DOI. The two nested member-list columns are unpacked into
 
 The release manifest now carries both version axes at once, which is the point of
 [ADR-0007](docs/adr/0007-release-manifest.md): `bugsigdb` resolves to `v1.3.1` by
-`release_number`, `ncbi_gene` to a date by `retrieval_date`.
+`release_number`, `ncbi_gene` to a date by `retrieval_date`. It is keyed
+`(release, source, artifact)`: `ncbi_gene` has a row per dump (`gene_info`,
+`gene2ensembl`, `gene_history`, …), `ensembl` a row per species, `obo` a row per
+ontology, each with its own URL and row count:
+
+```sql
+SELECT artifact, source_version, row_count, url
+FROM provenance.release WHERE release = '2026.09' AND source = 'ncbi_gene';
+```
 
 Serving is live behind icegate at
 `https://icegate-bioconice.seandavi.workers.dev` with **anonymous public

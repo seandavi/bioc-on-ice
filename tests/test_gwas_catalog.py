@@ -121,9 +121,14 @@ def test_manifest_and_the_newest_dated_directory(cat, url, tmp_path):
     assert newest.endswith("/2026/10/02/")
 
     gw.land_raw(cat, REL, url=newest)
-    m = next(r for r in rows(cat, "provenance.release") if r["source"] == "gwas_catalog")
-    assert (m["version_method"], m["source_version"], m["row_count"], m["url"]) == (
-        "release_number", "2026-10-02", 8, newest)
+    m = {r["artifact"]: r for r in rows(cat, "provenance.release")
+         if r["source"] == "gwas_catalog"}
+    assert {a: (r["version_method"], r["source_version"], r["row_count"], r["url"])
+            for a, r in m.items()} == {
+        "associations": ("release_number", "2026-10-02", 5,
+                         newest + "gwas-catalog-associations_ontology-annotated-full.zip"),
+        "studies": ("release_number", "2026-10-02", 3,
+                    newest + "gwas-catalog-download-studies-v1.0.3.1.txt")}
 
 
 def test_a_changed_header_fails_before_landing(cat, tmp_path):

@@ -39,12 +39,14 @@ go insert-only and compute `valid_to` as a `LEAD()` window in a view, which
 is where Data Vault has moved.
 """
 
+import re
 import time
 from datetime import datetime, timezone
 
 import duckdb
+import pyarrow as pa
 from pyiceberg.exceptions import CommitFailedException, RESTError
-from pyiceberg.expressions import And, EqualTo
+from pyiceberg.expressions import AlwaysTrue, And, EqualTo, IsNull
 
 from . import schemas
 
@@ -220,15 +222,18 @@ def write(cat, identifier, arrow, overwrite_filter):
     return arrow.num_rows
 
 
-def manifest(cat, release, source, url, rows, version=None, method="retrieval_date",
+def manifest(cat, release, source, artifact, url, rows, version=None, method="retrieval_date",
              checksum=None):
     """Record what this release was built from — ADR-0007.
 
-    Every lander writes under its own `source` key: they land independently,
-    and one overwriting another's manifest row would misreport what either was
-    built from. A source with no version of its own (NCBI) is versioned by the
-    retrieval date; one with a real, citable release label passes `version` and
-    method="release_number", so the version the source itself uses is kept.
+    `source` is the provider and `artifact` the one thing of its that was read:
+    the species for ensembl, the ontology for obo, otherwise the file, named as
+    its raw table is after the `__`. Each ingest replaces only its own
+    (release, source, artifact) row, so 276 species or three dumps no longer
+    overwrite one another (#96). A source with no version of its own (NCBI) is
+    versioned by the retrieval date; one with a real, citable release label
+    passes `version` and method="release_number", so the version the source
+    itself uses is kept.
     """
     now = datetime.now(timezone.utc)
     con = duckdb.connect()
@@ -237,9 +242,94 @@ def manifest(cat, release, source, url, rows, version=None, method="retrieval_da
                '{version or now.date()}' AS source_version,
                '{method}' AS version_method,
                '{now.isoformat(timespec="seconds")}' AS retrieved_at,
-               '{url}' AS url, {repr(checksum) if checksum else 'NULL'}::VARCHAR AS checksum, {rows}::BIGINT AS row_count
+               '{url}' AS url, {repr(checksum) if checksum else 'NULL'}::VARCHAR AS checksum, {rows}::BIGINT AS row_count,
+               {repr(artifact) if artifact else 'NULL'}::VARCHAR AS artifact
     """).to_arrow_table()
     # A manifest row states what a completed ingest used; it is not versioned,
-    # so it is replaced wholesale for its (release, source) rather than merged.
+    # so it is replaced wholesale for its key rather than merged. The match is
+    # null-safe because rows from before #96 have no artifact and `=` never
+    # matches a NULL: such a row is replaced only by another artifact-less
+    # write, never by one file's row — splitting it is migrate_manifest's job.
     write(cat, "provenance.release", arrow,
-          And(EqualTo("release", release), EqualTo("source", source)))
+          And(EqualTo("release", release), EqualTo("source", source),
+              EqualTo("artifact", artifact) if artifact else IsNull("artifact")))
+
+
+# Source keys as written before #96, each naming one file -> (source, artifact).
+# Absent on purpose: ncbi_gene, gwas_catalog and eqtlcatalogue rows summed
+# several files, so no single artifact is true of them and they stay NULL.
+_LEGACY = {
+    "ncbi_gene2go": ("ncbi_gene", "gene2go"),
+    "ncbi_gene2accession": ("ncbi_gene", "gene2accession"),
+    "ncbi_gene2pubmed": ("ncbi_gene", "gene2pubmed"),
+    "ncbi_gene_orthologs": ("ncbi_gene", "gene_orthologs"),
+    "ncbi_gene_group": ("ncbi_gene", "gene_group"),
+    "bedbase_bed": ("bedbase", "metadata"),
+    "bedbase_bedset": ("bedbase", "bedsets"),
+    "bedbase_bedset_membership": ("bedbase", "bedset_membership"),
+    "cellxgene": ("cellxgene", "dataset"),
+    "cellxgene_census": ("cellxgene", "census"),
+    "rnacentral": ("rnacentral", "id_mapping"),
+    "bugsigdb": ("bugsigdb", "full_dump"),
+    "biogrid": ("biogrid", "interactions"),
+    "cellosaurus": ("cellosaurus", "release"),
+    "intact": ("intact", "mitab"),
+    "complexportal": ("complexportal", "complex"),
+    "icite": ("icite", "metadata"),
+    "hgnc": ("hgnc", "complete_set"),
+    "mane": ("mane", "mane_summary"),
+    "wikipathways": ("wikipathways", "gmt"),
+}
+# Sources that minted a key per file: obo_cl -> (obo, cl).
+_LEGACY_PREFIXES = ("obo", "pubtator3", "encode")
+
+
+def _legacy_key(source, url):
+    """(source, artifact) for a pre-#96 row; artifact None where none is derivable."""
+    if source == "ensembl":
+        # The one row per release is whichever species landed last; its URL says which.
+        species = re.search(r"/gtf/([^/]+)/", url or "")
+        return source, species and species.group(1)
+    if source in _LEGACY:
+        return _LEGACY[source]
+    prefix, _, rest = source.partition("_")
+    return (prefix, rest) if prefix in _LEGACY_PREFIXES and rest else (source, None)
+
+
+def migrate_manifest(cat):
+    """One-off for #96: give the rows written under (release, source) their artifact.
+
+    Only `source` and `artifact` of a row without an artifact change; every
+    other field, and every row that already has one, is left as it is — so a
+    second run finds nothing to do and writes nothing. Where an ingest since
+    #96 has already written the key a legacy row maps to, the legacy row is the
+    stale one and is dropped. The table is a few hundred rows, so it is
+    rewritten whole, by PyIceberg like every other write — which is why it must
+    run while no ingest does: a manifest row committed between the read and
+    the rewrite here would be lost.
+    """
+    table = schemas.create(cat, "provenance.release")  # _evolve adds `artifact`
+    if table.schema().identifier_field_ids:
+        # (release, source) is no longer unique, and Iceberg takes no optional
+        # column as an identifier — see TableDef.iceberg_schema.
+        with table.update_schema() as update:
+            update.set_identifier_fields()
+    rows = table.scan().to_arrow().to_pylist()
+    taken = {(r["release"], r["source"], r["artifact"]) for r in rows if r["artifact"]}
+    out, stats = [], {"rows_before": len(rows), "backfilled": 0, "dropped_superseded": 0}
+    for r in rows:
+        if not r["artifact"]:
+            source, artifact = _legacy_key(r["source"], r["url"])
+            if (r["release"], source, artifact) in taken:
+                stats["dropped_superseded"] += 1
+                continue
+            if artifact:
+                r = {**r, "source": source, "artifact": artifact}
+                stats["backfilled"] += 1
+        out.append(r)
+    stats["rows_after"] = len(out)
+    stats["left_without_artifact"] = sum(not r["artifact"] for r in out)
+    if stats["backfilled"] or stats["dropped_superseded"]:
+        overwrite(cat, "provenance.release", table,
+                  pa.Table.from_pylist(out, schema=table.schema().as_arrow()), AlwaysTrue())
+    return stats

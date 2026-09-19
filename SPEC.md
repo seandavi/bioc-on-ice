@@ -967,8 +967,9 @@ cannot be retired correctly and MUST NOT be ingested under this model.
 
 ## Every release records what it was built from
 
-Each ingest writes a `provenance.release` row per source: the biocOnIce
-release, the source, the upstream version **in the source's own vocabulary**,
+Each ingest writes a `provenance.release` row per artifact it reads — a file,
+a species, an ontology: the biocOnIce release, the source and artifact, the
+upstream version **in the source's own vocabulary**,
 and `version_method` — how that version was determined. `unavailable` is a
 legitimate value; a source that publishes no version MUST be recorded as such
 rather than given a fabricated one. This is what makes a release reproducible:

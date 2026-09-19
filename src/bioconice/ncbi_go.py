@@ -2,9 +2,9 @@
 
 Same two phases and the same unversioned-source treatment as ncbi.py: gene2go
 is regenerated nightly, so the version is the retrieval date, recorded in the
-manifest under its own source key `ncbi_gene2go` — a separate row from
-`ncbi_gene`, because the two ingests run independently and one overwriting the
-other's manifest row would misreport what either was built from.
+manifest as source `ncbi_gene`, artifact `gene2go` — a separate row from the
+other NCBI Gene dumps, because the ingests run independently and one
+overwriting another's manifest row would misreport what either was built from.
 
 Raw is landed **whole** — every organism, ~48M rows — with per-taxon scoping in
 `transform`, for the same reason as ncbi.py: raw must not be a function of what
@@ -38,7 +38,7 @@ COLUMNS = (
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2go verbatim and whole into raw.ncbi__gene2go."""
     n = _land(cat, release, "raw.ncbi__gene2go", tsv(url or URL, COLUMNS))
-    merge.manifest(cat, release, "ncbi_gene2go", URL, n)
+    merge.manifest(cat, release, "ncbi_gene", "gene2go", URL, n)
     return n
 
 

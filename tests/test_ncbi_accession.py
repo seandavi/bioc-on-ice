@@ -105,7 +105,7 @@ def test_raw_is_verbatim_whole_and_gzipped(cat, g2a):
 def test_manifest_uses_the_retrieval_date(cat, g2a):
     ncbi_accession.land_raw(cat, REL, url=g2a)
     m = next(r for r in rows(cat, "provenance.release")
-             if r["source"] == "ncbi_gene2accession")
+             if (r["source"], r["artifact"]) == ("ncbi_gene", "gene2accession"))
     assert m["version_method"] == "retrieval_date"
     assert m["row_count"] == 6 and m["retrieved_at"].startswith("20")
 

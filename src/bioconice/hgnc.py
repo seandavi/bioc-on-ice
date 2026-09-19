@@ -97,7 +97,7 @@ def land_raw(cat, release, url=None):
         raise SystemExit(f"hgnc: {url} yielded no rows")
 
     n = merge.write(cat, "raw.hgnc__complete_set", arrow, EqualTo("hgnc_version", version))
-    merge.manifest(cat, release, "hgnc", url, n, version=version,
+    merge.manifest(cat, release, "hgnc", "complete_set", url, n, version=version,
                    method="release_number" if dated else "retrieval_date")
     return version, n
 

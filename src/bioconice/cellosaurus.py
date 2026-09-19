@@ -115,7 +115,7 @@ def land_raw(cat, release, url=None):
 
     n = merge.write(cat, "raw.cellosaurus__release", arrow.drop_columns(["malformed"]),
                     EqualTo("cellosaurus_version", version))
-    merge.manifest(cat, release, "cellosaurus", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "cellosaurus", "release", url, n, version=version, method="release_number")
     return version, n
 
 
