@@ -58,6 +58,7 @@ unchanged is Milestone 2 and not built yet.
 | nothing equivalent | `annotation.cellosaurus__cell_line`, `annotation.cellosaurus__xref`, `annotation.cellosaurus__disease` | Cellosaurus 56.0: 168,970 cell lines, 473,381 cross-references (DepMap, ENCODE, GEO, CLO...), 124,953 disease rows |
 | nothing equivalent | `annotation.rnacentral__rna`, `identifier_mapping` under `source='RNACENTRAL'` | RNAcentral 27: all 264M id-mapping rows landed; derived for human and mouse so far (5.9M ncRNA cross-references to miRBase, Rfam, HGNC, Ensembl, RefSeq) |
 | nothing equivalent | `annotation.icite__publication`, `annotation.icite__metrics`, `annotation.icite__citation` | NIH iCite: every PubMed record and ~930M citation edges |
+| nothing equivalent | `annotation.pubtator3__mention` | NCBI PubTator3, 2026-09-19 dump landed whole: 478M paper–concept links (disease 185M, chemical 148M, gene 82M, species 55M, mutation 8M) keyed by `pmid`, concept and the asserting `resource` (text mining, MeSH, gene2pubmed, CTD, ClinVar, BioGRID…), so curated-only is a filter; joins `icite__*` and `ncbi__gene` |
 
 Knowingly not served: KEGG pathways (redistribution is restricted) and the
 legacy protein-domain columns of OrgDb.
