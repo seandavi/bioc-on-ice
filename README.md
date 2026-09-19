@@ -52,7 +52,7 @@ unchanged is Milestone 2 and not built yet.
 | `Orthology.eg.db` | `annotation.ortholog` | NCBI gene_orthologs: 37.8M ortholog pairs across 1,753 taxa, stored in both directions, stacked by `source` so a second writer can join |
 | OrgDb symbols | `annotation.hgnc__gene` | HGNC complete set: 45,083 approved genes, 128,704 cross-references (Entrez, Ensembl, UCSC, OMIM) |
 | nothing equivalent | `annotation.mane__transcript` | MANE v1.5: 19,437 transcripts (19,363 Select, 74 Plus Clinical) pairing RefSeq and Ensembl |
-| `gwascat` | `clinical.gwas_catalog__association`, `clinical.gwas_catalog__study` | GWAS Catalog 2026-09-15: 1,192,472 associations, 230,057 studies, traits as EFO ids that join `ontology.term` |
+| `gwascat` | `clinical.gwas_catalog__association`, `clinical.gwas_catalog__study` | GWAS Catalog 2026-09-15: 1,192,472 associations, 230,057 studies, traits as ontology term ids — EFO, OBA, MONDO, HP, GO, as the MAPPED TRAIT URI gives them — that join `ontology.term` |
 | nothing equivalent | `annotation.interaction`, `annotation.complexportal__complex`, `annotation.complexportal__participant` | BioGRID 5.0.261 (2.94M interactions) and IntAct 2026-01-09 (1.79M) stacked by `source`; Complex Portal: 20,579 complexes, 101,561 participants |
 | `rWikiPathways` (API client) | `annotation.wikipathways__pathway`, `annotation.wikipathways__gene_pathway` | WikiPathways 20260910: 1,957 pathways in 18 species, 76,046 gene-pathway rows |
 | nothing equivalent | `annotation.cellosaurus__cell_line`, `annotation.cellosaurus__xref`, `annotation.cellosaurus__disease` | Cellosaurus 56.0: 168,970 cell lines, 473,381 cross-references (DepMap, ENCODE, GEO, CLO...), 124,953 disease rows |
