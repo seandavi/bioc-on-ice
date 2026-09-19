@@ -37,7 +37,7 @@ import urllib.request
 import duckdb
 from pyiceberg.expressions import And, EqualTo
 
-from . import merge
+from . import merge, schemas
 
 FTP = "https://ftp.ensembl.org/pub/release-{release}"
 
@@ -114,8 +114,20 @@ def gtf_url(ensembl_release, species):
     return listing + _pick_gtf(names, ensembl_release, species)
 
 
+def _migrated(cat):
+    """Stop before the first write if the live tables still have the pre-#94 shape.
+
+    `schemas.create` refuses a table that lacks the required genome_id. Without
+    asking first, raw and reference.genome would be written before gene's merge
+    hit that refusal, and `bioconice migrate-assembly-scope` would then find a
+    taxon's GTF landed twice.
+    """
+    schemas.create(cat, "annotation.gene")
+
+
 def land_raw(cat, release, species, ensembl_release, url=None, info=None):
     """Phase 1: the GTF, verbatim, into raw.ensembl__gtf."""
+    _migrated(cat)
     info = info or species_info(ensembl_release, species)
     con = duckdb.connect()
     arrow = con.sql(f"""
@@ -159,6 +171,7 @@ def _scope(identifier, info):
 
 def transform(cat, release, info, ensembl_release):
     """Phase 2: derive the annotation tables from landed raw rows."""
+    _migrated(cat)
     taxon, genome = info["taxon_id"], info["accession"]
     # An info dict without the flag is a taxon's only assembly.
     canonical = info.get("canonical", True)

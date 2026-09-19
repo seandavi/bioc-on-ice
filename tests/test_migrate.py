@@ -152,6 +152,14 @@ def test_a_taxon_without_exactly_one_genome_stops_the_run_before_any_write(cat):
     assert "genome_id" not in cat.load_table("annotation.gene").schema().column_names
 
 
+def test_an_ingest_before_the_migration_writes_nothing(cat):
+    before = len(rows(cat, "raw.ensembl__gtf"))
+    with pytest.raises(ValueError, match="rebuild the table"):
+        ensembl.land_raw(cat, "2026.10", "x", "116", info=HUMAN,
+                         url=str(Path(__file__).parent / "tiny.gtf"))
+    assert len(rows(cat, "raw.ensembl__gtf")) == before
+
+
 def test_respelling_refuses_to_double_a_mapping(cat):
     """An ingest with the new code before the migration asserts 'ENSEMBL' rows of its own."""
     table = cat.load_table("annotation.identifier_mapping")
