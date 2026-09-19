@@ -197,3 +197,13 @@ def test_every_column_is_documented(cat, tmp_path):
         assert table.properties.get("comment"), identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+def test_iso_text_matches_the_api_when_microseconds_are_zero():
+    # The API prints Python's isoformat(): no fraction at all for a whole second
+    # (one such record in the 2026-09-01 snapshot, found by the production re-land).
+    con = duckdb.connect(config={"TimeZone": "UTC"})
+    sql = ("SELECT {} FROM (SELECT TIMESTAMPTZ '2026-04-09 07:03:09+00' AS whole, "
+           "TIMESTAMPTZ '2025-05-22 12:02:50.145300+00' AS frac)")
+    assert con.sql(sql.format(bedbase._iso("whole"))).fetchone()[0] == "2026-04-09T07:03:09Z"
+    assert con.sql(sql.format(bedbase._iso("frac"))).fetchone()[0] == "2025-05-22T12:02:50.145300Z"

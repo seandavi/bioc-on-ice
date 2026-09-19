@@ -90,8 +90,10 @@ def _download(entry, directory):
 
 
 def _iso(col):
-    # The snapshot types these TIMESTAMPTZ; the raw columns are the text the API printed.
-    return f"strftime({col} AT TIME ZONE 'UTC', '%Y-%m-%dT%H:%M:%S.%fZ') AS {col}"
+    # The snapshot types these TIMESTAMPTZ; the raw columns are the text the API printed —
+    # Python's isoformat(), which drops the fraction when the microseconds are zero.
+    return (f"replace(strftime({col} AT TIME ZONE 'UTC', '%Y-%m-%dT%H:%M:%S.%fZ'), "
+            f"'.000000Z', 'Z') AS {col}")
 
 
 def _read_bed(path):
