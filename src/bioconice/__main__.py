@@ -89,12 +89,9 @@ def main():
                     "skips the registry URL (how offline tests stay offline)")
 
     bb = sub.add_parser("ingest-bedbase",
-                        help="land BEDbase's bed/bedset listings, then derive resource entries")
+                        help="land BEDbase's newest monthly Parquet snapshot whole, then derive "
+                             "resource entries")
     bb.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
-    bb.add_argument("--limit", type=int,
-                    help="bound the crawl to about this many records per endpoint (default: "
-                         "the full 663k bed / 22k bedset listings); a bounded run never "
-                         "retires records outside what it fetched")
 
     hg = sub.add_parser("ingest-hgnc", help="land the HGNC complete set whole, then derive")
     hg.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.09")
@@ -189,7 +186,7 @@ def main():
     elif args.cmd == "ingest-obo":
         _print(obo.ingest(cat, args.release, args.ontology, args.url))
     elif args.cmd == "ingest-bedbase":
-        _print(bedbase.ingest(cat, args.release, args.limit))
+        _print(bedbase.ingest(cat, args.release))
     elif args.cmd == "ingest-hgnc":
         _print(hgnc.ingest(cat, args.release, args.url))
     elif args.cmd == "ingest-mane":

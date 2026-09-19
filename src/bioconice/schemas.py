@@ -1331,11 +1331,11 @@ TABLES = {
                             "this record; false records may lack stats even at the full-detail "
                             "endpoint."),
             NestedField(13, "submission_date", StringType(),
-                        doc="ISO 8601 timestamp this record was submitted, kept as upstream "
-                            "prints it, unparsed."),
+                        doc="Timestamp this record was submitted, as the ISO 8601 UTC text "
+                            "BEDbase's API prints, e.g. '2025-05-22T12:02:50.145308Z'."),
             NestedField(14, "last_update_date", StringType(),
-                        doc="ISO 8601 timestamp this record last changed, kept as upstream "
-                            "prints it, unparsed."),
+                        doc="Timestamp this record last changed, same text form as "
+                            "submission_date."),
             NestedField(15, "annotation_organism", StringType(),
                         doc="annotation.organism as BEDbase prints it, e.g. 'Homo sapiens'. "
                             "Free text; annotation_species_id is the reliable taxon join."),
@@ -1348,8 +1348,9 @@ TABLES = {
             NestedField(17, "annotation_genotype", StringType(), doc="annotation.genotype as published."),
             NestedField(18, "annotation_phenotype", StringType(), doc="annotation.phenotype as published."),
             NestedField(19, "annotation_description", StringType(),
-                        doc="annotation.description — distinct from the record's own top-level "
-                            "`description` above. Frequently blank."),
+                        doc="annotation.description from the listing API — distinct from the "
+                            "record's own top-level `description` above. NULL since landing moved "
+                            "to the Parquet snapshot, which prints one `description` only."),
             NestedField(20, "annotation_cell_type", StringType(), doc="annotation.cell_type as published."),
             NestedField(21, "annotation_cell_line", StringType(), doc="annotation.cell_line as published."),
             NestedField(22, "annotation_tissue", StringType(), doc="annotation.tissue as published."),
@@ -1374,15 +1375,22 @@ TABLES = {
                             "'GSM4837486_Plasma_B2_T1.ATACseq.narrowPeak.gz'."),
             NestedField(31, "landed_in", StringType(), required=True,
                         doc="The biocOnIce release whose ingest landed these rows."),
+            # Added with the move to the Parquet snapshot; after landed_in because that is
+            # where schema evolution puts a column on the table that already existed.
+            NestedField(32, "header", StringType(),
+                        doc="The BED file's own header lines, where it had any. NULL for most."),
+            NestedField(33, "indexed", BooleanType(),
+                        doc="BEDbase's `indexed` flag: whether the record is in its search index."),
+            NestedField(34, "file_indexed", BooleanType(),
+                        doc="BEDbase's `file_indexed` flag, as published."),
         ),
-        comment="BEDbase's /v1/bed/list landed verbatim and whole, one row per BED file "
-                "record — every field the listing endpoint returns, its nested `annotation` "
-                "object flattened with an `annotation_` prefix. Per-file DETAIL (URIs, "
-                "checksums, stats) is deliberately NOT landed here: /v1/bed/{id}/metadata"
-                "?full=true is one HTTP request per record, 663,721 of them, left to a "
-                "follow-up (issue #79) rather than paid for on every crawl. BEDbase has no "
-                "release cadence, so this table is replaced wholesale each ingest and the "
-                "manifest records retrieval_date as the version.",
+        comment="BEDbase's monthly `bedbase_metadata` Parquet snapshot (the index is "
+                "api.bedbase.org/v1/exports) landed whole, one row per BED file record: its "
+                "`bed` table joined with `bed_metadata`. The sample-level columns keep the "
+                "`annotation_` prefix they had when this table was landed from the listing API. "
+                "Per-file DETAIL (URIs, checksums, stats) is not in the snapshot and not here "
+                "(issue #115). Replaced wholesale each ingest; the manifest records the "
+                "snapshot's date and sha256.",
         properties={"bioc.column.annotation_species_id.prefix": "ncbitaxon",
                     "bioc.column.license_id.prefix": "duo"},
     ),
@@ -1396,16 +1404,15 @@ TABLES = {
                         doc="BEDbase's own MD5 digest of the bedset's metadata — not a digest "
                             "of any file."),
             NestedField(4, "submission_date", StringType(),
-                        doc="ISO 8601 timestamp, kept as upstream prints it, unparsed."),
+                        doc="ISO 8601 UTC text as BEDbase's API prints it, e.g. "
+                            "'2025-06-05T12:03:43.962219Z'."),
             NestedField(5, "last_update_date", StringType(),
-                        doc="ISO 8601 timestamp, kept as upstream prints it, unparsed."),
+                        doc="ISO 8601 UTC text, same form as submission_date."),
             NestedField(6, "description", StringType(),
                         doc="Bedset description, Markdown text as BEDbase prints it."),
             NestedField(7, "bedfile_count", IntegerType(),
-                        doc="Member BED files, per BEDbase's own count. Membership itself "
-                            "(bed_ids) is NOT landed here: it is null on this listing endpoint "
-                            "and needs a per-bedset detail request, 22,189 of them, deferred "
-                            "alongside the per-file detail issue #79 leaves for a follow-up."),
+                        doc="Member BED files, per BEDbase's own count. Membership itself is "
+                            "raw.bedbase__bedset_membership."),
             NestedField(8, "author", StringType(), doc="Curator/submitter name as published."),
             NestedField(9, "bedset_source", StringType(),
                         doc="BEDbase's own 'source' field on a bedset, e.g. 'gse33600' "
@@ -1415,12 +1422,38 @@ TABLES = {
                             "rename BugSigDB's `source_in_paper` makes, and for the same reason."),
             NestedField(10, "landed_in", StringType(), required=True,
                         doc="The biocOnIce release whose ingest landed these rows."),
+            # Added with the move to the Parquet snapshot — see raw.bedbase__bed.
+            NestedField(11, "summary", StringType(),
+                        doc="Plain-text summary of the bedset, usually the GEO series summary."),
+            NestedField(12, "bedset_means", StringType(),
+                        doc="JSON object, as published: the mean of each bedstat statistic over "
+                            "the member files, e.g. '{\"number_of_regions\": 4363.0, ...}'."),
+            NestedField(13, "bedset_standard_deviation", StringType(),
+                        doc="JSON object, as published: the standard deviation of each bedstat "
+                            "statistic over the member files."),
+            NestedField(14, "bedset_stats", StringType(),
+                        doc="BEDbase's `bedset_stats`, as published. NULL on every row of the "
+                            "2026-09-01 snapshot."),
+            NestedField(15, "processed", BooleanType(),
+                        doc="Whether BEDbase's pipeline finished processing this bedset."),
         ),
-        comment="BEDbase's /v1/bedset/list landed verbatim and whole, one row per bedset. "
-                "Statistics, plots and membership (bed_ids) are null on this listing endpoint "
-                "and require a per-bedset detail request (22,189 of them) — deferred alongside "
-                "the per-file detail issue #79 leaves for a follow-up. Replaced wholesale each "
-                "ingest; retrieval_date is the version, per BEDbase's lack of a release cadence.",
+        comment="BEDbase's monthly `bedbase_bedsets` Parquet snapshot landed whole, one row "
+                "per bedset. Replaced wholesale each ingest; the manifest records the "
+                "snapshot's date and sha256.",
+        properties={},
+    ),
+    "raw.bedbase__bedset_membership": TableDef(
+        schema=Schema(
+            NestedField(1, "bedset_id", StringType(), required=True,
+                        doc="raw.bedbase__bedset.id."),
+            NestedField(2, "bedfile_id", StringType(), required=True,
+                        doc="raw.bedbase__bed.id. A file can belong to several bedsets."),
+            NestedField(3, "landed_in", StringType(), required=True,
+                        doc="The biocOnIce release whose ingest landed these rows."),
+        ),
+        comment="BEDbase's monthly `bedbase_bedset_membership` Parquet snapshot landed whole: "
+                "one row per (bedset, member BED file). The joinable, versioned form is "
+                "resource.resource_relationship, relationship = 'member_of_bedset'.",
         properties={},
     ),
     "resource.bedbase__bedfile": TableDef(
@@ -1477,10 +1510,11 @@ TABLES = {
         ),
         business_key=("resource_id",),
         comment="One row per BEDbase BED file, Type 2 by resource_id: title, genome, "
-                "organism/assay-level annotation and licence, from /v1/bed/list. Objects are "
+                "organism/assay-level annotation and licence, from BEDbase's monthly Parquet "
+                "snapshot. Objects are "
                 "REFERENCED here, never ingested: size, checksum and the http/s3/bigbed URIs "
                 "live at /v1/bed/{id}/metadata?full=true, one request per record (663,721 of "
-                "them), deferred to a follow-up (issue #79) and to be added by schema "
+                "them), deferred to a follow-up (issue #115) and to be added by schema "
                 "evolution when they land — a column that is always NULL advertises a "
                 "capability this table does not yet have. Key genomes on genome_digest, never "
                 "genome_alias — see that column's doc. license_id (a DUO code) is carried on "
@@ -1509,12 +1543,10 @@ TABLES = {
             NestedField(11, "valid_to", StringType(), doc=VALID_TO),
         ),
         business_key=("resource_id",),
-        comment="One row per BEDbase bedset, Type 2 by resource_id, from /v1/bedset/list. "
-                "Membership (which BED files belong to a bedset) is deliberately NOT here: "
-                "bed_ids is null on the listing endpoint and needs a per-bedset detail "
-                "request (22,189 of them) — deferred alongside the per-file detail issue #79 "
-                "leaves for a follow-up, to land as a resource_relationship-style membership "
-                "table when it does.",
+        comment="One row per BEDbase bedset, Type 2 by resource_id, from BEDbase's monthly "
+                "Parquet snapshot. Membership (which BED files belong to a bedset) is "
+                "resource.resource_relationship: resource_id = the BED file, relationship = "
+                "'member_of_bedset', target_id = this table's resource_id.",
         properties={},
     ),
     "annotation.icite__citation": TableDef(
@@ -1621,9 +1653,8 @@ TABLES = {
             NestedField(2, "relationship", StringType(), required=True,
                         doc="What the target is to the resource: has_assay, has_tissue, has_disease, "
                             "has_cell_type (CELLxGENE; eQTL Catalogue the last two; targets are ontology term ids); derived_from_sample, "
-                            "derived_from_experiment (BEDbase, targets are 'geo:gsm…'-style accessions). "
-                            "has_cell_type (CELLxGENE, targets are ontology term ids); derived_from_sample, "
                             "derived_from_experiment (BEDbase, targets are 'geo:gsm…'-style accessions); "
+                            "member_of_bedset (BEDbase, target is resource.bedbase__bedset.resource_id); "
                             "part_of_dataset, has_biosample, has_target_gene (ENCODE, targets are 'encode:ENCSR…', "
                             "an ontology term id, 'ncbigene:<Entrez id>'). "
                             "Part of the merge key."),

@@ -220,7 +220,8 @@ def write(cat, identifier, arrow, overwrite_filter):
     return arrow.num_rows
 
 
-def manifest(cat, release, source, url, rows, version=None, method="retrieval_date"):
+def manifest(cat, release, source, url, rows, version=None, method="retrieval_date",
+             checksum=None):
     """Record what this release was built from — ADR-0007.
 
     Every lander writes under its own `source` key: they land independently,
@@ -236,7 +237,7 @@ def manifest(cat, release, source, url, rows, version=None, method="retrieval_da
                '{version or now.date()}' AS source_version,
                '{method}' AS version_method,
                '{now.isoformat(timespec="seconds")}' AS retrieved_at,
-               '{url}' AS url, NULL::VARCHAR AS checksum, {rows}::BIGINT AS row_count
+               '{url}' AS url, {repr(checksum) if checksum else 'NULL'}::VARCHAR AS checksum, {rows}::BIGINT AS row_count
     """).to_arrow_table()
     # A manifest row states what a completed ingest used; it is not versioned,
     # so it is replaced wholesale for its (release, source) rather than merged.
