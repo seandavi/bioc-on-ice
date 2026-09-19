@@ -88,14 +88,13 @@ catalogs:
     endpoint: https://catalog.cloudflarestorage.com/${CF_ACCOUNT_ID}/bioconice
     backend_warehouse: ${CF_ACCOUNT_ID}_bioconice
     backend_prefix: ${R2_CATALOG_PREFIX}
-    # Two backend tokens (icegate#34): the read-only, bucket-scoped vending
-    # token is the default every request falls back to; the write token is
-    # selected only for principals granted `write`. CF_API_TOKEN is still the
-    # legacy Admin token — replace with a bucket-scoped RW vending token when
-    # minted (then nothing Admin-level remains in this Worker).
+    # Two bucket-scoped backend tokens (icegate#34, ADR-0011): the read-only
+    # vending token is the default every request falls back to; the write
+    # token is selected only for principals granted `write`. Nothing
+    # Admin-level remains in this Worker.
     auth:
       bearer_token: ${CF_API_TOKEN_RO}
-      bearer_token_write: ${CF_API_TOKEN}
+      bearer_token_write: ${CF_API_TOKEN_RW}
     capabilities:
       read: true
       write: true
