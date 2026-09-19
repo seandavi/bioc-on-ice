@@ -128,7 +128,8 @@ def land_raw(cat, release, version=None, url=None):
     else:
         version = version or latest()
         url = f"{FTP}{version}/psimitab/intact.zip"
-    members = fetch("intact", version, url)
+    facts = merge.reading(release, "intact", "mitab", url)
+    zpath, members = fetch("intact", version, url)
     for m in members:
         check_header(m, COLUMNS)
 
@@ -144,7 +145,8 @@ def land_raw(cat, release, version=None, url=None):
               f"(SELECT *, '{version}' AS intact_version FROM read_csv({[str(m) for m in members]}, "
               f"delim='\\t', header=true, auto_detect=false, columns={spec}, quote='', escape='', "
               f"nullstr='-', max_line_size=268435456))")
-    merge.manifest(cat, release, "intact", "mitab", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "intact", "mitab", url, n, version=version, method="release_number",
+                   checksum=merge.sha256(zpath), **facts)
     return version, n
 
 

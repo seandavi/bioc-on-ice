@@ -120,8 +120,9 @@ def land_raw(cat, release, number=None, url=None):
     # swallow the lines after it.
     source = (f"(SELECT *, '{number}' AS rnacentral_release FROM read_csv('{url}', sep='\\t', "
               f"header=false, auto_detect=false, columns={COLUMNS}, nullstr='', quote='', escape=''))")
+    facts = merge.reading(release, "rnacentral", "id_mapping", url)
     n = _land(cat, release, RAW, source)
-    merge.manifest(cat, release, "rnacentral", "id_mapping", url, n, version=number, method="release_number")
+    merge.manifest(cat, release, "rnacentral", "id_mapping", url, n, version=number, method="release_number", **facts)
     return str(number), n
 
 

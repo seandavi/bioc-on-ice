@@ -107,6 +107,7 @@ def land_raw(cat, release, name, url=None):
     never invented, and is what raw is replaced per (ADR-0007's version_method='release_number').
     """
     url = url or REGISTRY[name][0]
+    facts = merge.reading(release, "obo", name, url)
     con = duckdb.connect()
     # The graph is read as one JSON value and walked with JSON paths, not as an
     # inferred struct: struct inference makes `meta` a *key*, and a file whose
@@ -139,7 +140,7 @@ def land_raw(cat, release, name, url=None):
         raise SystemExit(f"obo {name}: {url} carries no graphs[0].meta.version")
 
     n = merge.write(cat, f"raw.obo__{name}", arrow, EqualTo("release_version", version))
-    merge.manifest(cat, release, "obo", name, url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "obo", name, url, n, version=version, method="release_number", **facts)
     return version, n
 
 

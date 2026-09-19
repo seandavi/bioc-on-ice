@@ -85,6 +85,7 @@ def land_raw(cat, release, url=None):
                          f"release; found {len(files)} files, dates {sorted(versions)}")
     version = versions.pop()
 
+    facts = merge.reading(release, "wikipathways", "gmt", url)
     con = duckdb.connect()
     # No CSV reader: the file is text, a line is a record, and tab is the only
     # separator. The final LF leaves one empty string after the split; that and
@@ -109,7 +110,7 @@ def land_raw(cat, release, url=None):
     n = merge.write(cat, "raw.wikipathways__gmt", arrow,
                     EqualTo("wikipathways_version", version))
     merge.manifest(cat, release, "wikipathways", "gmt", url, n, version=version,
-                   method="release_number")
+                   method="release_number", **facts)
     return version, n
 
 

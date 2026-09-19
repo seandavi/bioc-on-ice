@@ -55,8 +55,10 @@ def land_raw(cat, release, urls=None):
     urls = urls or {}
     counts = {}
     for name in FILES:
-        n = _land(cat, release, f"raw.ncbi__{name}", tsv(urls.get(name, f"{DATA}{name}.gz"), COLUMNS))
-        merge.manifest(cat, release, "ncbi_gene", name, f"{DATA}{name}.gz", n)
+        url = urls.get(name, f"{DATA}{name}.gz")
+        facts = merge.reading(release, "ncbi_gene", name, url)
+        n = _land(cat, release, f"raw.ncbi__{name}", tsv(url, COLUMNS))
+        merge.manifest(cat, release, "ncbi_gene", name, f"{DATA}{name}.gz", n, **facts)
         counts[f"raw.ncbi__{name}"] = n
     return counts
 

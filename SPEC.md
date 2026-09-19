@@ -746,33 +746,38 @@ Namespace:
 provenance
 ```
 
-## source
+## release
+
+One table, `provenance.release` ([ADR-0007](docs/adr/0007-release-manifest.md)),
+one row per (release, source, artifact) — what each biocOnIce release was built
+from, file by file. It replaced the `provenance.source` and
+`provenance.transformation` tables first sketched here.
 
 ```sql
-source
-------
-source_id
-provider
+release
+-------
+release          -- biocOnIce release, 2026.10
+source           -- the provider: ensembl, ncbi_gene, obo
+artifact         -- what of it was read: homo_sapiens, gene_info, cl
+source_version   -- in the source's own vocabulary
+version_method   -- how that version was learned
+retrieved_at
 url
-retrieved
-version
-checksum
+checksum         -- sha256 of the retrieved file, or the one the source publishes
+etag             -- HTTP validators, where the URL was read without a local copy
+last_modified
+row_count
 ```
 
----
+## What a write was built from
 
-## transformation
-
-```sql
-transformation
---------------
-input
-output
-software
-version
-parameters
-timestamp
-```
+What `transformation` was for — which input produced which output — rides on
+each Iceberg snapshot's summary instead, set once in the shared write path: a
+raw table's snapshot carries `bioc.release`, `bioc.source`, `bioc.artifact` and
+`bioc.url`; a derived table's carries `bioc.release`, `bioc.source` and
+`bioc.input.<raw table>`, the raw snapshot it was derived from. Snapshots
+expire and the manifest does not, which is why the manifest is the record and
+these are the detail.
 
 ---
 
@@ -1124,9 +1129,10 @@ mocks.
    changes no row.
 5. Warehouse size after N releases grows with upstream churn, not with N times
    the size of the catalog.
-6. Every ingest writes a `provenance.source` row carrying URL, retrieval
-   timestamp, upstream version where one exists, and `ETag` / `Last-Modified`
-   where the server supplies them.
+6. Every ingest writes a `provenance.release` row per artifact carrying URL,
+   retrieval timestamp, upstream version where one exists, a checksum where
+   the file was retrieved to disk or the source publishes one, and `ETag` /
+   `Last-Modified` where the server supplies them and the URL was read directly.
 
 ## B. Self-description
 

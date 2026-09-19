@@ -37,8 +37,9 @@ COLUMNS = (
 
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2go verbatim and whole into raw.ncbi__gene2go."""
+    facts = merge.reading(release, "ncbi_gene", "gene2go", url or URL)
     n = _land(cat, release, "raw.ncbi__gene2go", tsv(url or URL, COLUMNS))
-    merge.manifest(cat, release, "ncbi_gene", "gene2go", URL, n)
+    merge.manifest(cat, release, "ncbi_gene", "gene2go", URL, n, **facts)
     return n
 
 

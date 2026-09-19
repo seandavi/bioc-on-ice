@@ -370,7 +370,11 @@ TABLES = {
             NestedField(5, "retrieved_at", StringType(), required=True,
                         doc="UTC timestamp at which the source was fetched."),
             NestedField(6, "url", StringType(), doc="Canonical URL fetched."),
-            NestedField(7, "checksum", StringType(), doc="SHA-256 of the retrieved bytes, where computed."),
+            NestedField(7, "checksum", StringType(),
+                        doc="SHA-256 (hex) of the file as retrieved — the zip, where the source "
+                            "ships one — or the sha256 the source publishes for it (BEDbase). "
+                            "NULL where the URL was read directly with no local copy: see etag "
+                            "and last_modified."),
             NestedField(8, "row_count", LongType(),
                         doc="Rows landed from this artifact, as a cheap integrity check."),
             # Optional only because Iceberg cannot add a required column to a live
@@ -382,6 +386,17 @@ TABLES = {
                             "Part of the key. Always written since 2026-09; NULL only on an "
                             "earlier row that summarised several files at once (ncbi_gene, "
                             "gwas_catalog, eqtlcatalogue) — its row_count is their total."),
+            NestedField(10, "etag", StringType(),
+                        doc="HTTP ETag the server gave for `url` just before it was read, quotes "
+                            "and any W/ prefix kept as sent. Recorded where the URL was read "
+                            "without a local copy to hash; with last_modified it is what tells "
+                            "a file regenerated in place under one version (MANE does this) "
+                            "from the one landed. NULL where the server sends none (NCBI), the "
+                            "source is not http(s), or the row predates 2026-09-19."),
+            NestedField(11, "last_modified", StringType(),
+                        doc="HTTP Last-Modified of `url` just before it was read, verbatim "
+                            "(RFC 9110 date, e.g. 'Thu, 04 Dec 2025 17:02:11 GMT'). NULL under "
+                            "the same conditions as etag."),
         ),
         business_key=("release", "source", "artifact"),
         comment="One row per (biocOnIce release, source, artifact): what this release was built "

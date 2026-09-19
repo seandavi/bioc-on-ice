@@ -30,7 +30,9 @@ version_method     -- how we learned it: release_number, http_last_modified,
                    --   ftp_index_probe, retrieval_date, unavailable
 retrieved_at
 url
-checksum
+checksum           -- sha256 of the file as retrieved, or the one the source publishes
+etag               -- the server's validators, where the URL was read directly and
+last_modified      --   there is no local copy to hash (added 2026-09-19, issue #117)
 row_count          -- free integrity check, per InterPro's entry_count
 ```
 
@@ -58,6 +60,12 @@ catalog-wide and must outlive any snapshot, for the same reason ADR-0001 puts
 history in the rows. Per-table fetch facts still ride on snapshot properties;
 the manifest is the durable cross-source record, and the two do not duplicate:
 one describes a write, the other describes a release.
+
+Those properties are set in one place, `merge.snapshot_properties`, which both
+write paths use (issue #117). A raw table's snapshot carries `bioc.release`,
+`bioc.source`, `bioc.artifact` and `bioc.url`; a derived table's carries
+`bioc.release`, `bioc.source` and `bioc.input.<raw table>` — the snapshot id of
+the raw landing it was derived from, which is the lineage answer.
 
 ## Consequences
 

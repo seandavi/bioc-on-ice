@@ -10,7 +10,7 @@ class Table:
     def __init__(self, fail):
         self.fail, self.calls = list(fail), 0
 
-    def overwrite(self, arrow, overwrite_filter):
+    def overwrite(self, arrow, overwrite_filter, snapshot_properties):
         self.calls += 1
         if self.fail:
             raise self.fail.pop(0)

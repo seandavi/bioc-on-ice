@@ -160,7 +160,7 @@ def latest(base=RELEASES):
 
 
 def _fetch(url, scratch):
-    """A local path to `url`'s TSV: downloaded if remote, unzipped if a zip.
+    """(The file as retrieved, a local path to its TSV): downloaded if remote, unzipped if a zip.
 
     DuckDB does not read zip archives, so the associations go through disk.
     """
@@ -169,11 +169,11 @@ def _fetch(url, scratch):
         path = os.path.join(scratch, os.path.basename(url))
         urllib.request.urlretrieve(url, path)
     if not path.endswith(".zip"):
-        return path
+        return path, path
     with zipfile.ZipFile(path) as z:
         if len(names := z.namelist()) != 1:
             raise SystemExit(f"gwas_catalog: {url} holds {names}, expected one TSV")
-        return z.extract(names[0], scratch)
+        return path, z.extract(names[0], scratch)
 
 
 def land_raw(cat, release, url=None):
@@ -189,10 +189,12 @@ def land_raw(cat, release, url=None):
     version = "-".join(dated.groups()) if dated else str(datetime.now(timezone.utc).date())
 
     con = duckdb.connect()
-    counts = {}
+    counts, fetched = {}, {}
     with tempfile.TemporaryDirectory(dir=os.environ.get("BIOCONICE_SCRATCH")) as scratch:
         for identifier, (name, columns) in FILES.items():
-            tsv = _fetch(url + name, scratch)
+            facts = merge.reading(release, "gwas_catalog", identifier.split("__")[1], url + name)
+            retrieved, tsv = _fetch(url + name, scratch)
+            fetched[identifier] = {**facts, "checksum": merge.sha256(retrieved)}
             if (header := _header(tsv)) != tuple(columns):
                 raise SystemExit(f"gwas_catalog: {url}{name} header is not the declared one; "
                                  f"differs in {sorted(set(header) ^ set(columns))}")
@@ -219,7 +221,8 @@ def land_raw(cat, release, url=None):
     for identifier, (name, _) in FILES.items():
         merge.manifest(cat, release, "gwas_catalog", identifier.split("__")[1], url + name,
                        counts[identifier], version=version,
-                       method="release_number" if dated else "retrieval_date")
+                       method="release_number" if dated else "retrieval_date",
+                       **fetched[identifier])
     return version, counts
 
 

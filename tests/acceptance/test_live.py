@@ -164,7 +164,6 @@ def test_a5_history_grows_with_churn_not_with_releases(con):
 
 
 def test_a6_every_release_row_carries_url_timestamp_and_version(con):
-    # Live, the per-ingest provenance row is provenance.release (ADR-0007), not SPEC's provenance.source.
     n, bad = con.execute("""
         SELECT COUNT(*), COUNT(*) FILTER (WHERE url IS NULL OR retrieved_at IS NULL OR version_method IS NULL
                                           OR (source_version IS NULL AND version_method <> 'unavailable'))
@@ -172,11 +171,12 @@ def test_a6_every_release_row_carries_url_timestamp_and_version(con):
     assert n > 0 and bad == 0
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="A6: ETag / Last-Modified are recorded nowhere — provenance.release has no "
-                   "column for them and `checksum` is NULL in every row, though Ensembl serves an ETag")
 def test_a6_etag_or_last_modified_is_recorded(con):
+    # No longer an expected failure (#117). The live table gains the columns the first time
+    # code from #117 writes to it — `bioconice migrate-manifest`, or any ingest — so until
+    # then this fails, and says what is missing. Values follow with each source's next ingest.
     cols = {r[0] for r in con.execute("DESCRIBE bioc.provenance.release").fetchall()}
-    assert cols & {"etag", "last_modified"}
+    assert {"etag", "last_modified"} <= cols
 
 
 # --------------------------------------------------------------------------

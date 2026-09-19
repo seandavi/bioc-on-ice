@@ -101,6 +101,7 @@ def land_raw(cat, release, version=None, url=None):
     if not files:
         raise SystemExit(f"complexportal: no .tsv files at {url}")
 
+    facts = merge.reading(release, "complexportal", "complex", url)
     # 29 small files from one Apache: uncapped, DuckDB opens a connection per core
     # and EBI refuses some ('Could not connect to server', seen 2026-09-18). The
     # same cap-and-retry bedbase.py uses for its many-small-requests read.
@@ -125,7 +126,8 @@ def land_raw(cat, release, version=None, url=None):
 
     n = merge.write(cat, "raw.complexportal__complex", arrow,
                     EqualTo("complexportal_version", version))
-    merge.manifest(cat, release, "complexportal", "complex", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "complexportal", "complex", url, n, version=version, method="release_number",
+                   **facts)
     return version, n
 
 

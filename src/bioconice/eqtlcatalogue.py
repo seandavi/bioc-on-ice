@@ -112,12 +112,16 @@ def land_raw(cat, release, url=None, version=None):
                          f"release {version} metadata and tabix_ftp_paths.tsv (e.g. "
                          f"{sorted(unpaired)[0]}); the path table is for another release")
 
-    counts = {identifier: merge.write(cat, identifier, arrow,
-                                      EqualTo("eqtlcatalogue_release", version))
-              for identifier, arrow in raw.items()}
+    # Each file is declared at its write, not its read: both are read first (the
+    # pairing check above), and a tagged GitHub ref does not change in between.
+    counts = {}
     for identifier, (file, _) in files.items():
-        merge.manifest(cat, release, "eqtlcatalogue", identifier.split("__")[1], file,
-                       counts[identifier], version=version, method="release_number")
+        artifact = identifier.split("__")[1]
+        facts = merge.reading(release, "eqtlcatalogue", artifact, file)
+        counts[identifier] = merge.write(cat, identifier, raw[identifier],
+                                         EqualTo("eqtlcatalogue_release", version))
+        merge.manifest(cat, release, "eqtlcatalogue", artifact, file, counts[identifier],
+                       version=version, method="release_number", **facts)
     return version, counts
 
 

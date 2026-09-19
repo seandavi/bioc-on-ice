@@ -86,6 +86,7 @@ def land_raw(cat, release, url=None):
                          "refusing to invent a version")
     version = named.group(1)
 
+    facts = merge.reading(release, "mane", "mane_summary", url)
     con = duckdb.connect()
     # The dialect is stated rather than sniffed: no quoting, no comment character
     # (the header itself starts with '#'), empty cell for missing. all_varchar
@@ -102,7 +103,8 @@ def land_raw(cat, release, url=None):
         raise SystemExit(f"mane: {url} yielded no rows")
 
     n = merge.write(cat, "raw.ncbi__mane_summary", arrow, EqualTo("mane_version", version))
-    merge.manifest(cat, release, "mane", "mane_summary", url, n, version=version, method="release_number")
+    merge.manifest(cat, release, "mane", "mane_summary", url, n, version=version, method="release_number",
+                   **facts)
     return version, n
 
 

@@ -26,8 +26,9 @@ COLUMNS = "{'taxon_id':'INTEGER','gene_id':'VARCHAR','pubmed_id':'VARCHAR'}"
 
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2pubmed verbatim and whole into raw.ncbi__gene2pubmed."""
+    facts = merge.reading(release, "ncbi_gene", "gene2pubmed", url or URL)
     n = _land(cat, release, "raw.ncbi__gene2pubmed", tsv(url or URL, COLUMNS))
-    merge.manifest(cat, release, "ncbi_gene", "gene2pubmed", URL, n)
+    merge.manifest(cat, release, "ncbi_gene", "gene2pubmed", URL, n, **facts)
     return n
 
 
