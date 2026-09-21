@@ -286,7 +286,11 @@ def merge(cat, identifier, incoming, release, scope):
 
     stats = dict(con.sql("SELECT _state, count(*) FROM merged GROUP BY 1").fetchall())
     cols = ", ".join(f'"{f.name}"' for f in schema.fields)
-    final = con.sql(f"SELECT {cols} FROM merged").to_arrow_table()
+    # merged is a UNION ALL with no inherent row order (see TableDef.sort_by):
+    # without this, a column believed sorted for query-time pruning is not.
+    sort_cols = [f'"{c}"' for c in schemas.TABLES[identifier].sort_by]
+    order = f" ORDER BY {', '.join(sort_cols)}" if sort_cols else ""
+    final = con.sql(f"SELECT {cols} FROM merged{order}").to_arrow_table()
     overwrite(cat, identifier, table, final.cast(table.schema().as_arrow()), scope, release)
 
     return {"written": sum(stats.get(s, 0) for s in ("new", "changed", "reopened", "superseded", "retired")),

@@ -115,6 +115,16 @@ class TableDef:
     # Identity-partition columns, for pruning only: merge-scope containment, not
     # partitioning, is the correctness mechanism (ADR-0004).
     partition_by: tuple = ()
+    # Sort key applied to the written data, for Parquet/Iceberg column-stat
+    # pruning without an Iceberg partition (issue #177). merge()'s output is
+    # a UNION ALL of independently-computed branches with no inherent row
+    # order, so a column assumed sorted for query-time pruning has to be
+    # sorted explicitly at write time. Prefer this over partition_by for a
+    # high-cardinality or skewed column (e.g. taxon_id across ~53,000 taxa,
+    # most with a handful of rows): sorting costs the same regardless of
+    # cardinality or skew, where identity-partitioning such a column would
+    # explode into thousands of near-empty partitions instead of pruning.
+    sort_by: tuple = ()
     properties: dict = field(default_factory=dict)
 
     def iceberg_schema(self):
@@ -768,6 +778,7 @@ TABLES = {
             NestedField(9, "valid_to", StringType(), doc=VALID_TO),
         ),
         business_key=("gene_id", "taxon_id"),
+        sort_by=("taxon_id",),
         comment="Genes as NCBI Gene defines them, keyed by Entrez GeneID. Separate from "
                 "annotation.gene rather than extra columns on it, because gene_info is keyed by "
                 "Entrez id and the Entrez-to-Ensembl mapping is many-to-many in both directions: "
