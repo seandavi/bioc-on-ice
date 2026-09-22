@@ -239,3 +239,32 @@ def assembly_scope(cat, copy_swap=False):
         _rebuild(cat, identifier, genomes, copy_swap)
     _raw(cat, genomes)
     _respell(cat)
+
+
+def signature_taxon(cat, copy_swap=False):
+    """`bioconice migrate-signature-taxon`: set aside the pre-#152 annotation.signature_taxon.
+
+    The live table was not created from schemas.py: seven explode columns, no
+    valid_from / valid_to. The declaration (#152) requires valid_from, which
+    `schemas._evolve` refuses to add to existing rows, so the first
+    `ingest-bugsigdb` since #152 fails until this has run. Nothing is copied
+    forward: those rows carry no history to keep, and `bugsigdb.transform`
+    rebuilds them from raw at the release it is run for — this table's
+    row-carried history starts there. The original stays as
+    `annotation.signature_taxon__v1` until someone drops it: renamed there, or
+    with `copy_swap` (a catalog that cannot rename) copied there and dropped.
+    A table already in the declared shape, or none, is left alone. Untested live.
+    """
+    identifier = "annotation.signature_taxon"
+    old = _load(cat, identifier)
+    if old is None or "valid_from" in old.schema().column_names:
+        print(f"{identifier:32} nothing to do")
+        return
+    v1 = identifier + "__v1"
+    print(f"{identifier}: old shape was at {old.metadata_location}")
+    if copy_swap:
+        backup = _load(cat, v1) or cat.create_table(v1, schema=old.schema())
+        _write(cat, v1, backup, old.scan().to_arrow(), AlwaysTrue())   # rerun-safe: replaces
+        cat.drop_table(identifier)
+    else:
+        schemas.rate_limited(lambda: cat.rename_table(identifier, v1))

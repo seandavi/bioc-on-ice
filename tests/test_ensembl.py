@@ -404,7 +404,7 @@ BSDB = Path(__file__).parent / "tiny_bugsigdb.csv"
 def test_bugsigdb_lands_verbatim(cat):
     from bioconice import bugsigdb
     n = bugsigdb.land_raw(cat, REL, version="v1.3.1", url=str(BSDB))
-    assert n == 2
+    assert n == 3
     rows = {r["bsdb_id"]: r for r in rows_of(cat)}
     a = rows["bsdb:83/1/1"]
 
@@ -437,11 +437,11 @@ def test_bugsigdb_relands_a_tag_idempotently(cat):
     from bioconice import bugsigdb
     bugsigdb.land_raw(cat, REL, version="v1.3.1", url=str(BSDB))
     bugsigdb.land_raw(cat, "2026.09", version="v1.3.1", url=str(BSDB))
-    assert len(rows_of(cat)) == 2
+    assert len(rows_of(cat)) == 3
 
     # a different tag accumulates alongside it rather than replacing it
     bugsigdb.land_raw(cat, "2026.09", version="v1.3.0", url=str(BSDB))
-    assert len(rows_of(cat)) == 4
+    assert len(rows_of(cat)) == 6
     assert {r["bugsigdb_version"] for r in rows_of(cat)} == {"v1.3.0", "v1.3.1"}
 
 
@@ -451,7 +451,7 @@ def test_bugsigdb_manifest_uses_the_release_tag_not_a_date(cat):
     bugsigdb.land_raw(cat, REL, version="v1.3.1", url=str(BSDB))
     m = next(r for r in rows(cat, "provenance.release") if r["source"] == "bugsigdb")
     assert (m["source_version"], m["version_method"]) == ("v1.3.1", "release_number")
-    assert m["row_count"] == 2
+    assert m["row_count"] == 3
 
 
 def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):

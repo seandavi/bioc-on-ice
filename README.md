@@ -277,6 +277,32 @@ tables from it, so reinterpreting a source — a parsing fix, an attribute nobod
 needed before — is a re-run rather than a re-download. That is what
 `--transform-only` does.
 
+### BugSigDB
+
+```sh
+uv run bioconice migrate-signature-taxon                          # once, before the first ingest-bugsigdb since #152
+uv run bioconice ingest-bugsigdb --release 2026.09 --version v1.3.1
+uv run bioconice ingest-bugsigdb --release 2026.09 --version v1.3.1 --from-lake   # ADR-0012: read cdsci-lake, not GitHub
+```
+
+`ingest-bugsigdb` lands the tag and then derives `annotation.signature_taxon`
+(#152). The live `annotation.signature_taxon` predates that declaration: seven
+columns, no `valid_from`/`valid_to`, not created from `schemas.py`. The
+declaration requires `valid_from`, which schema evolution cannot add to existing
+rows, so the first `ingest-bugsigdb` fails at the transform until the old table
+is set aside. `migrate-signature-taxon` renames it to
+`annotation.signature_taxon__v1` — or, with `--copy-swap` for a catalog that
+cannot rename, copies it there and drops the original — and the next ingest
+creates the table from the declaration and fills it from raw. Nothing is copied
+forward: the old rows carry no history, so this table's row-carried history
+starts at the release of that first run. The migration is re-runnable and
+offline-tested but **has not been run live**; drop `__v1` once the new table
+checks out (59,486 rows expected at v1.3.1).
+
+`--from-lake` reads cdsci-lake's `lake.bugsigdb.signatures`, which holds one tag
+at a time: asking for a tag the lake has moved past fails before anything is
+written (cdsci-lake#103). It needs cdsci-lake importable — see Develop.
+
 ## Conventions
 
 `gene_id` is the bare Ensembl stable id (`ENSG00000141510`) with the upstream
@@ -337,8 +363,14 @@ what still needs a deploy.
 ## Develop
 
 ```sh
-uv run pytest       # raw ingest -> transform -> query, on a fixture, offline
+uv run pytest                      # raw ingest -> transform -> query, on a fixture, offline
+uv pip install -e ../cdsci-lake    # dev-only: the ADR-0012 lake read path and its tests (they skip without it)
 ```
+
+cdsci-lake is not a declared dependency until it publishes — a path source
+would break `uv sync` on any checkout without the sibling. `uv run` leaves the
+manual install in place; `uv sync` (exact by default) removes it, so repeat the
+line after syncing.
 
 ## Acceptance
 

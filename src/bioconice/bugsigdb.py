@@ -147,9 +147,11 @@ def _from_csv(url, version, release):
 
 
 # cdsci-lake types five columns on ingest (sources/bugsigdb/ingest.py `_TYPED`); raw
-# here is all-varchar, so they are rendered back to the CSV's text. curated_date
-# round-trips through strptime('%d %B %Y') exactly; a date cdsci could not parse
-# is NULL on the lake path where the CSV path kept the text (see the docstring).
+# here is all-varchar, so they are rendered back to the CSV's text. Two documented
+# divergences from the CSV path, shared by all five: a value TRY_CAST could not parse
+# ('NR', 'n.d.') is NULL where the CSV kept the text, and a parseable one is
+# re-rendered canonically ('05 January 2021' -> '5 January 2021', '0012345' -> '12345').
+# test_bugsigdb.py pins both; the raw table comment in schemas.py states them.
 _UNTYPED = {
     "pmid": "pmid::VARCHAR",
     "year": "year::VARCHAR",
@@ -163,15 +165,25 @@ def _from_lake(settings, version, release):
     """The same rows from cdsci-lake's curated table, filtered to one release tag.
 
     `lake.bugsigdb.signatures` is cdsci's upsert_latest_snapshot silver table,
-    keyed on bsdb_id: a row carries the tag it was last seen in, so filtering on
-    `bugsigdb_version = version` yields exactly that tag's dump only while it is
-    the newest tag loaded there. Older tags need DuckLake time travel on the
-    cdsci side; that is a shared-contract gap, not something to paper over here.
+    keyed on bsdb_id: a row carries the tag it was last seen in, so the table holds
+    exactly one tag's complete dump only while `version` is the newest tag loaded
+    there. Once cdsci has moved on, a `bugsigdb_version = version` filter returns
+    zero or a partial set, and writing that would replace the tag's scope in raw
+    with nothing — so this refuses unless every row in the table carries the tag.
+    Older tags need DuckLake time travel on the cdsci side (cdsci-lake#103); that
+    is a shared-contract gap, not something to paper over here.
     """
-    from cdsci.lake import lake_connect  # [lake] group; the CSV path needs none of it
+    from cdsci.lake import lake_connect  # dev-only: `uv pip install -e ../cdsci-lake`
 
     con = lake_connect(None if settings is True else settings, read_only=True)
     try:
+        total, tagged = con.execute(f"""
+            SELECT count(*), count(*) FILTER (WHERE bugsigdb_version = ?) FROM {LAKE_TABLE}
+        """, [version]).fetchone()
+        if not total or tagged != total:
+            raise ValueError(f"{LAKE_TABLE}: {tagged} of {total} rows carry {version}; the lake "
+                             f"holds one tag at a time, so this is not that tag's complete dump "
+                             f"(cdsci-lake#103). Land it from the CSV instead.")
         select = ",\n               ".join(f"{_UNTYPED.get(c, c)} AS {c}" for c in COLUMNS.values())
         return con.execute(f"""
             SELECT {select},
@@ -195,13 +207,9 @@ def land_raw(cat, release, version=DEFAULT_VERSION, url=None, lake=None):
     by its own environment (`CU_OPENALEX_LAKE_BACKEND` etc.), a
     `cdsci.lake.Settings` reads that lake (tests), `None` reads the CSV at `url`.
     """
-    if lake:
-        url = LAKE_TABLE
-        arrow = _from_lake(lake, version, release)
-    else:
-        url = url or dump_url(version)
-        arrow = _from_csv(url, version, release)
-    facts = merge.reading(release, "bugsigdb", "full_dump", url)
+    url = LAKE_TABLE if lake else (url or dump_url(version))
+    facts = merge.reading(release, "bugsigdb", "full_dump", url)   # before the read (merge.reading)
+    arrow = _from_lake(lake, version, release) if lake else _from_csv(url, version, release)
 
     n = merge.write(cat, RAW, arrow, EqualTo("bugsigdb_version", version))
     # release_number: BugSigDB publishes real, citable release tags.
@@ -213,7 +221,10 @@ def land_raw(cat, release, version=DEFAULT_VERSION, url=None, lake=None):
 # Verbatim body of cdsci-lake's transform/models/bugsigdb/signature_taxon.sql, with
 # its FROM pointed at the raw rows registered as `raw`. cdsci does not ship the model
 # in its package, so the text lives here too; test_bugsigdb.py runs both over one
-# fixture and fails if they drift. ponytail: no rank rollup (needs NCBI Taxonomy, #18).
+# fixture and fails if they drift — but only where the sibling checkout exists (the
+# test skips elsewhere, CI included), so drift is caught on a developer's machine, not
+# by the pipeline. cdsci-lake#103 asks cdsci to ship the model SQL or the gold table.
+# ponytail: no rank rollup (needs NCBI Taxonomy, #18).
 EXPLODE = """
 WITH lists AS (
     SELECT
@@ -249,7 +260,10 @@ def transform(cat, release, version=DEFAULT_VERSION):
     """Phase 2: one row per signature member, merged with release history.
 
     One tag is one complete state of every signature, and this is the only
-    writer, so the scope is the whole table (scd2_release, ADR-0004/0006).
+    writer, so the scope is the whole table (scd2_release, ADR-0004/0006). With
+    several tags landed in raw, `transform(tag)` retires any member unique to
+    the other tags: the last run wins, which is right for a single writer
+    deriving one tag per release.
     """
     con = duckdb.connect()
     con.register("raw", cat.load_table(RAW).scan(

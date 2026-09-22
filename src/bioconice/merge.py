@@ -299,7 +299,15 @@ def merge(cat, identifier, incoming, release, scope):
 
 
 def write(cat, identifier, arrow, overwrite_filter):
-    """Create-if-missing, cast to the declared schema, overwrite the filter's rows."""
+    """Create-if-missing, cast to the declared schema, overwrite the filter's rows.
+
+    An empty table is refused before anything is written: a lander that read
+    nothing (a source moved on, a filter that matched no rows) would otherwise
+    replace the whole scope with nothing and record row_count=0 as if that were
+    the data. `merge` is the place for "everything in scope is gone".
+    """
+    if not arrow.num_rows:
+        raise ValueError(f"{identifier}: refusing to overwrite {overwrite_filter} with 0 rows")
     table = schemas.create(cat, identifier)
     # Casting to the declared schema is the check: a column we failed to produce,
     # or a null in an identifier field, fails here rather than landing quietly.

@@ -641,8 +641,12 @@ TABLES = {
                 "rather than the hourly devel export, so it is immutable and citable (each release "
                 "has a Zenodo DOI). Read either from the export's GitHub CSV or, per ADR-0012, from "
                 "cdsci-lake's curated lake.bugsigdb.signatures rendered back to the same strings; "
-                "provenance.release.url says which. Licence CC BY 4.0, declared both in "
-                ".zenodo.json and in the file's own banner line.",
+                "provenance.release.url says which. CAVEAT on the lake path: cdsci types five "
+                "columns (pmid, year, group_0_sample_size, group_1_sample_size, curated_date), so "
+                "in those five a value it could not parse ('NR', 'n.d.') is NULL where the CSV "
+                "kept the text, and a parsed one is re-rendered canonically ('05 January 2021' -> "
+                "'5 January 2021', '0012345' -> '12345'); every other column is byte-identical. "
+                "Licence CC BY 4.0, declared both in .zenodo.json and in the file's own banner line.",
         properties={"bioc.column.pmid.prefix": "pubmed",
                     "bioc.column.doi.prefix": "doi",
                     "bioc.column.efo_id.prefix": "efo",
@@ -678,7 +682,9 @@ TABLES = {
                         doc="NCBI Taxonomy id of the asserted taxon: the last element of the "
                             "member's '|' lineage in raw.bugsigdb__full_dump.ncbi_taxonomy_ids. "
                             "Bare local id (bioregistry prefix ncbitaxon). NULL where BugSigDB "
-                            "curated no id or it is not an integer. Not part of the key: two "
+                            "curated no id or it is not an integer. int32, ceiling 2,147,483,647 "
+                            "(NCBI ids are ~3.5M as of 2026): an id above it fails the load in "
+                            "pyarrow's safe cast rather than wrapping. Not part of the key: two "
                             "members of one signature may resolve to the same taxon."),
             NestedField(6, "taxon_lineage", StringType(),
                         doc="The member's full MetaPhlAn lineage verbatim, '|'-separated with "
@@ -700,7 +706,8 @@ TABLES = {
                 "reference taxonomy for that. Study, experiment and contrast attributes stay in "
                 "the raw table, keyed by bsdb_id. Same explode as cdsci-lake's "
                 "bugsigdb.signature_taxon model; this table adds row-carried release history. "
-                "Licence CC BY 4.0 (BugSigDB).",
+                "Temporal model: scd2_release — valid_from/valid_to are biocOnIce release ids, "
+                "at most one live row per (bsdb_id, member_index). Licence CC BY 4.0 (BugSigDB).",
         properties={"bioc.column.ncbitaxon_id.prefix": "ncbitaxon",
                     "bioc.license": "CC-BY-4.0"},
     ),

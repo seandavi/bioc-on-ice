@@ -178,6 +178,12 @@ def main():
     mg.add_argument("--copy-swap", action="store_true",
                     help="for a catalog that cannot rename a table: drop, recreate and copy "
                          "<table>__v2 back instead of renaming it into place")
+    ms = sub.add_parser("migrate-signature-taxon",
+                        help="one-off (issue #152), before the first ingest-bugsigdb since it: set "
+                             "the pre-#152 annotation.signature_taxon (no valid_from) aside as "
+                             "__v1 so the ingest can create it in the declared shape; re-runnable")
+    ms.add_argument("--copy-swap", action="store_true",
+                    help="for a catalog that cannot rename a table: copy it to __v1 and drop it")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
@@ -192,6 +198,8 @@ def main():
         _print(counts)
     elif args.cmd == "migrate-assembly-scope":
         migrate.assembly_scope(cat, args.copy_swap)
+    elif args.cmd == "migrate-signature-taxon":
+        migrate.signature_taxon(cat, args.copy_swap)
     elif args.cmd == "ingest-bugsigdb":
         _print(bugsigdb.ingest(cat, args.release, args.version, lake=args.from_lake or None))
     elif args.cmd == "ingest-icite":
