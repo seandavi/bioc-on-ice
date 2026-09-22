@@ -45,11 +45,15 @@ def main():
     ing.add_argument("--transform-only", action="store_true",
                      help="re-derive from already-landed raw rows, without re-downloading")
 
-    bs = sub.add_parser("ingest-bugsigdb", help="land a BugSigDB export release (no transform yet)")
+    bs = sub.add_parser("ingest-bugsigdb",
+                        help="land a BugSigDB export release, then derive annotation.signature_taxon")
     bs.add_argument("--release", required=True, help="biocOnIce release, e.g. 2026.08")
     bs.add_argument("--version", default=bugsigdb.DEFAULT_VERSION,
                     help="BugSigDBExports release tag, e.g. v1.3.1. Tags are immutable; "
                          "the devel branch re-exports hourly and is not")
+    bs.add_argument("--from-lake", action="store_true",
+                    help="ADR-0012: read the tag from cdsci-lake's lake.bugsigdb.signatures "
+                         "(configured by CU_OPENALEX_* in the environment) instead of GitHub")
 
     # The NCBI ingests share a CLI shape: land whole, then derive — every taxon
     # in the dump by default, or only the ones named.
@@ -189,8 +193,7 @@ def main():
     elif args.cmd == "migrate-assembly-scope":
         migrate.assembly_scope(cat, args.copy_swap)
     elif args.cmd == "ingest-bugsigdb":
-        n = bugsigdb.land_raw(cat, args.release, args.version)
-        print(f"{'raw.bugsigdb__full_dump':40} {n:>10,} rows  ({args.version})")
+        _print(bugsigdb.ingest(cat, args.release, args.version, lake=args.from_lake or None))
     elif args.cmd == "ingest-icite":
         _print(icite.ingest(cat, args.release, args.snapshot, args.csv))
     elif args.cmd == "ingest-pubtator3":

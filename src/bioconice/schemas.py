@@ -608,12 +608,14 @@ TABLES = {
                             "taxa increased and decreased are different signatures."),
             NestedField(48, "metaphlan_taxon_names", StringType(),
                         doc="Signature members as MetaPhlAn lineages. TWO levels of nesting, kept "
-                            "verbatim: ';' separates members, '|' separates ranks within one "
+                            "verbatim: ',' separates members, '|' separates ranks within one "
                             "member's lineage, with k__/p__/c__/o__/f__/g__/s__ rank prefixes. "
-                            "Splitting on '|' alone silently turns one taxon into seven."),
+                            "Splitting on '|' alone silently turns one taxon into seven. The "
+                            "member separator differs from ncbi_taxonomy_ids' ';' (verified on "
+                            "the full v1.3.1 export: the two lists agree in length on every row)."),
             NestedField(49, "ncbi_taxonomy_ids", StringType(),
                         doc="Signature members as NCBI taxon ids, same two-level nesting as "
-                            "metaphlan_taxon_names: ';' between members, '|' up each member's "
+                            "metaphlan_taxon_names but ';' between members, '|' up each member's "
                             "lineage from kingdom to the curated rank. The LAST element of each "
                             "'|' group is the taxon actually reported; the rest are its lineage."),
             NestedField(50, "state", StringType(),
@@ -634,15 +636,72 @@ TABLES = {
         comment="BugSigDB's full_dump.csv landed verbatim: one row per curated microbial signature, "
                 "flattened across study, experiment and signature. Every column is a string and "
                 "nothing is split, per the raw contract — in particular the two member-list columns "
-                "keep their ';' and '|' nesting. BugSigDB's 'NA' placeholder is read as NULL, the "
-                "same treatment NCBI's '-' gets. Landed from a release TAG rather than the hourly "
-                "devel export, so it is immutable and citable (each release has a Zenodo DOI). "
-                "Licence CC BY 4.0, declared both in .zenodo.json and in the file's own banner line.",
+                "keep their member (',' / ';') and '|' lineage nesting. BugSigDB's 'NA' placeholder "
+                "is read as NULL, the same treatment NCBI's '-' gets. Landed from a release TAG "
+                "rather than the hourly devel export, so it is immutable and citable (each release "
+                "has a Zenodo DOI). Read either from the export's GitHub CSV or, per ADR-0012, from "
+                "cdsci-lake's curated lake.bugsigdb.signatures rendered back to the same strings; "
+                "provenance.release.url says which. Licence CC BY 4.0, declared both in "
+                ".zenodo.json and in the file's own banner line.",
         properties={"bioc.column.pmid.prefix": "pubmed",
                     "bioc.column.doi.prefix": "doi",
                     "bioc.column.efo_id.prefix": "efo",
                     "bioc.column.uberon_id.prefix": "uberon",
                     "bioc.column.ncbi_taxonomy_ids.prefix": "ncbitaxon",
+                    "bioc.license": "CC-BY-4.0"},
+    ),
+    # Temporal model: scd2_release (ADR-0004/0006) — valid_from / valid_to are biocOnIce
+    # release ids, a row is one version of one signature member, at most one live row per
+    # business key. Columns mirror cdsci-lake's transform/models/bugsigdb/signature_taxon.sql
+    # output exactly (issue #152 / #114); the history columns are this catalog's.
+    "annotation.signature_taxon": TableDef(
+        schema=Schema(
+            NestedField(1, "bsdb_id", StringType(), required=True,
+                        doc="BugSigDB signature id, e.g. 'bsdb:83/1/1', exactly as in "
+                            "raw.bugsigdb__full_dump.bsdb_id (the 'bsdb:' prefix is part of the "
+                            "value, so no bioc.column prefix is declared). Part of the business key; "
+                            "recurs once per member of the signature."),
+            NestedField(2, "member_index", IntegerType(), required=True,
+                        doc="1-based position of this member in the signature's curated member "
+                            "list (the order of raw.bugsigdb__full_dump.metaphlan_taxon_names). "
+                            "Part of the business key: (bsdb_id, member_index) is the grain. Not "
+                            "stable across BugSigDB versions if curators reorder a signature."),
+            NestedField(3, "taxon_rank", StringType(),
+                        doc="MetaPhlAn rank letter of the asserted taxon: k (kingdom), p, c, o, f, "
+                            "g, s (species), or t (strain). The rank the curators reported the "
+                            "member at — NOT rolled up to a fixed rank; a signature mixes ranks."),
+            NestedField(4, "taxon_name", StringType(),
+                        doc="Name of the asserted taxon with its rank prefix stripped, e.g. "
+                            "'Anaerostipes caccae' from 's__Anaerostipes caccae'. MetaPhlAn's "
+                            "spelling, which may lag NCBI's current name."),
+            NestedField(5, "ncbitaxon_id", IntegerType(),
+                        doc="NCBI Taxonomy id of the asserted taxon: the last element of the "
+                            "member's '|' lineage in raw.bugsigdb__full_dump.ncbi_taxonomy_ids. "
+                            "Bare local id (bioregistry prefix ncbitaxon). NULL where BugSigDB "
+                            "curated no id or it is not an integer. Not part of the key: two "
+                            "members of one signature may resolve to the same taxon."),
+            NestedField(6, "taxon_lineage", StringType(),
+                        doc="The member's full MetaPhlAn lineage verbatim, '|'-separated with "
+                            "k__/p__/.../s__ prefixes, e.g. 'k__Bacillati|p__Bacillota|...|"
+                            "g__Anaerostipes'. Kept for provenance; taxon_name/taxon_rank are "
+                            "its leaf."),
+            NestedField(7, "taxon_lineage_ids", StringType(),
+                        doc="The member's NCBI Taxonomy ids up its lineage, '|'-separated, in the "
+                            "same rank order as taxon_lineage, e.g. '1783272|1239|...|31977'. "
+                            "Kept verbatim; ncbitaxon_id is its last element."),
+            NestedField(8, "valid_from", StringType(), required=True, doc=VALID_FROM),
+            NestedField(9, "valid_to", StringType(), doc=VALID_TO),
+        ),
+        business_key=("bsdb_id", "member_index"),
+        comment="BugSigDB signature <-> NCBI taxon bridge: one row per taxon member of a curated "
+                "signature, exploded from the two positionally-matched member-list columns of "
+                "raw.bugsigdb__full_dump. Each member is reported at the rank the curators "
+                "asserted (taxon_rank), with no rollup to a fixed rank; join ncbitaxon_id to "
+                "reference taxonomy for that. Study, experiment and contrast attributes stay in "
+                "the raw table, keyed by bsdb_id. Same explode as cdsci-lake's "
+                "bugsigdb.signature_taxon model; this table adds row-carried release history. "
+                "Licence CC BY 4.0 (BugSigDB).",
+        properties={"bioc.column.ncbitaxon_id.prefix": "ncbitaxon",
                     "bioc.license": "CC-BY-4.0"},
     ),
     "raw.ensembl__gtf": TableDef(

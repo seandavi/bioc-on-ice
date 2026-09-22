@@ -17,6 +17,17 @@ bioconice-mcp = "bioconice.mcp:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
+# ADR-0012: the BugSigDB lander reads cdsci-lake's curated table through the base
+# package's `lake_connect`. Its own group so `uv sync --no-group lake` still works
+# without the sibling checkout; the lake-path tests importorskip it.
+lake = ["cdsci-lake"]
+
+[tool.uv]
+default-groups = ["dev", "lake"]
+
+[tool.uv.sources]
+# ponytail: path dep until cdsci-lake publishes
+cdsci-lake = { path = "../cdsci-lake" }
 
 [tool.pytest.ini_options]
 markers = ["slow: hits the live icegate endpoint over the network; deselected by default, run with -m slow"]

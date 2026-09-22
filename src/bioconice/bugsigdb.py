@@ -1,4 +1,4 @@
-"""BugSigDB exports -> Iceberg. Landing only; the munging is deliberately absent.
+"""BugSigDB exports -> Iceberg: land full_dump, derive the signature <-> taxon bridge.
 
 BugSigDB is manually curated microbial signatures: per publication, a contrast
 between two groups of subjects, and the taxa that were differentially abundant in
@@ -21,6 +21,13 @@ trusted and the SELECT names each column: an upstream rename or removal then
 fails loudly in DuckDB's binder, rather than silently shifting every value one
 column to the left.
 
+**Two read paths (ADR-0012 pilot, #114).** The GitHub CSV is the original; the
+lake path reads cdsci-lake's already-curated `lake.bugsigdb.signatures` through
+its own `lake_connect(read_only=True)` and renders the handful of typed columns
+back to the CSV's strings, so raw is byte-identical whichever path landed it.
+Selected by `land_raw(lake=...)` / `--from-lake`; the CSV stays the fallback.
+The write side (`merge.write`, PyIceberg) is untouched either way.
+
 ponytail: only `full_dump.csv` is landed, not the twelve `*.gmt` files. Those are
 re-renderings of the two member-list columns at fixed taxonomic ranks and ID
 types. The `mixed` ones are derivable from what we land; the `genus`/`species`
@@ -32,13 +39,15 @@ import re
 import urllib.request
 
 import duckdb
-from pyiceberg.expressions import EqualTo
+from pyiceberg.expressions import AlwaysTrue, EqualTo
 
 from . import merge
 
 
 REPO = "https://raw.githubusercontent.com/waldronlab/bugsigdbexports"
 DEFAULT_VERSION = "v1.3.1"
+RAW = "raw.bugsigdb__full_dump"
+LAKE_TABLE = "lake.bugsigdb.signatures"
 
 # Upstream header -> our column name. Snake-cased throughout; `Source` becomes
 # `source_in_paper` because `source` means "the asserting authority" everywhere
@@ -118,16 +127,8 @@ def _exported_at(url):
     return m.group(1) if m else None
 
 
-def land_raw(cat, release, version=DEFAULT_VERSION, url=None):
-    """Phase 1: full_dump.csv, verbatim, for one release tag.
-
-    Replaced wholesale for its `bugsigdb_version`, so re-landing a tag is
-    idempotent and landing a new tag accumulates alongside the old one.
-    """
-    url = url or dump_url(version)
+def _from_csv(url, version, release):
     exported = _exported_at(url)
-
-    facts = merge.reading(release, "bugsigdb", "full_dump", url)
     con = duckdb.connect()
     select = ",\n               ".join(f'"{src}" AS {dst}' for src, dst in COLUMNS.items())
     # The dialect is stated rather than sniffed: free-text columns carry commas,
@@ -135,7 +136,7 @@ def land_raw(cat, release, version=DEFAULT_VERSION, url=None):
     # releases would shift values silently. all_varchar keeps raw unparsed.
     # nullstr='NA' is BugSigDB's missing marker, treated like NCBI's '-'. skip=1
     # drops the banner line so the real header is read as the header.
-    arrow = con.sql(f"""
+    return con.sql(f"""
         SELECT {select},
                {f"'{exported}'" if exported else 'NULL::VARCHAR'} AS export_timestamp,
                '{version}' AS bugsigdb_version,
@@ -144,8 +145,122 @@ def land_raw(cat, release, version=DEFAULT_VERSION, url=None):
                       delim=',', quote='"', escape='"')
     """).to_arrow_table()
 
-    n = merge.write(cat, "raw.bugsigdb__full_dump", arrow, EqualTo("bugsigdb_version", version))
+
+# cdsci-lake types five columns on ingest (sources/bugsigdb/ingest.py `_TYPED`); raw
+# here is all-varchar, so they are rendered back to the CSV's text. curated_date
+# round-trips through strptime('%d %B %Y') exactly; a date cdsci could not parse
+# is NULL on the lake path where the CSV path kept the text (see the docstring).
+_UNTYPED = {
+    "pmid": "pmid::VARCHAR",
+    "year": "year::VARCHAR",
+    "group_0_sample_size": "group_0_sample_size::VARCHAR",
+    "group_1_sample_size": "group_1_sample_size::VARCHAR",
+    "curated_date": "strftime(curated_date, '%-d %B %Y')",
+}
+
+
+def _from_lake(settings, version, release):
+    """The same rows from cdsci-lake's curated table, filtered to one release tag.
+
+    `lake.bugsigdb.signatures` is cdsci's upsert_latest_snapshot silver table,
+    keyed on bsdb_id: a row carries the tag it was last seen in, so filtering on
+    `bugsigdb_version = version` yields exactly that tag's dump only while it is
+    the newest tag loaded there. Older tags need DuckLake time travel on the
+    cdsci side; that is a shared-contract gap, not something to paper over here.
+    """
+    from cdsci.lake import lake_connect  # [lake] group; the CSV path needs none of it
+
+    con = lake_connect(None if settings is True else settings, read_only=True)
+    try:
+        select = ",\n               ".join(f"{_UNTYPED.get(c, c)} AS {c}" for c in COLUMNS.values())
+        return con.execute(f"""
+            SELECT {select},
+                   export_timestamp,
+                   bugsigdb_version,
+                   '{release}' AS landed_in
+            FROM {LAKE_TABLE}
+            WHERE bugsigdb_version = ?
+        """, [version]).to_arrow_table()
+    finally:
+        con.close()
+
+
+def land_raw(cat, release, version=DEFAULT_VERSION, url=None, lake=None):
+    """Phase 1: full_dump.csv, verbatim, for one release tag.
+
+    Replaced wholesale for its `bugsigdb_version`, so re-landing a tag is
+    idempotent and landing a new tag accumulates alongside the old one.
+
+    `lake` selects the ADR-0012 read path: `True` reads cdsci-lake as configured
+    by its own environment (`CU_OPENALEX_LAKE_BACKEND` etc.), a
+    `cdsci.lake.Settings` reads that lake (tests), `None` reads the CSV at `url`.
+    """
+    if lake:
+        url = LAKE_TABLE
+        arrow = _from_lake(lake, version, release)
+    else:
+        url = url or dump_url(version)
+        arrow = _from_csv(url, version, release)
+    facts = merge.reading(release, "bugsigdb", "full_dump", url)
+
+    n = merge.write(cat, RAW, arrow, EqualTo("bugsigdb_version", version))
     # release_number: BugSigDB publishes real, citable release tags.
     merge.manifest(cat, release, "bugsigdb", "full_dump", url, n, version=version, method="release_number",
                    **facts)
     return n
+
+
+# Verbatim body of cdsci-lake's transform/models/bugsigdb/signature_taxon.sql, with
+# its FROM pointed at the raw rows registered as `raw`. cdsci does not ship the model
+# in its package, so the text lives here too; test_bugsigdb.py runs both over one
+# fixture and fails if they drift. ponytail: no rank rollup (needs NCBI Taxonomy, #18).
+EXPLODE = """
+WITH lists AS (
+    SELECT
+        bsdb_id,
+        string_split(metaphlan_taxon_names, ',') AS taxa,
+        string_split(ncbi_taxonomy_ids, ';') AS taxids
+    FROM raw
+    WHERE metaphlan_taxon_names IS NOT NULL AND ncbi_taxonomy_ids IS NOT NULL
+),
+members AS (
+    SELECT
+        bsdb_id,
+        ord AS member_index,
+        trim(taxon_lineage) AS taxon_lineage,
+        trim(taxids[ord]) AS taxon_lineage_ids,
+        list_extract(string_split(trim(taxon_lineage), '|'), -1) AS leaf_raw
+    FROM lists, UNNEST(taxa) WITH ORDINALITY AS u(taxon_lineage, ord)
+    WHERE trim(taxon_lineage) <> ''
+)
+SELECT
+    bsdb_id,
+    member_index,
+    regexp_extract(leaf_raw, '^([a-z])__', 1) AS taxon_rank,
+    regexp_replace(leaf_raw, '^[a-z]__', '') AS taxon_name,
+    TRY_CAST(list_extract(string_split(taxon_lineage_ids, '|'), -1) AS BIGINT) AS ncbitaxon_id,
+    taxon_lineage,
+    taxon_lineage_ids
+FROM members
+"""
+
+
+def transform(cat, release, version=DEFAULT_VERSION):
+    """Phase 2: one row per signature member, merged with release history.
+
+    One tag is one complete state of every signature, and this is the only
+    writer, so the scope is the whole table (scd2_release, ADR-0004/0006).
+    """
+    con = duckdb.connect()
+    con.register("raw", cat.load_table(RAW).scan(
+        row_filter=EqualTo("bugsigdb_version", version),
+        selected_fields=("bsdb_id", "metaphlan_taxon_names", "ncbi_taxonomy_ids")).to_arrow())
+    rows = con.sql(EXPLODE).to_arrow_table()
+    con.close()
+    return {"annotation.signature_taxon": merge.merge(
+        cat, "annotation.signature_taxon", rows, release, AlwaysTrue())}
+
+
+def ingest(cat, release, version=DEFAULT_VERSION, url=None, lake=None):
+    n = land_raw(cat, release, version, url, lake)
+    return {f"{RAW} [{version}]": n, **transform(cat, release, version)}
