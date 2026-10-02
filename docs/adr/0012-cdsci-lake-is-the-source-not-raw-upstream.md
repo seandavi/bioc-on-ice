@@ -1,10 +1,12 @@
 # 0012 — cdsci-lake is the source, not raw upstream, for platform-curated data
 
-**Status**: Proposed — accepted once the first dataset release built from
-cdsci-lake verifies against real lake data.
+**Status**: Accepted (amended by 0013) — the first dataset release built from
+cdsci-lake, `bioconice-bugsigdb` 2026-10-02 (59,486 rows, equal to
+`lake.bugsigdb.signature_taxon`), verified against real lake data on 2026-10-02.
 **Amended by**: [ADR-0013](0013-versioned-datasets-not-versioned-rows.md) — the
-acceptance condition is now the one above, not a verified lander on the icegate
-write path.
+acceptance condition became "the first dataset release built from cdsci-lake
+verifies against real lake data", not a verified lander on the icegate write
+path.
 
 ## Context
 
