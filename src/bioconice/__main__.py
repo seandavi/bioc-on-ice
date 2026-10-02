@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 
 from . import bedbase
 from . import biogrid
@@ -175,8 +176,21 @@ def main():
                     help="for a catalog that cannot rename a table: drop, recreate and copy "
                          "<table>__v2 back instead of renaming it into place")
 
+    rb = sub.add_parser("release-bugsigdb",
+                        help="publish the bioconice-bugsigdb dataset release from cdsci-lake (local)")
+    rb.add_argument("--out", type=Path, default=None,
+                    help="keep the release tree here; default is a temporary directory")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
+
+    if args.cmd == "release-bugsigdb":
+        from cdsci.lake.connect import lake_connect
+
+        from .release import release_bugsigdb
+        release_bugsigdb(lake_connect(read_only=True), args.out)
+        return
+
 
     cat = catalog()
     if args.cmd == "ingest-ensembl":

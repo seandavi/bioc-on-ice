@@ -1,6 +1,7 @@
 # 0001 — Point-in-time lives in the rows, not in Iceberg snapshots
 
 **Status**: Accepted
+**Superseded by 0013 (dataset releases)** — for sources that have moved to dataset releases; still governs the Iceberg tables of the rest.
 
 ## Context
 

@@ -841,7 +841,25 @@ is per-table, so no snapshot describes the catalog; it is per-write, so several
 compose one release and some correspond to nothing meaningful (a re-run after a
 bug fix). Snapshot ids are opaque and unordered across tables.
 
+## Dataset releases
+
+A source that has moved to dataset releases (ADR-0013) is published as
+immutable **full-snapshot releases** by `cdsci.lake.publish`, not as row
+history. A release id is the UTC build date, `YYYY-MM-DD`; a second release on
+the same day is `YYYY-MM-DD.2`, `.3`, and so on, ordered by date then number
+(never as raw strings). Upstream versions are recorded in provenance, never in
+the id. Each release carries every current row of its tables; there are no
+`valid_from` / `valid_to` columns. Retention is per dataset: every release is
+kept unless the dataset declares `keep_last = N`, and pinned releases are never
+pruned. The first dataset is `bioconice-bugsigdb`.
+
+**Archive rule.** The Iceberg tables of a source keep their `valid_from` /
+`valid_to` rows only until the source moves to dataset releases, then receive
+no further writes and remain as a read-only archive.
+
 ## History lives in the rows, not in the files
+
+This section governs the Iceberg tables of sources not yet moved to dataset releases.
 
 Point-in-time access MUST be served by the `valid_from` / `valid_to` columns
 on every row-bearing table, not by Iceberg time travel:
