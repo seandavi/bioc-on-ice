@@ -26,6 +26,10 @@ dataset releases.
 **Archive rule.** Iceberg tables keep their `valid_from` / `valid_to` rows only
 until their source moves to dataset releases; after that they receive no further
 writes and stay as a read-only archive. No backfill into releases.
+The `bioconice-bugsigdb` pilot does not yet make that move: the legacy
+`ingest-bugsigdb` command and its Iceberg tables stay active until the remaining
+BugSigDB consumers are repointed (follow-on work), and the archive rule applies
+from then on.
 
 **ADR-0012.** Its acceptance condition becomes "the first dataset release built
 from cdsci-lake verifies against real lake data".

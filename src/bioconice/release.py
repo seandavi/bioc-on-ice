@@ -93,21 +93,22 @@ BUGSIGDB = DatasetContract(
 _SELECT = (
     "SELECT bsdb_id, CAST(member_index AS BIGINT) AS member_index, taxon_rank, taxon_name, "
     "CAST(ncbitaxon_id AS BIGINT) AS ncbitaxon_id, taxon_lineage, taxon_lineage_ids "
-    "FROM lake.bugsigdb.signature_taxon"
+    "FROM lake.bugsigdb.signature_taxon AT (VERSION => {sid})"
 )
 
 
 def release_bugsigdb(con, out: Path | None = None, *, today: date | None = None) -> ReleaseManifest:
     """Publish one `bioconice-bugsigdb` release; `con` has the lake attached as `lake`.
 
-    Builds into a temporary directory removed on return when `out` is None."""
+    Rows are read at snapshot `sid`, so they match the recorded provenance even if the
+    lake is written concurrently. Builds into a temporary directory removed on return when `out` is None."""
     sid = con.sql("SELECT max(snapshot_id) FROM lake.snapshots()").fetchone()[0]
     sources = (SourceAssetVersion(ref="lake.bugsigdb.signature_taxon", version=f"snapshot:{sid}"),)
 
     def run(root: Path) -> ReleaseManifest:
         return publish_release(
             LocalDirStore(root), contract=BUGSIGDB,
-            tables={"annotation.signature_taxon": con.sql(_SELECT)},
+            tables={"annotation.signature_taxon": con.sql(_SELECT.format(sid=sid))},
             source_asset_versions=sources, run_id=str(uuid.uuid4()), today=today, con=None)
 
     if out is None:
