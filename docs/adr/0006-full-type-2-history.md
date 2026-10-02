@@ -1,6 +1,7 @@
 # 0006 — Attribute changes close a row and open a new one
 
 **Status**: Accepted
+**Superseded by 0013 (dataset releases)** — for sources that have moved to dataset releases; still governs the Iceberg tables of the rest.
 **Amends**: [ADR-0001](0001-point-in-time-lives-in-the-rows.md) — its core claim stands; its guarantee was overstated.
 
 ## Context

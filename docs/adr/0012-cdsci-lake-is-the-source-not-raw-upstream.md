@@ -1,7 +1,10 @@
 # 0012 — cdsci-lake is the source, not raw upstream, for platform-curated data
 
-**Status**: Proposed — accepted once the first migrated lander is verified
-live against the icegate write path.
+**Status**: Proposed — accepted once the first dataset release built from
+cdsci-lake verifies against real lake data.
+**Amended by**: [ADR-0013](0013-versioned-datasets-not-versioned-rows.md) — the
+acceptance condition is now the one above, not a verified lander on the icegate
+write path.
 
 ## Context
 

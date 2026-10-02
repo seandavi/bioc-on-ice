@@ -9,7 +9,12 @@ dependencies = [
     # official MCP SDK (FastMCP): src/bioconice/mcp.py (issue #100) needs a stdio server
     # and tool/resource decorators that a hand-rolled JSON-RPC loop would just reimplement.
     "mcp>=1.2,<2",
+    # ADR-0013 (bioc) / dataset releases: cdsci.lake builds, verifies, and indexes releases.
+    "cdsci-lake",
 ]
+
+[tool.uv.sources]
+cdsci-lake = { git = "https://github.com/seandavi/cdsci-lake", tag = "v0.3.0" }
 
 [project.scripts]
 bioconice = "bioconice.__main__:main"
