@@ -27,7 +27,7 @@ Deploy credentials, both in Secret Manager project `cdsci-infra`:
 
 | Worker | URL | Config | Deploy |
 | --- | --- | --- | --- |
-| `icegate-bioconice` | https://icegate-bioconice.seandavi.workers.dev | this repo's `icegate.yaml` + the icegate checkout | `scripts/deploy-icegate.sh` |
+| `icegate-bioconice` | https://icegate-bioconice.seandavi.workers.dev | this repo's `icegate.yaml` + the icegate checkout | icegate's `scripts/deploy-catalog.sh bioconice icegate.yaml` |
 | `bioconice-explorer` | https://bioconice-explorer.seandavi.workers.dev | `explorer/wrangler.jsonc` (static assets only, no script) | `cd explorer && npx wrangler@4 deploy` with the same two credentials |
 
 The explorer reads the catalog anonymously through icegate, so it has no secrets. Its
@@ -41,8 +41,8 @@ engine. Live since 2026-09-18 at https://bioconice-mcp.cancerdatasci.org (proxie
 ## Deploy
 
 ```sh
-scripts/deploy-icegate.sh --dry-run   # bundles, prints size, deploys nothing
-scripts/deploy-icegate.sh             # deploys, then verifies /health, /v1/config, namespaces
+../icegate/scripts/deploy-catalog.sh bioconice icegate.yaml --dry-run   # bundles, prints size, deploys nothing
+../icegate/scripts/deploy-catalog.sh bioconice icegate.yaml             # deploys, then verifies /health, /v1/config, namespaces
 ```
 
 The script refuses to run with uncommitted changes to `icegate.yaml` (the
@@ -84,12 +84,18 @@ in the icegate checkout, with the same two environment variables.
 2. **`logpush: true` is uncommitted** in the icegate checkout's `wrangler.jsonc`
    (enabled via the API on 2026-08-07; icegate#35). A fresh clone would deploy without it and
    silently stop the access logs. It belongs in a commit to the icegate repo.
-3. **No uptime check.** The platform convention for always-on services
+3. **Uptime check: pending apply.** monode#48 adds `terraform/apps/icegate`
+   (anonymous namespace listing, not `/health`). Until applied:
+   **no uptime check.** The platform convention for always-on services
    (`monode/infrastructure/OBSERVABILITY.md`) is a GCP uptime check with
    alerting; the gateway has none. `/health` is the endpoint to watch, and
    `/v1/config?warehouse=bioconice` is the one that proves config resolution.
-4. **`CF_API_TOKEN` is still Admin-level.** The write path should move to a
-   bucket-scoped RW vending token once minted (icegate#34), after which nothing
-   Admin-level remains in the Worker.
+4. **Write token: closing.** `icegate.yaml` now names `${CF_API_TOKEN_RW}`. The
+   first `deploy-catalog.sh` run after this change mints the bucket-scoped
+   `icegate-bioconice-rw` (Secret Manager `bioconice-cf-vending-rw` is absent,
+   so the script creates it) and sets the Worker secret; writes 500 for the
+   few seconds between deploy and secret push, reads are unaffected. Then
+   delete the legacy Admin secret: `npx wrangler secret delete CF_API_TOKEN
+   --name icegate-bioconice`, and revoke that token if nothing else uses it.
 5. A stale wrangler OAuth token from January sits in
    `~/.config/.wrangler/config/default.toml`; deploys never used it.
