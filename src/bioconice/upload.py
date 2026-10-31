@@ -95,9 +95,10 @@ def upload(bundle: Path, fs, root=BUCKET, apply=False, retention_days=30, today=
     """Upload `bundle` (a `bioconice publish` directory) to `v{release}/` and `latest/`, then prune."""
     manifest = json.loads((bundle / "manifest.json").read_text())
     dated = f"v{manifest['release']}"
-    # A dated release is immutable: it is what users pin and what the next release is checked against.
-    if fs.get_file_info(f"{root}/{dated}").type != pafs.FileType.NotFound:
-        raise SystemExit(f"{root}/{dated}/ already exists; dated releases are never overwritten")
+    # A completed dated release (manifest.json present) is immutable: users pin it and the next
+    # release is checked against it. A folder without a manifest is an interrupted upload: retry it.
+    if fs.get_file_info(f"{root}/{dated}/manifest.json").type != pafs.FileType.NotFound:
+        raise SystemExit(f"{root}/{dated}/ is a completed release; dated releases are never overwritten")
     for folder in (dated, "latest"):
         _folder(fs, root, bundle, manifest, folder, apply)
     for name in _expired(fs, root, dated, retention_days, today or datetime.now(UTC).date()):

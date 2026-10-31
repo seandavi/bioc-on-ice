@@ -72,7 +72,15 @@ def test_an_existing_dated_release_is_never_overwritten(tmp_path):
     bucket = _bucket(tmp_path)
     (bucket / f"v{RELEASE}").mkdir()
     (bucket / f"v{RELEASE}" / "manifest.json").write_text("{}")
-    with pytest.raises(SystemExit, match="already exists"):
+    with pytest.raises(SystemExit, match="completed release"):
         upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
     assert (bucket / f"v{RELEASE}" / "manifest.json").read_text() == "{}"
     assert not (bucket / "latest" / "views.sql").exists()
+
+
+def test_an_interrupted_dated_upload_is_retried(tmp_path):
+    bucket = _bucket(tmp_path)
+    (bucket / f"v{RELEASE}" / "annotation").mkdir(parents=True)
+    (bucket / f"v{RELEASE}" / "annotation" / "gene.parquet").write_text("partial")
+    upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+    assert json.loads((bucket / f"v{RELEASE}" / "manifest.json").read_text())["release"] == RELEASE
