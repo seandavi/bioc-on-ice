@@ -21,8 +21,10 @@ BugSigDB, so they are settled once, here:
 
 Since #185 was filed, the release has become SQL. `publish.TABLES` is a list of
 (schema, table, SELECT) entries, and `publish()` streams each SELECT to Parquet
-through `COPY`, so moving a table to the lake means changing its SELECT
-(`annotation.pubmed__article` already reads `lake.omicidx.pubmed_article`).
+through `COPY`, so moving a table to the lake means changing its SELECT. The
+release is already partly lake-backed: `annotation.pubmed__article` reads
+`lake.omicidx.pubmed_article`, unpinned, from the live lake. Every other table
+still reads the live Iceberg catalog.
 
 cdsci-lake's ADRs bear on this:
 [ADR-0013](https://github.com/seandavi/cdsci-lake/blob/main/docs/adr/0013-lake-write-path-is-el-only.md)
@@ -96,8 +98,10 @@ Why on the merits:
   `git_sha`, and the lake tables it reads are named in the SQL. The missing piece
   is the lake version. A release built from the lake must read **one pinned lake
   snapshot** (`AT (VERSION => sid)`, as `release.py` does for BugSigDB) and
-  record that snapshot id in `manifest.json` provenance. That lands with step 10
-  of #183, when the release first builds from the lake. Release-time SELECTs do
+  record that snapshot id in `manifest.json` provenance. Pinning becomes
+  mandatory at step 10 of #183, when the whole release moves to the lake, and
+  from then it covers `pubmed__article` too. Until then that one table reads the
+  lake unpinned and its lake version is not recorded. Release-time SELECTs do
   not appear in `lake_ops.column_lineage`. That is accepted: ADR-0021 treats
   lineage as observability, and the release manifest is the public record.
 - **One gate.** Step 5's release-over-release gate checks what users actually
@@ -121,13 +125,20 @@ mouse ENA rows already in the table. Measured on release 2026-10-31:
 | of which `source = 'RNACENTRAL'` (9606, 10090) | 5,911,834 |
 | of which ENA targets | 1,918,777 (32%) |
 
-The join check was run against the human and mouse slice. The 1,918,777 ENA
-targets have **0** exact matches among the 2,024,806 distinct ids that any other
-source puts in `identifier_mapping` for those taxa. Cut to the accession before
-the first `:`, 3,652 of 231,472 distinct accessions (1.6%) match, and 10 match
-unversioned. The composite `accession:range:feature` names a feature span inside
-an INSDC record. No other source uses that form, and the stored value cannot
-join without parsing.
+**Human and mouse only.** The join check, and every count above for
+`identifier_mapping`, covers taxa 9606 and 10090, the only taxa RNAcentral
+writes there today. Joinability for other taxa, and against tables other than
+`identifier_mapping`, was not checked.
+
+The 1,918,777 human and mouse ENA targets have **0** exact matches among the
+2,024,806 distinct ids that other sources put in `identifier_mapping` for those
+taxa. Cut to the accession before the first `:`, 3,652 of 231,472 distinct
+accessions (1.6%) match, and 10 match unversioned. The composite
+`accession:range:feature` names a feature span inside an INSDC record. No other
+source's human or mouse `identifier_mapping` ids use that form, and the stored
+value cannot join without parsing. The decision extends this to all taxa on the
+unverified assumption that other taxa behave the same; a release-time check on
+the all-taxa derive can confirm it.
 
 The all-taxa derive therefore adds about 30M rows (the 35.8M non-ENA rows, less
 the human and mouse rows already present and duplicates), not about 260M.
@@ -137,8 +148,9 @@ dedup).
 
 The size argument in #162 was partly about sharding. That concern goes away,
 because a release SELECT streams through `COPY` with no PyIceberg merge. The
-decision rests on the remaining reasons: nothing joins to the ids, they would
-make up about a third of the table, and raw already serves them. #162's
+decision rests on the remaining reasons: for human and mouse nothing in
+`identifier_mapping` joins to the ids, they make up about a third of the
+RNAcentral rows, and raw already serves them. #162's
 other worry, that rows become permanent Type-2 history, no longer applies under
 ADR-0013. Each release is a full snapshot, so a later release can add ENA back
 if a consumer asks. A separate `annotation.rnacentral__ena` table (#162 option 3)
@@ -176,9 +188,10 @@ shared lake and is never set for a write before the owner's go at step 10.
 
 - bioc-on-ice is a read-only lake consumer. Its write code shrinks to
   `publish.py` plus the release SELECTs, and the PyIceberg landers retire source
-  by source (#183). SPEC.md is not edited here. Its raw/derived section ("derived
-  tables are computed by reading `raw` back out") still holds, and its Iceberg
-  wording changes at step 11, as ADR-0014 already arranged.
+  by source (#183). SPEC.md gains decision (c) under Identifier Mapping. Its
+  raw/derived section ("derived tables are computed by reading `raw` back out")
+  still holds, and its Iceberg wording changes at step 11, as ADR-0014 already
+  arranged.
 - A migrated table's SELECT, not a lander, is where bioc-on-ice's biological
   rules live. Those SELECTs need offline tests against a fixture attached as
   `lake`, the same discipline `tests/tiny.gtf` gives the landers.

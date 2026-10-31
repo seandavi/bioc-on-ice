@@ -440,6 +440,13 @@ retirement has to be modelled rather than left implicit.
 are written for the taxon's canonical assembly only; an alternate assembly's
 gene ids get no rows here, and their symbols are on `gene`.
 
+RNAcentral's ENA cross-references (`database = 'ENA'`, composite
+`accession:range:feature` ids) are excluded from `identifier_mapping` for every
+taxon. They stay landed whole and published in `raw.rnacentral__id_mapping`,
+with `urs` and `taxon_id`. For human and mouse no other source's ids join to
+them (ADR-0015). Until RNAcentral's derive moves to a release SELECT (#183),
+`rnacentral.py` still writes the human and mouse ENA rows.
+
 `taxon_id` appears on `transcript`, `exon` and `identifier_mapping` beyond what
 the entity itself strictly needs, because it is part of every merge key: it
 keeps ingest scoped to one species without a scan of the whole table.
