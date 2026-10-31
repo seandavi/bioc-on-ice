@@ -53,7 +53,7 @@ missing) and the terms URL.
 | 1 | #54 | Reactome | 2 | 3 | 3 | 3 | 3 | **14** | **cleared**: data and derived files CC0, §1(c) | https://reactome.org/license | https://reactome.org/download/current/NCBI2Reactome_All_Levels.txt (+ ReactomePathways.txt, ReactomePathwaysRelation.txt) | ~100 MB, 788k gene-pathway rows (cdsci-lake, 2026-08-11) |
 | 2 | #41 | MGI reports | 3 | 3 | 3 | 3 | 2 | **14** | **cleared**: "MGI data and annotations are licensed under … CC-BY" 4.0 | https://www.informatics.jax.org/mgihome/other/copyright.shtml | https://www.informatics.jax.org/downloads/reports/ — MRK_List2.rpt, MGI_EntrezGene.rpt, MGI_Gene_Model_Coord.rpt | 78.8 + 88.5 + 16.2 MB |
 | 3 | #39 | UniProt ID mapping | 3 | 3 | 3 | 1 | 3 | **13** | **cleared**: CC BY 4.0 on all copyrightable parts | https://www.uniprot.org/help/license (read via rest.uniprot.org/help/license) | https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/idmapping/idmapping_selected.tab.gz | 7.10 GB gz; one row per UniProtKB entry, 150,006,383 in release 2026_03 (`relnotes.txt`) |
-| 4 | #45 | ClinVar | 3 | 3 | 3 | 2 | 2 | **13** | **cleared**: "NCBI itself places no restrictions on the use or distribution of the data contained therein", for molecular databases including "molecular variation"; ClinVar's own use page sits behind a bot check and was **not read** | https://www.ncbi.nlm.nih.gov/home/about/policies/ | https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz (+ submission_summary; monthly `archive/`) | 456.6 MB gz (+ 404.9 MB) |
+| 4 | #45 | ClinVar | 3 | 2 | 3 | 2 | 2 | **12** | **cleared**: "NCBI itself places no restrictions on the use or distribution of the data contained therein", for molecular databases including "molecular variation"; ClinVar's own use page sits behind a bot check and was **not read** | https://www.ncbi.nlm.nih.gov/home/about/policies/ | https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz (+ submission_summary; monthly `archive/`) | 456.6 MB gz (+ 404.9 MB) |
 | 5 | #127 | HGNC withdrawn.txt | 2 | 2 | 3 | 3 | 2 | **12** | **cleared**: "No restrictions are imposed on access to, or use of, the data provided by the HGNC" | https://www.genenames.org/about/ | https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/withdrawn.txt | 259 KB |
 | 6 | #49 | ClinGen gene-disease validity | 3 | 1 | 3 | 3 | 2 | **12** | **cleared**: curated content CC0 1.0 | https://clinicalgenome.org/docs/terms-of-use/ | https://search.clinicalgenome.org/kb/gene-validity/download | 1.1 MB, ~3.7k curations (HGNC id + MONDO id per row) |
 | 7 | #50 | CIViC | 3 | 1 | 3 | 3 | 2 | **12** | **cleared**: content CC0 1.0 | https://civic.readthedocs.io/en/latest/about/faq.html | https://civicdb.org/downloads/01-Oct-2026/01-Oct-2026-ClinicalEvidenceSummaries.tsv (+ VariantSummaries, AssertionSummaries) | 4.2 MB, 4,974 evidence rows (nightly) |
@@ -114,11 +114,16 @@ permitted uses, and redistribution is not one of them.
    user, `UniProt.ws`. The #114 block is stale here too. The raw file is
    150M rows (size score 1), but the lake already pays for it, which is why
    its effort is 3.
-4. **#45 ClinVar**: SPEC's "Selected for the first release" names it, and no
-   Bioconductor package ships it. `variant_summary` joins on Entrez `GeneID`,
+4. **#45 ClinVar**: SPEC's "Selected for the first release" names it. No
+   Bioconductor package ships it, so Demand is 2 (filtering variant calls by
+   clinical significance is a common workflow), not 3, and its total is 12.
+   That ties #127, #49 and #50; ClinVar keeps fourth place on the tie-break
+   (Demand over ClinGen and CIViC, issue number over #127, which folds into
+   the HGNC migration anyway). `variant_summary` joins on Entrez `GeneID`,
    `HGNC_ID`, MONDO/OMIM ids in `PhenotypeIDS` and `Assembly`
-   (GRCh37/GRCh38). It is the biggest pick (457 MB gz). Pin the monthly
-   archive, as SPEC requires. Parsing note: MONDO ids arrive double-prefixed
+   (GRCh37/GRCh38). At 457 MB gz (862 MB with `submission_summary`) it is
+   the largest pick not already landed in cdsci-lake; UniProt's 7.10 GB file
+   is larger. Pin the monthly archive, as SPEC requires. Parsing note: MONDO ids arrive double-prefixed
    (`MONDO:MONDO:0013342`).
 
 **Not a runner-up: #48 gnomAD constraint.** It scores 12, but its licence is
