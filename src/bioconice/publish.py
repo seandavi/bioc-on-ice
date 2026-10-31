@@ -3,8 +3,8 @@
 
 The shape is omicidx's bundle publisher (parquet_export, publish_bundle, sql) without
 Prefect. Tables are SQL: `TABLES` is (schema, table, SELECT) against whatever DuckDB has
-attached as `bioc` — the live Iceberg catalog today. A table moves to cdsci-lake by
-changing its SELECT. Nothing is uploaded here.
+attached as `bioc` (the live Iceberg catalog) or `lake` (cdsci-lake, ADR-0012). A table
+moves to cdsci-lake by changing its SELECT. Nothing is uploaded here.
 """
 
 import hashlib
@@ -42,7 +42,24 @@ TABLES = [(*name.split("."), _current(name, d)) for name, d in DECLARED.items()]
     # bioconice-bugsigdb release contract (release.py); raw.metadata has no writer here.
     ("annotation", "signature_taxon", "SELECT * FROM bioc.annotation.signature_taxon"),
     ("raw", "metadata", "SELECT * FROM bioc.raw.metadata"),
+    # From cdsci-lake (#194); becomes lake.pubmed.article with seandavi/cdsci-lake#136.
+    ("annotation", "pubmed__article", "SELECT * FROM lake.omicidx.pubmed_article"),
 ]
+PUBMED_COMMENT = (
+    "PubMed citations, one row per PMID: title, abstract, journal, authors, MeSH terms, "
+    "references and grants, from the cdsci-lake table lake.omicidx.pubmed_article. "
+    "Join on pmid with ncbi__gene_pubmed, icite__publication and pubtator3__mention."
+)
+
+
+def connect():
+    """DuckDB with both sources of `TABLES`: cdsci-lake as `lake` (read-only) and the live
+    Iceberg catalog as `bioc`. The shared lake needs CU_OPENALEX_LAKE_BACKEND=postgres."""
+    from cdsci.lake.connect import lake_connect
+
+    con = lake_connect(read_only=True)
+    con.execute(ATTACH_LIVE)
+    return con
 
 
 def _docs(name):
@@ -52,6 +69,8 @@ def _docs(name):
         return d.comment, {f.name: f.doc for f in d.schema.fields if f.doc}
     if name == SIGNATURE_TAXON.name:
         return SIGNATURE_TAXON.description, {c.name: c.description for c in SIGNATURE_TAXON.columns}
+    if name == "annotation.pubmed__article":
+        return PUBMED_COMMENT, {}
     return None, {}
 
 

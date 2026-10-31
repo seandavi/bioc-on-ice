@@ -211,11 +211,7 @@ def main():
     args = p.parse_args()
 
     if args.cmd == "parity":
-        import duckdb
-
-        con = duckdb.connect()
-        con.execute(publish.ATTACH_LIVE)
-        raise SystemExit(0 if parity.parity(con, args.release) else 1)
+        raise SystemExit(0 if parity.parity(publish.connect(), args.release) else 1)
 
     if args.cmd == "upload":
         from . import upload
@@ -224,14 +220,11 @@ def main():
         return
 
     if args.cmd == "publish":
-        import duckdb
         from cdsci.lake.publish.release import _check_public_path
 
         # Views in a public bundle must point at public https, never a local path.
         _check_public_path(args.base_url, field_name="--base-url")
-        con = duckdb.connect()
-        con.execute(publish.ATTACH_LIVE)
-        publish.publish(con, args.out, args.base_url, args.only)
+        publish.publish(publish.connect(), args.out, args.base_url, args.only)
         return
 
     if args.cmd == "release-bugsigdb":
