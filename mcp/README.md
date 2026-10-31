@@ -8,6 +8,13 @@ follows).
 
 ## Run it locally
 
+The server attaches the public release
+(`https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb`, ADR-0014)
+read-only and reads table docs and row counts from that folder's
+`manifest.json`. Set `BIOCONICE_RELEASE_URL` to a dated folder
+(`.../v2026-10-31`) to pin one release. Before #193 it went through icegate;
+that is what the 2026-09-18 notes below verified.
+
 ```sh
 uv run bioconice-mcp              # stdio — what uvx/Claude Desktop/Code use
 uv run bioconice-mcp --http       # streamable HTTP on :8000, plus GET /health
@@ -56,7 +63,7 @@ this change; it is the checklist for whoever deploys it.
    pattern, `validate_ssl: true`, probing `https://bioconice-mcp.cancerdatasci.org/health`.
 
 No auth in v1: every tool is read-only against data that's already
-anonymously public through icegate. If that ever needs to change, Cloudflare
+anonymously public as the release. If that ever needs to change, Cloudflare
 Access in front of the same hostname (flip to orange-cloud + an Access
 policy) is the platform's existing option — no code change.
 
@@ -119,7 +126,7 @@ Dockerfile) and no new Cloudflare product surface.
 | Endpoint | Meaning | Use |
 | --- | --- | --- |
 | `GET /health/live` | the process is up; never touches the lake | the external uptime check — a failure here means the container died |
-| `GET /health` (alias `/health/ready`) | icegate reachable and a release resolvable through DuckDB | the compose healthcheck; a 503 here with `/health/live` green means the gateway, not us |
+| `GET /health` (alias `/health/ready`) | the release's `bioconice.duckdb` attached and `provenance.release` readable through DuckDB | the compose healthcheck; a 503 here with `/health/live` green means the release host, not us |
 
 Logs on stdout (`docker logs bioconice-mcp`): uvicorn's access lines, plus **one JSON line per
 tool call** — `{"tool", "args", "ms", "ok", "rows", "truncated", "error"}` — which is what tells

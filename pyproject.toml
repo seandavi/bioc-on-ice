@@ -28,7 +28,7 @@ bioconice-mcp = "bioconice.mcp:main"
 dev = ["pytest>=8"]
 
 [tool.pytest.ini_options]
-markers = ["slow: hits the live icegate endpoint over the network; deselected by default, run with -m slow"]
+markers = ["slow: hits the live release or icegate over the network; deselected by default, run with -m slow"]
 addopts = "-m 'not slow'"
 
 [build-system]

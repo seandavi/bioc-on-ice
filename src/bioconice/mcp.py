@@ -1,17 +1,15 @@
 """MCP server for biocOnIce: hand a model the lake's own SQL, anonymously.
 
-Issue #100. This is read-only by construction: DuckDB attaches to icegate with
-`AUTHORIZATION_TYPE 'none'` (no `BIOCONICE_TOKEN`, ever — never set it here),
-and icegate itself refuses writes through the anonymous principal regardless
-of what SQL reaches it (SPEC.md C.4). The `query` tool's SQL guard is a second,
-local line of defense against DuckDB-*local* side effects (ATTACH-ing another
-database, COPY-ing to a file, LOAD-ing an extension), not against writing the
-lake.
+Issue #100. This is read-only by construction: DuckDB attaches the public
+release's `bioconice.duckdb` READ_ONLY (ADR-0014, #193) — static files on R2,
+nothing to write to and no credential to hold. The `query` tool's SQL guard is
+a local line of defense against DuckDB-*local* side effects (ATTACH-ing another
+database, COPY-ing to a file, LOAD-ing an extension).
 
-Table/column docs are never copied from schemas.py into this file — they are
-read from the live Iceberg metadata (icegate's REST API, hit with plain
-`urllib` since pyiceberg's REST catalog 401s anonymously) so the server can
-never drift from what the catalog actually serves.
+Table comments, column docs and row counts are read from the release's own
+`manifest.json`, so the server describes exactly what it queries. The release
+does not carry business keys or identifier prefixes; those come from the
+declarations in schemas.py, which the release was built from.
 
 Two transports, one implementation: `bioconice-mcp` runs stdio by default
 (for `uvx`/Claude Desktop/Claude Code); set `BIOCONICE_MCP_TRANSPORT=streamable-http`
@@ -36,8 +34,11 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-ENDPOINT = os.environ.get("BIOCONICE_ICEGATE_ENDPOINT", "https://icegate-bioconice.seandavi.workers.dev")
-WAREHOUSE = "bioconice"
+from .schemas import TABLES as DECLARED
+
+# A release folder: `latest/` by default, or a dated `v{YYYY-MM-DD}/` pin.
+RELEASE_URL = os.environ.get("BIOCONICE_RELEASE_URL", "https://data.bioconice.cancerdatasci.org/latest").rstrip("/")
+ATTACH_SQL = f"ATTACH '{RELEASE_URL}/bioconice.duckdb' AS b (READ_ONLY)"
 MAX_LIMIT = 10_000
 DEFAULT_LIMIT = 1000
 
@@ -52,13 +53,13 @@ mcp = FastMCP(
     "bioconice",
     instructions=(
         "Bioconductor gene/transcript/exon annotation, NCBI Gene, iCite citations, "
-        "OBO ontologies and dataset catalogs, served anonymously and read-only through "
-        "icegate. Call list_tables() first to see what exists, then describe_table() on "
+        "OBO ontologies and dataset catalogs, served anonymously and read-only from "
+        "the public biocOnIce release. Call list_tables() first to see what exists, then describe_table() on "
         "the ones you plan to join before writing SQL — the column docs say what a null "
         "means and which convention a coordinate uses, which you cannot guess correctly. "
-        "The one mistake every query here can make silently: forgetting `valid_to IS NULL` "
-        "(or a release predicate from resolve_release()) and getting every historical "
-        "version of a row back, not just the current one."
+        "The release holds current rows only (`valid_to` is always NULL), so it cannot "
+        "answer 'as of an earlier release' questions; that history lives in the frozen "
+        "Iceberg archive, not here."
     ),
     transport_security=TransportSecuritySettings(
         allowed_hosts=ALLOWED_HOSTS,
@@ -67,12 +68,12 @@ mcp = FastMCP(
 
 
 # --------------------------------------------------------------------------
-# icegate REST metadata — anonymous, plain HTTP (pyiceberg's REST catalog
-# needs a token even for GET /v1/config, this endpoint does not).
+# The release's manifest.json — plain HTTP, read fresh each call: `latest/`
+# moves with every publish, and the file is a few hundred KB.
 # --------------------------------------------------------------------------
 
-def _rest_get(path):
-    url = f"{ENDPOINT}/v1/{WAREHOUSE}/{path}"
+def _manifest():
+    url = f"{RELEASE_URL}/manifest.json"
     # Cloudflare's WAF (error 1010) blocks urllib's default "Python-urllib/x.y"
     # User-Agent outright; any ordinary one satisfies it.
     req = urllib.request.Request(url, headers={"User-Agent": "bioconice-mcp"})
@@ -80,21 +81,9 @@ def _rest_get(path):
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as e:
-        raise ValueError(f"icegate {e.code} on {url}: {e.read().decode(errors='replace')[:500]}") from e
+        raise ValueError(f"HTTP {e.code} on {url}: {e.read().decode(errors='replace')[:500]}") from e
     except urllib.error.URLError as e:
-        raise ValueError(f"could not reach icegate at {url}: {e.reason}") from e
-
-
-def _namespaces():
-    return [ns[0] for ns in _rest_get("namespaces")["namespaces"]]
-
-
-def _table_names(namespace):
-    return [t["name"] for t in _rest_get(f"namespaces/{namespace}/tables")["identifiers"]]
-
-
-def _table_metadata(namespace, name):
-    return _rest_get(f"namespaces/{namespace}/tables/{name}")["metadata"]
+        raise ValueError(f"could not reach {url}: {e.reason}") from e
 
 
 def _split_table_ref(table):
@@ -104,60 +93,38 @@ def _split_table_ref(table):
     return namespace, name
 
 
-def _describe(namespace, name):
-    """Everything describe_table/the docs resource need, read straight off live metadata."""
-    meta = _table_metadata(namespace, name)
-    schema = next(s for s in meta["schemas"] if s["schema-id"] == meta["current-schema-id"])
-    fields = schema["fields"]
-    order = {f["id"]: i for i, f in enumerate(fields)}
-    id_to_name = {f["id"]: f["name"] for f in fields}
-    props = meta.get("properties", {})
-
-    # The row key is business_key + valid_from (schemas.py's TableDef.iceberg_schema);
-    # report the business key alone, in column order, which is what a caller joins on.
-    id_field_ids = schema.get("identifier-field-ids", [])
-    business_key = [
-        id_to_name[i] for i in sorted(
-            (i for i in id_field_ids if id_to_name.get(i) != "valid_from"),
-            key=lambda i: order[i],
-        )
-    ]
-
-    spec = next((p for p in meta["partition-specs"] if p["spec-id"] == meta["default-spec-id"]), {"fields": []})
-    partitioning = [
-        {"column": id_to_name.get(pf["source-id"], str(pf["source-id"])), "transform": pf["transform"]}
-        for pf in spec["fields"]
-    ]
-
-    columns = []
-    for f in fields:
-        fname = f["name"]
-        columns.append({
-            "name": fname,
-            "type": f["type"] if isinstance(f["type"], str) else f["type"],
-            "required": bool(f.get("required")),
-            "doc": f.get("doc"),
-            "in_business_key": fname in business_key,
-            "identifier_prefix": props.get(f"bioc.column.{fname}.prefix"),
-            "coordinate_system": props.get(f"bioc.column.{fname}.coordinate_system"),
-        })
-
-    snapshots = meta.get("snapshots") or []
-    row_count = None
-    if snapshots:
-        summary = snapshots[-1].get("summary", {})
-        if "total-records" in summary:
-            row_count = int(summary["total-records"])
-
+def _describe(t):
+    """Everything describe_table/the docs resource need, for one manifest.json table entry."""
+    declared = DECLARED.get(f"{t['schema']}.{t['table']}")
+    props = declared.properties if declared else {}
+    # Report the business key in column order, which is what a caller joins on.
+    key = set(declared.business_key) if declared else set()
+    business_key = [c["name"] for c in t["columns"] if c["name"] in key]
+    columns = [{
+        "name": c["name"],
+        "type": c["type"],
+        "doc": c["doc"],
+        "in_business_key": c["name"] in key,
+        "identifier_prefix": props.get(f"bioc.column.{c['name']}.prefix"),
+        "coordinate_system": props.get(f"bioc.column.{c['name']}.coordinate_system"),
+    } for c in t["columns"]]
     return {
-        "namespace": namespace,
-        "table": name,
-        "comment": props.get("comment", ""),
+        "namespace": t["schema"],
+        "table": t["table"],
+        "comment": t["comment"] or "",
         "business_key": business_key,
-        "partitioning": partitioning,
-        "row_count": row_count,
+        "row_count": t["row_count"],
         "columns": columns,
     }
+
+
+def _describe_ref(table):
+    namespace, name = _split_table_ref(table)
+    m = _manifest()
+    t = next((t for t in m["tables"] if (t["schema"], t["table"]) == (namespace, name)), None)
+    if t is None:
+        raise ValueError(f"no table {table!r} in release {m['release']}; call list_tables() for the names")
+    return _describe(t)
 
 
 # --------------------------------------------------------------------------
@@ -171,10 +138,8 @@ def _duck():
     global _con
     if _con is None:
         con = duckdb.connect()
-        con.execute("INSTALL iceberg; LOAD iceberg; INSTALL httpfs; LOAD httpfs;")
-        con.execute(
-            f"ATTACH '{WAREHOUSE}' AS b (TYPE ICEBERG, ENDPOINT '{ENDPOINT}', AUTHORIZATION_TYPE 'none');"
-        )
+        con.execute("INSTALL httpfs; LOAD httpfs;")
+        con.execute(ATTACH_SQL)
         _con = con
     return _con
 
@@ -228,9 +193,12 @@ def _point_in_time_predicate(release):
 
 def _provenance_rows():
     con = _duck()
+    # ponytail: the first release predates provenance.release.artifact (#176); NULL until it lands.
+    cols = {r[0] for r in con.execute("DESCRIBE b.provenance.release").fetchall()}
+    artifact = "artifact" if "artifact" in cols else "NULL AS artifact"
     return con.execute(
-        "SELECT release, source, source_version, version_method, artifact "
-        "FROM b.provenance.release ORDER BY release, source, artifact"
+        f"SELECT release, source, source_version, version_method, {artifact} "
+        "FROM b.provenance.release ORDER BY ALL"
     ).fetchall()
 
 
@@ -383,7 +351,9 @@ RECIPES = [
         "name": "gene_models_at_release",
         "description": (
             "A species' gene/transcript/exon models as of a specific biocOnIce release — resolve "
-            "the release with resolve_release() first, then splice its predicate in for each table."
+            "the release with resolve_release() first, then splice its predicate in for each table. "
+            "The public release holds current rows only, so this returns the models still "
+            "current that already existed then, not ones retired since."
         ),
         "sql": (
             "SELECT g.gene_id, g.symbol, t.transcript_id, e.rank, e.start, e.end\n"
@@ -455,48 +425,41 @@ def _logged(fn):
 @mcp.tool()
 @_logged
 def list_tables(namespace: str = "") -> list[dict]:
-    """List every table in the live biocOnIce lake (optionally one namespace).
+    """List every table in the public biocOnIce release (optionally one namespace).
 
     Call this FIRST, before describe_table or query — it is the map of what
     exists: namespace, table, its comment, its current row count, and its
     business key (what a join or a merge uses to identify one record). Pass
     `namespace` (e.g. "annotation") to narrow it; leave it empty for
-    everything the anonymous principal can see.
+    everything in the release.
     The one mistake to avoid: table names outside `annotation.*` are dotted
     with the namespace, e.g. pass `describe_table("ontology.term")`, not
     just `"term"`.
     """
-    namespaces = [namespace] if namespace else _namespaces()
     out = []
-    for ns in namespaces:
-        for name in _table_names(ns):
-            d = _describe(ns, name)
-            out.append({
-                "namespace": d["namespace"],
-                "table": d["table"],
-                "comment": d["comment"],
-                "row_count": d["row_count"],
-                "business_key": d["business_key"],
-            })
+    for t in _manifest()["tables"]:
+        if namespace and t["schema"] != namespace:
+            continue
+        d = _describe(t)
+        out.append({k: d[k] for k in ("namespace", "table", "comment", "row_count", "business_key")})
     return out
 
 
 @mcp.tool()
 @_logged
 def describe_table(table: str) -> dict:
-    """Full column-level description of one table, straight from Iceberg metadata.
+    """Full column-level description of one table, from the release's manifest.
 
     Call this before writing any SQL against a table you have not used yet —
     the per-column `doc` says what a null means, what authority an id belongs
     to, and which coordinate convention a number uses, none of which the name
     or type tells you. `table` is `"namespace.table"`, e.g.
     `"annotation.ncbi__gene"` (get valid names from list_tables).
-    The one mistake to avoid: an identifier column's `bioc.column.<col>.prefix`
-    (here, in `identifier_prefix`) is a Bioregistry prefix, not a hint about
-    which OTHER table to join to — use `business_key` for joins.
+    The one mistake to avoid: an identifier column's `identifier_prefix` is a
+    Bioregistry prefix, not a hint about which OTHER table to join to — use
+    `business_key` for joins.
     """
-    ns, name = _split_table_ref(table)
-    return _describe(ns, name)
+    return _describe_ref(table)
 
 
 @mcp.tool()
@@ -523,9 +486,10 @@ def resolve_release(
     provider; which ontology, species or file a row is about is that table's
     `artifact` column, which resolving by `release` lists. An unknown
     version errors back with the list of ones that exist.
-    The one mistake to avoid: `valid_to IS NULL` alone means CURRENT, not "at
-    this release" — use the predicate this tool returns for a past release,
-    not a bare `valid_to IS NULL`.
+    The one mistake to avoid: the public release holds current rows only
+    (`valid_to` is always NULL), so the predicate for a PAST release returns
+    only the rows still current today, not the rows as they stood then; true
+    point-in-time history lives in the frozen Iceberg archive (ADR-0013/0014).
     """
     return resolve_release_impl(
         release=release or None,
@@ -540,7 +504,7 @@ def resolve_release(
 @mcp.tool()
 @_logged
 def query(sql: str, limit: int = DEFAULT_LIMIT, current: bool = False) -> dict:
-    """Run one read-only SQL query against the live biocOnIce lake through icegate.
+    """Run one read-only SQL query against the public biocOnIce release.
 
     Only a single `SELECT` or `WITH ... SELECT` is accepted — no
     INSERT/UPDATE/DELETE/ATTACH/COPY/PRAGMA/CREATE and no second statement
@@ -553,10 +517,9 @@ def query(sql: str, limit: int = DEFAULT_LIMIT, current: bool = False) -> dict:
     already includes `valid_to` — this does not parse or rewrite your query,
     it filters the OUTPUT, so `valid_to` has to be one of the columns you
     asked for.
-    The one mistake to avoid: writing a query with no `valid_to` filter and
-    no `current=true` returns EVERY historical version of every row, not
-    today's data — call describe_table or resolve_release first if you are
-    not sure a table is versioned.
+    The one mistake to avoid: tables are named `b.<namespace>.<table>`
+    (e.g. `b.annotation.gene`); the release holds current rows only, so a
+    `valid_to IS NULL` filter is harmless but changes nothing.
     """
     return query_impl(sql, limit=limit, current=current)
 
@@ -569,7 +532,7 @@ def recipes() -> list[dict]:
     Call this when you know roughly what question you want to ask (gene to
     citing literature, dataset by cell type, gene models at a release, one
     taxon's coverage) but not the exact join path — each entry is real SQL
-    that has been run against the live lake, with the literal ids from a
+    that has been run against the live data, with the literal ids from a
     verified example (TP53, CL:0000084, UBERON:0000178, taxon 9606) that you
     swap for your own. Prefer adapting one of these over writing a multi-table
     join from scratch, particularly the ontology rollup: `is_a` closures need
@@ -583,22 +546,19 @@ def recipes() -> list[dict]:
 def docs_resource(table: str) -> str:
     """The same description describe_table() returns, as prose, plus the
     ATTACH snippet every client needs before it can run anything."""
-    ns, name = _split_table_ref(table)
-    d = _describe(ns, name)
+    d = _describe_ref(table)
     lines = [
         f"# {d['namespace']}.{d['table']}",
         "",
         d["comment"],
         "",
         f"Business key: {', '.join(d['business_key']) or '(none — this table has no versioned rows)'}",
-        f"Row count (latest snapshot): {d['row_count']}",
+        f"Row count: {d['row_count']}",
         "",
         "## Columns",
     ]
     for c in d["columns"]:
         flags = []
-        if c["required"]:
-            flags.append("required")
         if c["in_business_key"]:
             flags.append("business key")
         if c["identifier_prefix"]:
@@ -611,8 +571,7 @@ def docs_resource(table: str) -> str:
         "",
         "## Connecting",
         "```sql",
-        "INSTALL iceberg; LOAD iceberg; INSTALL httpfs; LOAD httpfs;",
-        f"ATTACH '{WAREHOUSE}' AS b (TYPE ICEBERG, ENDPOINT '{ENDPOINT}', AUTHORIZATION_TYPE 'none');",
+        f"{ATTACH_SQL};",
         "```",
         "No account, no token — anonymous read is public. See README.md's \"Query it\" section "
         "for the canonical TxDb-style join example.",
@@ -623,14 +582,14 @@ def docs_resource(table: str) -> str:
 @mcp.custom_route("/health/live", methods=["GET"])
 async def live(request: Request) -> JSONResponse:
     """Liveness: the process is up and serving. Never touches the lake, so an
-    uptime check on this tells 'our container died' apart from 'icegate is down'."""
+    uptime check on this tells 'our container died' apart from 'the release is unreachable'."""
     return JSONResponse({"status": "ok"})
 
 
 @mcp.custom_route("/health", methods=["GET"])
 @mcp.custom_route("/health/ready", methods=["GET"])
 async def health(request: Request) -> JSONResponse:
-    """Readiness: icegate is reachable and DuckDB can still resolve a release.
+    """Readiness: the release is reachable and DuckDB can still resolve a release.
     The compose healthcheck uses this; /health is kept as its alias."""
     try:
         release = max(r[0] for r in _provenance_rows())

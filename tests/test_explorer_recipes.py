@@ -1,7 +1,7 @@
 """explorer/public/recipes.js's SQL parses in DuckDB.
 
 Offline and syntax-only, per AGENTS.md (tests stay offline; no network call to
-icegate here). `extract_statements` parses without binding, so this catches a
+the release here). `extract_statements` parses without binding, so this catches a
 typo or unbalanced clause without needing the tables — or even a network
 connection — to exist. The live numbers in recipes.js's `verified` fields were
 checked by hand against the real catalog (see explorer/README.md) and are not

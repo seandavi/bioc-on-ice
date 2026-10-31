@@ -1,9 +1,9 @@
 # biocOnIce
 
 **Bioconductor annotation without the packages.** Biological annotation and
-pointers to public data resources, published as Apache Iceberg tables that R,
-Python, DuckDB, a browser or an AI assistant can query directly. No package to
-install, no account, no token.
+pointers to public data resources, published as dated releases of Parquet
+plus a DuckDB database that R, Python, DuckDB, a browser or an AI assistant can
+query directly. No package to install, no account, no token.
 
 ## Why
 
@@ -15,7 +15,7 @@ release, and leaves no easy way to recover the annotation a past analysis used.
 biocOnIce publishes the same knowledge as open tables on object storage:
 
 - **Any language.** One artifact serves R, Python, SQL and the browser through
-  stock Iceberg clients. Nothing here is R-specific.
+  plain Parquet and DuckDB. Nothing here is R-specific.
 - **Every release stays queryable.** History lives in the rows, so the catalog
   as it stood at release `2026.08` is a `WHERE` clause, not an archived package.
 - **Every species at once.** NCBI Gene covers 51,796 taxa and Ensembl 276 in
@@ -33,8 +33,9 @@ biocOnIce publishes the same knowledge as open tables on object storage:
 
 [SPEC.md](SPEC.md) is the design source of truth, and
 [the wayfinder map](https://github.com/seandavi/bioc-on-ice/issues/1) tracks the
-work. [icegate](https://github.com/seandavi/icegate) is the gateway in front of
-the catalog.
+work. The public releases are listed at
+https://bioconice.cancerdatasci.org/releases
+([ADR-0014](docs/adr/0014-public-releases-are-parquet-plus-duckdb-views.md)).
 
 ## What it replaces
 
@@ -120,7 +121,10 @@ asserting provider in a `source` column — `'ENSEMBL'` today — so RefSeq or
 GENCODE later land as new rows, not new tables. They are keyed by assembly too
 (`genome_id`): Ensembl ships 13 mouse, 28 pig and 12 sheep assemblies under one
 taxon id each, so for a taxon with more than one loaded, pick one —
-`reference.genome.is_canonical` marks the reference assembly:
+`reference.genome.is_canonical` marks the reference assembly. Not in the public
+release yet: the live tables predate `genome_id` on the feature tables and
+`is_canonical` (production migrations owed in #176), so this query fails there
+today; with one assembly loaded per taxon, `taxon_id` alone selects it.
 
 ```sql
 SELECT count(*) FROM bioc.annotation.gene g
@@ -172,21 +176,19 @@ The release manifest now carries both version axes at once, which is the point o
 `release_number`, `ncbi_gene` to a date by `retrieval_date`. It is keyed
 `(release, source, artifact)`: `ncbi_gene` has a row per dump (`gene_info`,
 `gene2ensembl`, `gene_history`, …), `ensembl` a row per species, `obo` a row per
-ontology, each with its own URL and row count:
+ontology, each with its own URL and row count. The public release does not
+carry `artifact` yet (#176), so it shows one summed `ncbi_gene` row:
 
 ```sql
-SELECT artifact, source_version, row_count, url
-FROM provenance.release WHERE release = '2026.09' AND source = 'ncbi_gene';
+SELECT source_version, row_count, url
+FROM bioc.provenance.release WHERE release = '2026.09' AND source = 'ncbi_gene';
 ```
 
-Serving is live behind icegate at
-`https://icegate-bioconice.seandavi.workers.dev` with **anonymous public
-read** — no token needed. Vended credentials are contained to this catalog's
-bucket, read-only, by a bucket-scoped backend token
-([ADR-0011](docs/adr/0011-bucket-scoped-vending-tokens.md)). Write access
-remains key-only. Deploying a config change to the gateway is
-[`docs/DEPLOY.md`](docs/DEPLOY.md). Browse the catalog — tables, column docs,
-provenance, copyable queries — at https://bioconice-explorer.seandavi.workers.dev.
+Serving is the public release on R2 ([Query it](#query-it)), static files
+with **anonymous public read** — no token needed. The Iceberg catalog behind
+icegate still holds the Type-2 history until phase 2 of #187 retires it.
+Browse the release — tables, column docs, row counts, copyable queries and an
+in-browser query box — at https://bioconice-explorer.seandavi.workers.dev.
 
 Not yet: the `ensembl` row of the release manifest (see below), sequence lengths,
 and everything in Milestone 2.
@@ -199,16 +201,39 @@ and everything in Milestone 2.
 
 ## Query it
 
-No account, no token — anonymous read is public:
+No account, no token, no extension to install — anonymous read is public:
 
 ```sql
-INSTALL iceberg; LOAD iceberg;
-ATTACH 'bioconice' AS bioc (
-    TYPE ICEBERG,
-    ENDPOINT 'https://icegate-bioconice.seandavi.workers.dev',
-    AUTHORIZATION_TYPE 'none'
-);
+ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bioc (READ_ONLY);
 ```
+
+`bioconice.duckdb` holds only views, one per table, named as before
+(`bioc.annotation.gene`), over the release's Parquet files. `latest/` moves
+with each release; pin one by its dated folder, kept 30 days
+(`https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb`). The
+releases, with row counts and checksums, are at
+https://bioconice.cancerdatasci.org/releases. For a local copy (about 57 GB),
+run that folder's `restore.sql`, which materialises every table and checks the
+row counts against `manifest.json`:
+
+```sh
+curl -O https://data.bioconice.cancerdatasci.org/latest/restore.sql
+duckdb bioconice-local.duckdb < restore.sql
+```
+
+From R, the same `ATTACH` through the duckdb package:
+
+```r
+con <- DBI::dbConnect(duckdb::duckdb())
+DBI::dbExecute(con, "ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bioc (READ_ONLY)")
+DBI::dbGetQuery(con, "SELECT count(*) FROM bioc.annotation.gene WHERE taxon_id = 9606")
+```
+
+A release holds current rows only: `valid_to` is always NULL, so the
+`valid_from`/`valid_to` point-in-time queries run but cannot reach a row
+retired since. Those need the Type-2 Iceberg tables, which become a frozen
+archive (ADR-[0013](docs/adr/0013-versioned-datasets-not-versioned-rows.md),
+[0014](docs/adr/0014-public-releases-are-parquet-plus-duckdb-views.md)).
 
 The TxDb query — a canonical transcript's exons in biological order, with
 coding bounds:

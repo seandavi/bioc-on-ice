@@ -1,30 +1,17 @@
-// biocOnIce Explorer — reads the live icegate REST catalog, anonymously.
+// biocOnIce Explorer — reads the public release (ADR-0014), anonymously.
 // Plain JS, no framework, no build step: this file is served as-is.
-import { RECIPES, PROVENANCE_MATRIX_SQL } from "./recipes.js";
+import { RECIPES, PROVENANCE_MATRIX_SQL, RELEASE_URL, VERIFIED_ON } from "./recipes.js";
 
-const CATALOG_ENDPOINT = "https://icegate-bioconice.seandavi.workers.dev";
-const WAREHOUSE = "bioconice";
-
-// Every metadata field this page shows (comments, `doc`, properties, snapshots)
-// is read from this call at view time — never copied into this file — so the
-// page can never drift from the live schema. See AGENTS.md / SPEC.md
-// "Semantic Layer".
-//
-// icegate rate-limits bursts of catalog calls (see this repo's commit
-// history on 429s), and loading the whole namespace tree up front is exactly
-// that kind of burst, so a 429 gets one short retry before it's treated as a
-// real error.
-async function api(path, { retried = false } = {}) {
-  const res = await fetch(`${CATALOG_ENDPOINT}/v1/${WAREHOUSE}${path}`);
-  if (res.status === 429 && !retried) {
-    await new Promise((r) => setTimeout(r, 500 + Math.random() * 500));
-    return api(path, { retried: true });
-  }
-  if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
+// Every metadata field this page shows (comments, `doc`, types, row counts)
+// is read from the release's manifest.json at view time — never copied into
+// this file — so the page can never drift from what the release serves.
+async function loadManifest() {
+  const res = await fetch(`${RELEASE_URL}/manifest.json`);
+  if (!res.ok) throw new Error(`manifest.json -> HTTP ${res.status}`);
   return res.json();
 }
 
-document.getElementById("catalog-endpoint").textContent = CATALOG_ENDPOINT;
+document.getElementById("catalog-endpoint").textContent = RELEASE_URL;
 
 // ---------- sidebar: namespaces -> tables ----------
 
@@ -33,65 +20,38 @@ let currentTableEl = null;
 
 async function loadCatalog() {
   try {
-    const { namespaces } = await api("/namespaces");
+    const manifest = await loadManifest();
+    document.getElementById("catalog-endpoint").textContent = `${RELEASE_URL} (release ${manifest.release})`;
+    const byNs = {};
+    for (const t of manifest.tables) (byNs[t.schema] ??= []).push(t);
     tree.innerHTML = "";
     tree.removeAttribute("aria-busy");
-    for (const [ns] of namespaces.sort((a, b) => a[0].localeCompare(b[0]))) {
-      tree.appendChild(await renderNamespaceGroup(ns));
+    for (const ns of Object.keys(byNs).sort()) {
+      tree.appendChild(renderNamespaceGroup(ns, byNs[ns].sort((a, b) => a.table.localeCompare(b.table))));
     }
   } catch (err) {
-    tree.innerHTML = `<p class="status">Could not reach the catalog: ${escapeHtml(err.message)}</p>`;
+    tree.innerHTML = `<p class="status">Could not read the release: ${escapeHtml(err.message)}</p>`;
   }
 }
 
-async function renderNamespaceGroup(ns) {
+function renderNamespaceGroup(ns, tables) {
   const group = document.createElement("div");
   group.className = "ns-group";
-
-  let nsInfo = { properties: {} };
-  let tablesInfo = { identifiers: [] };
-  let loadError = null;
-  try {
-    [nsInfo, tablesInfo] = await Promise.all([
-      api(`/namespaces/${ns}`),
-      api(`/namespaces/${ns}/tables`),
-    ]);
-  } catch (err) {
-    loadError = err.message;
-  }
-  const tables = tablesInfo.identifiers
-    .map((t) => t.name)
-    .sort((a, b) => a.localeCompare(b));
 
   const btn = document.createElement("button");
   btn.className = "ns-button";
   btn.setAttribute("aria-expanded", "true");
-  btn.innerHTML = `${escapeHtml(ns)} <span class="count">${loadError ? "error" : tables.length}</span>`;
+  btn.innerHTML = `${escapeHtml(ns)} <span class="count">${tables.length}</span>`;
   group.appendChild(btn);
-
-  if (loadError) {
-    const p = document.createElement("p");
-    p.className = "ns-comment";
-    p.textContent = `Could not load this namespace: ${loadError}`;
-    group.appendChild(p);
-    return group;
-  }
-
-  if (nsInfo.properties?.comment) {
-    const p = document.createElement("p");
-    p.className = "ns-comment";
-    p.textContent = nsInfo.properties.comment;
-    group.appendChild(p);
-  }
 
   const ul = document.createElement("ul");
   ul.className = "tables";
-  for (const table of tables) {
+  for (const t of tables) {
     const li = document.createElement("li");
     const tbtn = document.createElement("button");
-    tbtn.textContent = table;
+    tbtn.textContent = t.table;
     tbtn.setAttribute("aria-current", "false");
-    tbtn.addEventListener("click", () => selectTable(ns, table, tbtn));
+    tbtn.addEventListener("click", () => selectTable(t, tbtn));
     li.appendChild(tbtn);
     ul.appendChild(li);
   }
@@ -106,12 +66,12 @@ async function renderNamespaceGroup(ns) {
   return group;
 }
 
-function selectTable(ns, table, el) {
+function selectTable(t, el) {
   if (currentTableEl) currentTableEl.setAttribute("aria-current", "false");
   el.setAttribute("aria-current", "true");
   currentTableEl = el;
   showBrowseView();
-  renderTable(ns, table);
+  renderTable(t);
 }
 
 // ---------- top nav ----------
@@ -144,54 +104,17 @@ navRecipes.addEventListener("click", showRecipesView);
 
 const tableView = document.getElementById("table-view");
 
-function attachSnippet(ns, table, hasValidTo) {
-  const lines = [
-    "INSTALL iceberg; LOAD iceberg;",
-    "ATTACH 'bioconice' AS bioc (",
-    "    TYPE ICEBERG,",
-    `    ENDPOINT '${CATALOG_ENDPOINT}',`,
-    "    AUTHORIZATION_TYPE 'none'",
-    ");",
+function attachSnippet(ns, table) {
+  return [
+    `ATTACH '${RELEASE_URL}/bioconice.duckdb' AS bioc (READ_ONLY);`,
     "",
     `SELECT * FROM bioc.${ns}.${table} LIMIT 10;`,
-  ];
-  if (hasValidTo) {
-    lines.push("", `-- current rows only:`, `SELECT * FROM bioc.${ns}.${table} WHERE valid_to IS NULL LIMIT 10;`);
-  }
-  return lines.join("\n");
+  ].join("\n");
 }
 
-function fmtType(t) {
-  if (typeof t === "string") return t;
-  if (t?.type === "list") return `list<${fmtType(t.element)}>`;
-  if (t?.type === "struct") return "struct";
-  if (t?.type === "map") return `map<${fmtType(t.key)}, ${fmtType(t.value)}>`;
-  return JSON.stringify(t);
-}
-
-function businessKeyFieldIds(schema) {
-  const validFromField = schema.fields.find((f) => f.name === "valid_from");
-  const ids = new Set(schema["identifier-field-ids"] || []);
-  if (validFromField) ids.delete(validFromField.id);
-  return ids;
-}
-
-async function renderTable(ns, table) {
-  tableView.innerHTML = `<p class="status" aria-busy="true">Loading ${escapeHtml(ns)}.${escapeHtml(table)}…</p>`;
-  let data;
-  try {
-    data = await api(`/namespaces/${ns}/tables/${table}`);
-  } catch (err) {
-    tableView.innerHTML = `<p class="status">Could not load this table: ${escapeHtml(err.message)}</p>`;
-    return;
-  }
-  const meta = data.metadata;
-  const schema = meta.schemas.find((s) => s["schema-id"] === meta["current-schema-id"]) || meta.schemas[0];
-  const props = meta.properties || {};
-  const comment = props.comment || "(no table comment)";
-  const businessKeyIds = businessKeyFieldIds(schema);
-  const hasValidTo = schema.fields.some((f) => f.name === "valid_to");
-  const partSpec = (meta["partition-specs"] || []).find((p) => p["spec-id"] === meta["default-spec-id"]);
+function renderTable(t) {
+  const ns = t.schema;
+  const table = t.table;
 
   const el = document.createElement("div");
 
@@ -201,12 +124,11 @@ async function renderTable(ns, table) {
 
   const commentP = document.createElement("p");
   commentP.className = "muted";
-  commentP.textContent = comment;
+  commentP.textContent = t.comment || "(no table comment)";
   el.appendChild(commentP);
 
   // tabs
-  const tabIds = ["overview", "columns", "snapshots"];
-  if (localStorage.getItem("bioconice_query_tab") === "1") tabIds.push("query");
+  const tabIds = ["overview", "columns", "query"];
   const tabsNav = document.createElement("div");
   tabsNav.className = "tabs";
   tabsNav.setAttribute("role", "tablist");
@@ -227,42 +149,22 @@ async function renderTable(ns, table) {
 
   // Overview panel
   const overview = document.createElement("div");
+  overview.appendChild(sectionTitle("Rows"));
+  const rows = document.createElement("p");
+  rows.textContent = `${t.row_count.toLocaleString()} current rows · ${(t.bytes / 1e6).toFixed(1)} MB of Parquet (${t.path})`;
+  overview.appendChild(rows);
+
   overview.appendChild(sectionTitle("Copyable DuckDB snippet"));
-  overview.appendChild(sqlBlock(attachSnippet(ns, table, hasValidTo)));
-
-  if (partSpec && partSpec.fields.length) {
-    overview.appendChild(sectionTitle("Partitioned by"));
-    const p = document.createElement("p");
-    p.textContent = partSpec.fields.map((f) => `${f.name} (${f.transform})`).join(", ");
-    overview.appendChild(p);
-  }
-
-  if (businessKeyIds.size) {
-    const names = schema.fields.filter((f) => businessKeyIds.has(f.id)).map((f) => f.name);
-    overview.appendChild(sectionTitle("Business key"));
-    const p = document.createElement("p");
-    p.innerHTML = names.map((n) => `<code>${escapeHtml(n)}</code>`).join(", ") +
-      ` <span class="muted">— what a merge joins on; the Iceberg row key is this plus <code>valid_from</code>.</span>`;
-    overview.appendChild(p);
-  }
-
-  const licence = props["bioc.license"];
-  if (licence) {
-    overview.appendChild(sectionTitle("Licence"));
-    const p = document.createElement("p");
-    p.textContent = licence;
-    overview.appendChild(p);
-  }
+  overview.appendChild(sqlBlock(attachSnippet(ns, table)));
 
   if (ns === "provenance" && table === "release") {
     overview.appendChild(sectionTitle("Release × source matrix"));
-    const note = document.createElement("div");
-    note.className = "warn";
+    const note = document.createElement("p");
+    note.className = "muted";
     note.textContent =
-      "Rendering the actual rows needs a query engine, which this static page does not have in phase 1 " +
-      "(the in-browser query tab exists but is off by default — see the Recipes page and explorer/README.md " +
-      "for why). Run this PIVOT yourself: rows are releases, columns are sources, cells are each source's own " +
-      "version string, and the current release is the lexicographically greatest one (SPEC.md's release ordering).";
+      "Rows are releases, columns are sources, cells are each source's own version string; the current " +
+      "release is the lexicographically greatest one (SPEC.md's release ordering). Paste the PIVOT (without the " +
+      "ATTACH line) into the Query tab to run it here.";
     overview.appendChild(note);
     overview.appendChild(sqlBlock(PROVENANCE_MATRIX_SQL));
   }
@@ -273,84 +175,32 @@ async function renderTable(ns, table) {
   // Columns panel
   const columns = document.createElement("div");
   columns.hidden = true;
-  const t = document.createElement("table");
-  t.className = "cols";
-  t.innerHTML = `<thead><tr><th>Column</th><th>Type</th><th>Required</th><th>Key</th><th>Doc</th></tr></thead>`;
+  const ct = document.createElement("table");
+  ct.className = "cols";
+  ct.innerHTML = `<thead><tr><th>Column</th><th>Type</th><th>Doc</th></tr></thead>`;
   const tbody = document.createElement("tbody");
-  for (const f of schema.fields) {
+  for (const c of t.columns) {
     const tr = document.createElement("tr");
-    const badges = [];
-    if (businessKeyIds.has(f.id)) badges.push('<span class="badge key">key</span>');
-    const prefix = props[`bioc.column.${f.name}.prefix`];
-    if (prefix) badges.push(`<span class="badge">prefix: ${escapeHtml(prefix)}</span>`);
-    const coord = props[`bioc.column.${f.name}.coordinate_system`];
-    if (coord) badges.push(`<span class="badge">${escapeHtml(coord)}</span>`);
     tr.innerHTML = `
-      <td><code>${escapeHtml(f.name)}</code></td>
-      <td><code>${escapeHtml(fmtType(f.type))}</code></td>
-      <td>${f.required ? "yes" : "no"}</td>
-      <td>${badges.join(" ") || "&nbsp;"}</td>
-      <td>${escapeHtml(f.doc || "")}</td>`;
+      <td><code>${escapeHtml(c.name)}</code></td>
+      <td><code>${escapeHtml(c.type)}</code></td>
+      <td>${escapeHtml(c.doc || "")}</td>`;
     tbody.appendChild(tr);
   }
-  t.appendChild(tbody);
-  columns.appendChild(t);
+  ct.appendChild(tbody);
+  columns.appendChild(ct);
   panels.columns = columns;
   el.appendChild(columns);
 
-  // Snapshots panel
-  const snapshots = document.createElement("div");
-  snapshots.hidden = true;
-  snapshots.appendChild(renderSnapshots(meta));
-  panels.snapshots = snapshots;
-  el.appendChild(snapshots);
-
-  // Query panel (phase 2, opt-in only)
-  if (panels.query === undefined && tabIds.includes("query")) {
-    const queryPanel = document.createElement("div");
-    queryPanel.hidden = true;
-    queryPanel.appendChild(buildQueryPanel(ns, table, hasValidTo));
-    panels.query = queryPanel;
-    el.appendChild(queryPanel);
-  }
+  // Query panel: DuckDB-WASM, loaded on first Run
+  const queryPanel = document.createElement("div");
+  queryPanel.hidden = true;
+  queryPanel.appendChild(buildQueryPanel(ns, table));
+  panels.query = queryPanel;
+  el.appendChild(queryPanel);
 
   tableView.innerHTML = "";
   tableView.appendChild(el);
-}
-
-function renderSnapshots(meta) {
-  const wrap = document.createElement("div");
-  const snaps = (meta.snapshots || []).slice().sort((a, b) => b["timestamp-ms"] - a["timestamp-ms"]);
-  if (!snaps.length) {
-    wrap.innerHTML = `<p class="muted">No snapshots.</p>`;
-    return wrap;
-  }
-  const SHOWN = 50;
-  const t = document.createElement("table");
-  t.className = "snap-table";
-  t.innerHTML = `<thead><tr><th>Timestamp (UTC)</th><th>Operation</th><th>+records</th><th>-records</th><th>Snapshot id</th></tr></thead>`;
-  const tbody = document.createElement("tbody");
-  for (const s of snaps.slice(0, SHOWN)) {
-    const tr = document.createElement("tr");
-    if (s["snapshot-id"] === meta["current-snapshot-id"]) tr.className = "current";
-    const sum = s.summary || {};
-    tr.innerHTML = `
-      <td>${new Date(s["timestamp-ms"]).toISOString().replace("T", " ").slice(0, 19)}</td>
-      <td>${escapeHtml(sum.operation || "")}${s["snapshot-id"] === meta["current-snapshot-id"] ? " (current)" : ""}</td>
-      <td class="num">${sum["added-records"] ?? "–"}</td>
-      <td class="num">${sum["deleted-records"] ?? "–"}</td>
-      <td><code>${s["snapshot-id"]}</code></td>`;
-    tbody.appendChild(tr);
-  }
-  t.appendChild(tbody);
-  wrap.appendChild(t);
-  if (snaps.length > SHOWN) {
-    const p = document.createElement("p");
-    p.className = "muted";
-    p.textContent = `Showing the latest ${SHOWN} of ${snaps.length} snapshots.`;
-    wrap.appendChild(p);
-  }
-  return wrap;
 }
 
 function sectionTitle(text) {
@@ -430,34 +280,13 @@ function renderRecipes() {
     div.appendChild(sqlBlock(r.sql));
     const result = document.createElement("p");
     result.className = "result";
-    result.textContent = `Verified 2026-09-18: ${r.verified}`;
+    result.textContent = `Verified ${VERIFIED_ON}: ${r.verified}`;
     div.appendChild(result);
     container.appendChild(div);
   }
-
-  const flagCard = document.createElement("div");
-  flagCard.className = "card";
-  flagCard.innerHTML = `<h3>In-browser queries (phase 2, experimental)</h3>
-    <p class="muted">DuckDB-WASM's <code>ATTACH</code> to this catalog works anonymously in the browser, but reading
-    table <em>data</em> currently fails: the R2 bucket behind icegate serves no CORS headers, so the browser blocks
-    the data-file fetch (icegate's own CORS is fine — this is the bucket). See explorer/README.md for the exact
-    finding. Off by default for that reason.</p>`;
-  const label = document.createElement("label");
-  label.className = "toggle";
-  const cb = document.createElement("input");
-  cb.type = "checkbox";
-  cb.id = "query-flag";
-  cb.checked = localStorage.getItem("bioconice_query_tab") === "1";
-  cb.addEventListener("change", () => {
-    localStorage.setItem("bioconice_query_tab", cb.checked ? "1" : "0");
-  });
-  label.appendChild(cb);
-  label.append(" Enable the Query tab on table pages (known broken — see above)");
-  flagCard.appendChild(label);
-  container.appendChild(flagCard);
 }
 
-// ---------- phase 2: in-browser DuckDB-WASM query panel ----------
+// ---------- in-browser DuckDB-WASM query panel ----------
 
 let duckdbDbPromise = null;
 
@@ -476,10 +305,8 @@ async function getDuckDB(log) {
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
       URL.revokeObjectURL(workerUrl);
       const conn = await db.connect();
-      await conn.query("INSTALL iceberg; LOAD iceberg; INSTALL httpfs; LOAD httpfs;");
-      await conn.query(
-        `ATTACH 'bioconice' AS bioc (TYPE ICEBERG, ENDPOINT '${CATALOG_ENDPOINT}', AUTHORIZATION_TYPE 'none');`
-      );
+      // The release Worker serves CORS on the .duckdb file and every Parquet file its views read.
+      await conn.query(`ATTACH '${RELEASE_URL}/bioconice.duckdb' AS bioc (READ_ONLY);`);
       return conn;
     })();
   }
@@ -488,11 +315,8 @@ async function getDuckDB(log) {
 
 const WRITE_STATEMENT = /^\s*(insert|update|delete|merge|attach|detach|copy|pragma|create|drop|alter|call|export|import|install|load|set|vacuum)\b/i;
 
-function buildQueryPanel(ns, table, hasValidTo) {
+function buildQueryPanel(ns, table) {
   const wrap = document.createElement("div");
-  wrap.innerHTML = `
-    <p class="warn">Experimental and, as of 2026-09-18, expected to fail on any real data read (R2 CORS — see
-    Recipes page). Kept behind this opt-in flag so the failure mode is visible rather than hidden.</p>`;
   const box = document.createElement("textarea");
   box.id = "sql-box";
   box.setAttribute("aria-label", "SQL query");
@@ -504,16 +328,6 @@ function buildQueryPanel(ns, table, hasValidTo) {
   controls.style.gap = "0.75rem";
   controls.style.alignItems = "center";
   controls.style.margin = "0.5rem 0";
-
-  const currentOnly = document.createElement("label");
-  currentOnly.className = "toggle";
-  currentOnly.style.margin = "0";
-  const currentOnlyCb = document.createElement("input");
-  currentOnlyCb.type = "checkbox";
-  currentOnlyCb.disabled = !hasValidTo;
-  currentOnly.appendChild(currentOnlyCb);
-  currentOnly.append(" current only (valid_to IS NULL)");
-  controls.appendChild(currentOnly);
 
   const runBtn = document.createElement("button");
   runBtn.className = "copy-btn";
@@ -534,9 +348,7 @@ function buildQueryPanel(ns, table, hasValidTo) {
       out.innerHTML = `<p class="warn">Refused: this box only runs a single read-only SELECT/WITH.</p>`;
       return;
     }
-    let sql = raw.replace(/;\s*$/, "");
-    if (currentOnlyCb.checked) sql = `SELECT * FROM (${sql}) t WHERE valid_to IS NULL`;
-    sql = `SELECT * FROM (${sql}) t LIMIT ${ROW_CAP}`;
+    const sql = `SELECT * FROM (${raw.replace(/;\s*$/, "")}) t LIMIT ${ROW_CAP}`;
     out.innerHTML = `<p class="status" aria-busy="true">Running…</p>`;
     try {
       const conn = await getDuckDB();

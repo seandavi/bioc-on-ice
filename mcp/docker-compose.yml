@@ -37,7 +37,7 @@ services:
       # no cert resolver. Grey-cloud + Let's Encrypt never issued for this host (2026-09-18).
       - "traefik.http.services.bioconice-mcp.loadbalancer.server.port=8000"
     # No auth in v1: every tool is read-only against data that is already
-    # anonymously public through icegate, so there is nothing a token would
+    # anonymously public as the release (ADR-0014), so there is nothing a token would
     # protect. If that changes, Cloudflare Access in front of this hostname
     # (same DNS record, orange-cloud + an Access policy) is the platform's
     # existing option — no application change needed.

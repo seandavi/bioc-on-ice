@@ -1,17 +1,15 @@
 // Fixed recipe list — the same worked queries issue #100's MCP `recipes()` tool
-// serves. Every SQL string here is self-contained (INSTALL/LOAD/ATTACH included)
-// so pasting one verbatim into desktop DuckDB works with no setup.
+// serves. Every SQL string here is self-contained (ATTACH included) so pasting
+// one verbatim into desktop DuckDB works with no setup.
 //
-// Verified live against the catalog on 2026-09-18 (`duckdb` CLI, no browser):
+// Verified against the 2026-10-31 release (Python duckdb 1.5.5, no browser):
 // the `verified` field is the row/count DuckDB actually returned that day, not
 // a guess — see explorer/README.md for how to re-check.
 
-const ATTACH = `INSTALL iceberg; LOAD iceberg;
-ATTACH 'bioconice' AS bioc (
-    TYPE ICEBERG,
-    ENDPOINT 'https://icegate-bioconice.seandavi.workers.dev',
-    AUTHORIZATION_TYPE 'none'
-);`;
+export const RELEASE_URL = "https://data.bioconice.cancerdatasci.org/latest";
+export const VERIFIED_ON = "2026-10-31";
+
+const ATTACH = `ATTACH '${RELEASE_URL}/bioconice.duckdb' AS bioc (READ_ONLY);`;
 
 export const RECIPES = [
   {
@@ -69,7 +67,7 @@ WHERE d.taxon_id = 9606 AND d.valid_to IS NULL;`,
     id: "gene-models",
     title: "Gene models for a species at the current release",
     description:
-      "Every current Ensembl transcript for human, joined back to its gene. Swap taxon_id for another organism, or add valid_from <= 'R' AND (valid_to IS NULL OR valid_to > 'R') for a past release instead of 'current'.",
+      "Every current Ensembl transcript for human, joined back to its gene. Swap taxon_id for another organism. The release holds current rows only; a past release's gene models are in the frozen Iceberg archive.",
     sql: `${ATTACH}
 
 SELECT g.gene_id, g.symbol, g.gene_type, t.transcript_id, t.biotype, t.canonical
