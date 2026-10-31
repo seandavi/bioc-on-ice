@@ -4,6 +4,7 @@ import json
 from datetime import date
 
 import duckdb
+import pytest
 from fsspec.implementations.local import LocalFileSystem
 from pyarrow import fs as pafs
 
@@ -65,3 +66,13 @@ def test_dry_run_writes_nothing(tmp_path, capsys):
     out = capsys.readouterr().out
     assert f"delete {bucket}/v2026-09-01/" in out and "v2026-09-30/" not in out
     assert out.count("put ") == 10
+
+
+def test_an_existing_dated_release_is_never_overwritten(tmp_path):
+    bucket = _bucket(tmp_path)
+    (bucket / f"v{RELEASE}").mkdir()
+    (bucket / f"v{RELEASE}" / "manifest.json").write_text("{}")
+    with pytest.raises(SystemExit, match="already exists"):
+        upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+    assert (bucket / f"v{RELEASE}" / "manifest.json").read_text() == "{}"
+    assert not (bucket / "latest" / "views.sql").exists()
