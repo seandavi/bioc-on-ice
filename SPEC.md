@@ -857,9 +857,18 @@ history. A release id is the UTC build date, `YYYY-MM-DD`; a second release on
 the same day is `YYYY-MM-DD.2`, `.3`, and so on, ordered by date then number
 (never as raw strings). Upstream versions are recorded in provenance, never in
 the id. Each release carries every current row of its tables; there are no
-`valid_from` / `valid_to` columns. Retention is per dataset: every release is
-kept unless the dataset declares `keep_last = N`, and pinned releases are never
-pruned. The first dataset is `bioconice-bugsigdb`.
+`valid_from` / `valid_to` columns. The first dataset is `bioconice-bugsigdb`.
+
+**Cadence and retention** (ADR-0016). The public whole-product release
+(ADR-0014) is published weekly, Sundays 00:00 UTC, and only after it passes the
+publish gate. R2 keeps the 4 newest `v{YYYY-MM-DD}/` folders, counted, not
+aged; one-off releases count toward the 4, `latest/` does not. R2 is for
+querying in place. Each month the first weekly release that passed the gate is
+copied to a Hugging Face dataset repo as one commit tagged `YYYY-MM`. Tags are
+never deleted, and they replace pinned releases: nothing on R2 is pinned. A
+Bioconductor release cites the nearest `YYYY-MM` tag. Monthly releases are
+downloaded and queried locally, never queried in place through `hf://`,
+because anonymous Hugging Face reads are rate-limited (HTTP 429).
 
 **Archive rule.** The Iceberg tables of a source keep their `valid_from` /
 `valid_to` rows only until the source moves to dataset releases, then receive

@@ -209,8 +209,12 @@ ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bio
 
 `bioconice.duckdb` holds only views, one per table, named as before
 (`bioc.annotation.gene`), over the release's Parquet files. `latest/` moves
-with each release; pin one by its dated folder, kept 30 days
-(`https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb`). The
+with each release; pin one by its dated folder
+(`https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb`).
+Dated folders are kept 30 days for now. Once releases go weekly, only the
+last 4 are kept, about four weeks, and a monthly archive on Hugging Face,
+tagged `YYYY-MM`, becomes the copy to cite
+([ADR-0016](docs/adr/0016-release-cadence-weekly-r2-monthly-hf.md)). The
 releases, with row counts and checksums, are at
 https://bioconice.cancerdatasci.org/releases. For a local copy (about 57 GB),
 run that folder's `restore.sql`, which materialises every table and checks the
