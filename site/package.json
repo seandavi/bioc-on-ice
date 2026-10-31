@@ -1,0 +1,17 @@
+{
+  "name": "bioconice-site",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "seed": "wrangler r2 object put --local data-bioconice/latest/manifest.json --file test/fixture/manifest.json && wrangler r2 object put --local data-bioconice/v2026-10-30/manifest.json --file test/fixture/manifest.json && wrangler r2 object put --local data-bioconice/latest/reference/genome.parquet --file test/fixture/manifest.json"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260708.1",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}

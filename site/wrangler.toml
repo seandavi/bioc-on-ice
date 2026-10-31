@@ -1,0 +1,41 @@
+# Cloudflare Worker: the whole public bioc-on-ice site (#191), copied from
+# omicidx site/.
+#   bioconice.cancerdatasci.org/        -> pages (public/, Workers static assets)
+#   bioconice.cancerdatasci.org/data/*  -> `data-bioconice` R2 bucket
+#   data.bioconice.cancerdatasci.org/*  -> same bucket at `/` (release bundle
+#                                          views hard-code this URL; never redirect)
+# The bucket path is the anonymous, credential-free read surface for the
+# frozen releases: range requests + CORS for DuckDB `ATTACH` and read_parquet.
+#
+# Deploy (needs `wrangler login` and the bucket): cd site && npm ci && npx wrangler deploy
+# custom_domain auto-creates the DNS records on deploy (cancerdatasci.org is
+# Cloudflare-managed).
+
+name = "data-bioconice"
+main = "src/index.ts"
+compatibility_date = "2025-03-14"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# The worker routes first: on the data host every path is a bucket key, even
+# ones that collide with a page (e.g. `/`).
+run_worker_first = true
+
+[[r2_buckets]]
+binding = "DATA_BUCKET"
+bucket_name = "data-bioconice"
+# ponytail: local R2 under `wrangler dev` (seed with `npm run seed`); add
+# `remote = true` once the bucket exists to dev against the real data.
+
+[[analytics_engine_datasets]]
+binding = "USAGE"
+dataset = "data_bioconice_usage"
+
+[[routes]]
+pattern = "bioconice.cancerdatasci.org"
+custom_domain = true
+
+[[routes]]
+pattern = "data.bioconice.cancerdatasci.org"
+custom_domain = true
