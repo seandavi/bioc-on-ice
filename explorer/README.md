@@ -1,14 +1,18 @@
 # biocOnIce Explorer
 
-A static page that reads the live biocOnIce catalog through icegate,
-anonymously, and shows what's in it: namespaces, tables, column docs,
-business keys, partition specs, snapshot history, and a copyable DuckDB
-snippet per table — plus the same fixed recipe queries issue #100's MCP
-`recipes()` tool serves. Plain HTML/CSS/JS, no framework, no build step.
-Nothing here writes to the catalog; nothing here is a backend — it makes the
-same anonymous, read-only REST calls a browser could always make against
-`https://icegate-bioconice.seandavi.workers.dev` (`icegate.yaml`'s
-`cors: origins: ["*"]` exists for exactly this).
+A static page that reads the public biocOnIce release
+(`https://data.bioconice.cancerdatasci.org/latest`, ADR-0014) anonymously and
+shows what's in it: namespaces, tables, table comments, column docs and types,
+row counts, a copyable DuckDB snippet per table, an in-browser query box, and
+the same fixed recipe queries issue #100's MCP `recipes()` tool serves. Plain
+HTML/CSS/JS, no framework, no build step. Metadata comes from the release's
+`manifest.json`; queries run in DuckDB-WASM, which `ATTACH`es the release's
+`bioconice.duckdb` over https. The release Worker serves CORS on every file,
+so nothing here needs a backend.
+
+Before #193 the page read the icegate REST catalog instead, which also gave it
+snapshot history, partition specs, business keys and licences. The release
+does not carry those, so the page no longer shows them.
 
 ## Serve it locally
 
@@ -18,9 +22,8 @@ python -m http.server 8000
 # open http://localhost:8000
 ```
 
-No server-side code, no build, no `npm install` for phase 1 — everything is
-fetched from the live catalog and (for the opt-in Query tab) a CDN at
-request time.
+No server-side code, no build, no `npm install` — the manifest and the data
+come from the release and DuckDB-WASM from a CDN at request time.
 
 ## Deploy
 
@@ -52,91 +55,40 @@ both work too, if the Worker path is ever not preferred — the page has zero
 platform-specific code — but Workers Static Assets is what this repo is
 configured for.
 
-## Phase 2 gate: in-browser DuckDB-WASM queries
+## The Query tab
 
-**Finding (tested live in a real browser, 2026-09-18): `ATTACH` succeeds
-anonymously; reading table *data* fails, because the `bioconice` R2 bucket
-serves no CORS headers.** This is the blocker the issue predicted, confirmed
-end to end:
+DuckDB-WASM is `@duckdb/duckdb-wasm@1.33.1-dev57.0` (npm's `latest` dist-tag;
+DuckDB v1.5.4 inside), loaded from jsdelivr on the first Run. Its browser
+build imports the bare specifier `apache-arrow`, which needs the static
+`<script type="importmap">` in `index.html`. It attaches the release with
 
-1. `duckdb-wasm` (`@duckdb/duckdb-wasm@1.33.1-dev57.0`, the version npm's
-   `latest` dist-tag resolves to as of 2026-09-18 — no plain `1.33.0` is
-   published) loads in the browser via ESM from jsdelivr. Its browser build
-   imports the bare specifier `apache-arrow`, which needs a static
-   `<script type="importmap">` declared before any module script runs
-   (`index.html`) — that's undocumented in the issue and worth recording.
-2. `INSTALL iceberg; LOAD iceberg;` succeeds — the WASM build at
-   `extensions.duckdb.org/.../iceberg.duckdb_extension.wasm` the issue names
-   is real and loads.
-3. `INSTALL httpfs; LOAD httpfs;` is *also* required before `ATTACH` — the
-   default secret provider DuckDB tries for `s3://` needs it — again not
-   called out in the issue.
-4. `ATTACH 'bioconice' AS bioc (TYPE ICEBERG, ENDPOINT '...', AUTHORIZATION_TYPE 'none')`
-   **succeeds** — the anonymous credential-vending path works from a browser
-   origin, exercising icegate's CORS handling end to end for metadata.
-5. Any query that touches table *data* — e.g.
-   `SELECT * FROM bioc.provenance.release LIMIT 5` — fails:
-   ```
-   HTTP Error: Full download failed to to URL
-   "https://<account>.r2.cloudflarestorage.com/bioconice/__r2_data_catalog/.../snap-....avro":
-   404 (Please consult the browser console for details, might be potentially
-   a CORS error)
-   ```
-   The "404" is misleading — `curl -X OPTIONS` against the same R2 URL with
-   an `Origin` header returns `403 Forbidden` with **no**
-   `access-control-allow-origin` header at all (checked directly, not just
-   inferred from the browser error), so the browser's CORS preflight is
-   rejected before a real GET is even attempted. icegate's own CORS
-   (`access-control-allow-origin: *` on every `/v1/*` response) is
-   confirmed working; this is the R2 bucket, not the gateway.
+```sql
+ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bioc (READ_ONLY);
+```
 
-**Fix, not done here per the task's instructions**: add a CORS policy to the
-`bioconice` R2 bucket allowing `GET`/`HEAD` (and `Range`, which DuckDB's
-httpfs needs for partial reads) from the explorer's origin(s) — e.g.
-`wrangler r2 bucket cors put bioconice --rules '[...]'` or the dashboard.
-This is an infrastructure change to the bucket, tracked separately from this
-PR and from icegate's own config.
+and the views read the Parquet files with HTTP range requests. The box takes
+one read-only `SELECT`/`WITH` and caps results at 1,000 rows. `ATTACH` probes
+for `bioconice.duckdb.wal`, which 404s and shows as one console error; DuckDB
+treats a missing WAL as normal.
 
-**Consequence for this page**: the Query tab exists (`app.js`,
-`buildQueryPanel`) but is **off by default**, gated behind a checkbox on the
-Recipes page (persisted in `localStorage`, per-browser only — nothing is
-sent anywhere). Turning it on lets a visitor see the exact failure above
-rather than hiding it. `provenance.release`'s release×source×version matrix
-(acceptance criterion 2) is therefore shown as a copyable `PIVOT` query, not
-rendered inline, for the same reason — rendering it needs the same blocked
-data read.
-
-If a CORS policy is ever added to the bucket, flip the default in
-`app.js` (`localStorage.getItem("bioconice_query_tab")`) and re-verify; the
-code path is already exercised and only the bucket setting stands in the
-way.
-
-### Future option, not built here
-
-A remote MCP server on Workers using R2 SQL (Cloudflare's SQL engine over R2
-Data Catalog) is being built separately. If it lands, it could serve as a
-server-side query fallback for this page's Query tab — issuing the read from
-Cloudflare's edge instead of the visitor's browser, sidestepping the R2 CORS
-gap entirely — but that is a design decision for whenever that server
-exists, not something this PR implements.
+The 2026-09 attempt against icegate failed on CORS: the Iceberg bucket served
+no CORS headers, so the tab shipped off by default. The release does not have
+that problem, and the tab is now always on.
 
 ## What's verified vs. what isn't
 
-Every column doc, table comment, partition spec and snapshot on the page is
-read live from the REST catalog at view time (`app.js`'s `api()`), never
-copied from `src/bioconice/schemas.py`. The four recipe queries in
-`public/recipes.js` were run against the live catalog with the `duckdb` CLI
-on 2026-09-18 and the numbers in the "Verified" line under each one are what
-DuckDB actually returned that day — re-run them yourself to check currency
-(the human gene/transcript/exon counts in particular will drift as sources
-update).
+Every comment, column doc and row count on the page is read from the release's
+`manifest.json` at view time (`app.js`'s `loadManifest()`), never copied from
+`src/bioconice/schemas.py`. The four recipe queries in `public/recipes.js` were
+run against the 2026-10-31 release with Python duckdb 1.5.5, and the
+"Verified" line under each is what DuckDB returned (unchanged from the
+2026-09-18 run against icegate). On 2026-10-30 the page was served locally
+(`python -m http.server`) and driven in headless Chromium: 80 tables in 7
+namespaces loaded from the manifest, and the Query tab returned 78,348 for
+`SELECT count(*) FROM bioc.annotation.gene WHERE taxon_id = 10090`, with the
+`.wal` 404 above as the only console error.
 
-Acceptance criterion 4 ("every recipe's snippet ... checked in CI for one
-recipe") and 4b (a live in-browser query returning the README's number) are
-**not** wired into CI: this repo's tests stay offline (AGENTS.md — fixtures
-over network calls), and criterion 4b additionally requires phase 2's data
-path, which is blocked per the finding above. What ships instead:
-`tests/test_explorer_recipes.py` checks that every recipe's SQL — and the
-provenance matrix `PIVOT` — parses in DuckDB (`extract_statements`, no
-network, no binding to real tables). The live numbers above were verified by
-hand this session; they are not re-verified automatically.
+`tests/test_explorer_recipes.py` checks offline that every recipe's SQL, and
+the provenance matrix `PIVOT`, parses in DuckDB (`extract_statements`, no
+network, no binding to real tables). The live numbers are not re-verified
+automatically; this repo's tests stay offline (AGENTS.md).

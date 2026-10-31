@@ -195,39 +195,23 @@ def test_query_impl_truncates_and_flags_it(monkeypatch):
 # The live half of the same session is test_live_scripted_session below.
 # --------------------------------------------------------------------------
 
-# A trimmed but real-shaped slice of what GET .../namespaces/<ns>/tables/<t>
-# actually returns (recorded from the live endpoint on 2026-09-18).
-_FAKE_TABLE_METADATA = {
-    "current-schema-id": 0,
-    "default-spec-id": 0,
-    "partition-specs": [{"spec-id": 0, "fields": []}],
-    "schemas": [{
-        "schema-id": 0,
-        "identifier-field-ids": [3, 2, 1],
-        "fields": [
-            {"id": 1, "name": "gene_id", "type": "string", "required": True,
-             "doc": "NCBI Entrez GeneID, e.g. 7157."},
-            {"id": 2, "name": "taxon_id", "type": "int", "required": True,
+# A trimmed but real-shaped slice of the release's manifest.json.
+_FAKE_MANIFEST = {
+    "release": "2026-10-31",
+    "tables": [{
+        "schema": "annotation", "table": "ncbi__gene_pubmed", "row_count": 3,
+        "comment": "Gene-to-publication links.",
+        "columns": [
+            {"name": "gene_id", "type": "VARCHAR", "doc": "NCBI Entrez GeneID, e.g. 7157."},
+            {"name": "taxon_id", "type": "INTEGER",
              "doc": "NCBI taxonomy id of the organism, e.g. 9606 for human."},
-            {"id": 3, "name": "pubmed_id", "type": "string", "required": True,
+            {"name": "pubmed_id", "type": "VARCHAR",
              "doc": "PubMed id (PMID) of a publication discussing this gene."},
-            {"id": 4, "name": "valid_from", "type": "string", "required": True, "doc": "..."},
-            {"id": 5, "name": "valid_to", "type": "string", "required": False, "doc": "..."},
+            {"name": "valid_from", "type": "VARCHAR", "doc": "..."},
+            {"name": "valid_to", "type": "VARCHAR", "doc": "..."},
         ],
     }],
-    "properties": {"comment": "Gene-to-publication links.", "bioc.column.gene_id.prefix": "ncbigene"},
-    "snapshots": [{"summary": {"total-records": "3"}}],
 }
-
-
-def _fake_rest_get(path):
-    if path == "namespaces":
-        return {"namespaces": [["annotation"]]}
-    if path == "namespaces/annotation/tables":
-        return {"identifiers": [{"namespace": ["annotation"], "name": "ncbi__gene_pubmed"}]}
-    if path == "namespaces/annotation/tables/ncbi__gene_pubmed":
-        return {"metadata": _FAKE_TABLE_METADATA}
-    raise AssertionError(f"unexpected REST path in offline fixture: {path}")
 
 
 def _fake_lake_con():
@@ -258,7 +242,7 @@ def _fake_lake_con():
 
 
 def test_scripted_session_offline(monkeypatch):
-    monkeypatch.setattr(mcp, "_rest_get", _fake_rest_get)
+    monkeypatch.setattr(mcp, "_manifest", lambda: _FAKE_MANIFEST)
     monkeypatch.setattr(mcp, "_duck", _fake_lake_con)
 
     tables = mcp.list_tables()
@@ -271,6 +255,9 @@ def test_scripted_session_offline(monkeypatch):
     described = mcp.describe_table("annotation.ncbi__gene_pubmed")
     assert described["business_key"] == ["gene_id", "taxon_id", "pubmed_id"]
     assert all(c["doc"] for c in described["columns"])
+    assert described["columns"][0]["identifier_prefix"] == "ncbigene"
+    with pytest.raises(ValueError, match="list_tables"):
+        mcp.describe_table("annotation.nope")
 
     resolved = mcp.resolve_release(ensembl="116")
     assert resolved["release"] == "2026.09"
