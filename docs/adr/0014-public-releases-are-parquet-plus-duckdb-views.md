@@ -75,4 +75,5 @@ a public bucket of static files vends nothing.
 - A release is only as good as its parity with the live tables; #190 gates the
   first publication on that. *(Since replaced by the release-over-release gate,
   `bioconice gate`, which checks each release against the previous published one:
-  #183 step 5.)*
+  #183 step 5. The order is publish → gate → upload dry run → upload `--apply`;
+  README "Release it".)*

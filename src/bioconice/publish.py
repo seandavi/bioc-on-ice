@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
+from cdsci.lake.contracts import ColumnContract, TableContract, TemporalModel
 from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.local import LocalFileSystem
 
@@ -45,10 +46,63 @@ TABLES = [(*name.split("."), _current(name, d)) for name, d in DECLARED.items()]
     # From cdsci-lake (#194); becomes lake.pubmed.article with seandavi/cdsci-lake#136.
     ("annotation", "pubmed__article", "SELECT * FROM lake.omicidx.pubmed_article"),
 ]
-PUBMED_COMMENT = (
-    "PubMed citations, one row per PMID: title, abstract, journal, authors, MeSH terms, "
-    "references and grants, from the cdsci-lake table lake.omicidx.pubmed_article. "
-    "Join on pmid with ncbi__gene_pubmed, icite__publication and pubtator3__mention."
+_EMPTY = "Empty string, not null, when the PubMed record has no value."
+
+
+def _text(name, doc):
+    return ColumnContract(name, "string", doc, True, null_meaning=_EMPTY)
+
+
+PUBMED_ARTICLE = TableContract(
+    name="annotation.pubmed__article",
+    description=(
+        "PubMed citations, one row per PMID: title, abstract, journal, authors, MeSH terms, "
+        "references and grants, from the cdsci-lake table lake.omicidx.pubmed_article. "
+        "Join on pmid with ncbi__gene_pubmed, icite__publication and pubtator3__mention."
+    ),
+    grain="one row per pmid",
+    primary_key=("pmid",),
+    temporal_model=TemporalModel.UPSERT_LATEST_SNAPSHOT,
+    owner="bioc-on-ice",
+    license="nlm-terms",
+    columns=(
+        ColumnContract("pmid", "string", "PubMed id, e.g. '35000000'; the key.", False,
+                       identifier_namespace="pubmed"),
+        _text("title", "Article title (English, or translated to English)."),
+        _text("issue", "Volume and issue as 'volume(issue)', e.g. '54(4)'."),
+        _text("pages", "Pagination as printed, e.g. '501-511'."),
+        _text("abstract", "Abstract text."),
+        _text("journal", "Full journal title."),
+        ColumnContract(
+            "authors",
+            "list<struct<lastname:string, forename:string, initials:string, "
+            "identifier:string, affiliation:string>>",
+            "Authors in byline order; identifier is an ORCID URL where given.", True),
+        _text("pubdate", "Publication date as precise as the record gives: 'YYYY', 'YYYY-MM' "
+                         "or 'YYYY-MM-DD'."),
+        _text("mesh_terms", "MeSH headings, '; '-separated, each 'Dnnnnnn:Heading' followed by "
+                            "' / Qnnnnnn:Qualifier' pairs; '*' marks a major topic."),
+        _text("publication_types", "Publication types, '; '-separated 'Dnnnnnn:Type'."),
+        _text("chemical_list", "Substances, '; '-separated 'Dnnnnnn:Name'."),
+        _text("keywords", "Author keywords, '; '-separated."),
+        _text("doi", "DOI, without the 'https://doi.org/' prefix."),
+        ColumnContract("references", "list<struct<citation:string, pmid:string>>",
+                       "Cited works as listed; pmid where PubMed resolved one.", True),
+        _text("languages", "Article language code(s), e.g. 'eng'."),
+        _text("vernacular_title", "Title in the original language."),
+        _text("date_completed", "Date MEDLINE indexing was completed, 'YYYY-MM-DD'."),
+        _text("date_revised", "Date the record was last revised, 'YYYY-MM-DD'."),
+        _text("pmc", "PubMed Central id."),
+        _text("other_id", "Other ids the record carries."),
+        _text("medline_ta", "NLM title abbreviation of the journal, e.g. 'Amino Acids'."),
+        _text("nlm_unique_id", "NLM catalog id of the journal."),
+        _text("issn_linking", "Linking ISSN of the journal."),
+        _text("country", "Country of the journal's publisher."),
+        ColumnContract("grant_ids",
+                       "list<struct<grant_id:string, grant_acronym:string, country:string, "
+                       "agency:string>>",
+                       "Funding: grant number, acronym, agency and its country.", True),
+    ),
 )
 
 
@@ -69,8 +123,8 @@ def _docs(name):
         return d.comment, {f.name: f.doc for f in d.schema.fields if f.doc}
     if name == SIGNATURE_TAXON.name:
         return SIGNATURE_TAXON.description, {c.name: c.description for c in SIGNATURE_TAXON.columns}
-    if name == "annotation.pubmed__article":
-        return PUBMED_COMMENT, {}
+    if name == PUBMED_ARTICLE.name:
+        return PUBMED_ARTICLE.description, {c.name: c.description for c in PUBMED_ARTICLE.columns}
     return None, {}
 
 

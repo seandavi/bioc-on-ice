@@ -381,7 +381,11 @@ uv run bioconice upload --release release/ --apply
 The gate (`src/bioconice/gate.py`) checks every table's columns and types and keeps
 its row count within bounds of the previous release. Tables with a contract also
 get key (not null, unique) and join checks. Tables still without one are listed
-in `UNCONTRACTED_TABLES` (#208).
+in `UNCONTRACTED_TABLES` (#208). It also checks that `manifest.json` gives each
+table's true row count, columns and types, and it refuses a reference that is not
+older than the bundle: once `latest/` is this release, pass
+`--reference https://data.bioconice.cancerdatasci.org/v<date>` instead. The README
+queries run on the bundle as warnings only.
 
 ## Acceptance
 

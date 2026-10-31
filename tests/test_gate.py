@@ -56,8 +56,40 @@ def test_grown_release_passes_with_exempt_table_warned(tmp_path, reference, monk
         "provenance.release": PROVENANCE.format(n=1)})
     assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 0
     out = capsys.readouterr().out
+    assert out.startswith(f"release 2026-11-01 against {reference} (release 2026-10-31)\n")
     assert "annotation.signature_taxon\n" in out and "  ok    key_unique" in out
+    assert "  ok    manifest_row_count  (parquet 33, manifest 33)" in out
     assert "  warn  contract_declared" in out and out.endswith("PASS\n")
+    # README queries name tables this bundle lacks: they fail, but only as warnings.
+    assert "  warn  readme_query_line_" in out
+
+
+def test_a_reference_not_older_than_the_release_is_refused(reference, monkeypatch, capsys):
+    assert _run(monkeypatch, "--release", str(reference), "--reference", str(reference)) == 1
+    out = capsys.readouterr().out
+    assert "reference release 2026-10-31 is not older than 2026-10-31" in out
+    assert "--reference https://data.bioconice.cancerdatasci.org/v<date>" in out
+
+
+def test_a_manifest_row_count_that_disagrees_with_its_parquet_fails(
+        tmp_path, reference, monkeypatch, capsys):
+    candidate = _bundle(tmp_path / "candidate", "2026-11-01", {
+        "annotation.signature_taxon": SIGNATURE_TAXON.format(n=30),
+        "provenance.release": PROVENANCE.format(n=1)})
+    m = json.loads((candidate / "manifest.json").read_text())
+    m["tables"][0]["row_count"] = 31
+    (candidate / "manifest.json").write_text(json.dumps(m))
+    assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 1
+    assert "  FAIL  manifest_row_count  (parquet 30, manifest 31)" in capsys.readouterr().out
+
+
+def test_a_new_pubmed_table_passes_on_its_contract(tmp_path, reference, monkeypatch, capsys):
+    candidate = _bundle(tmp_path / "candidate", "2026-11-01", {
+        "annotation.signature_taxon": SIGNATURE_TAXON.format(n=30),
+        "provenance.release": PROVENANCE.format(n=1),
+        "annotation.pubmed__article": "SELECT i::VARCHAR AS pmid FROM range(5) t(i)"})
+    assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 0
+    assert "annotation.pubmed__article\n  ok    key_not_null" in capsys.readouterr().out
 
 
 def test_duplicate_key_fails(tmp_path, reference, monkeypatch, capsys):
