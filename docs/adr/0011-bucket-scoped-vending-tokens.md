@@ -6,6 +6,8 @@ deployed gateway on 2026-08-07. Retires the account-inventory gate of
 [ADR-0005](0005-cloudflare-account-is-the-trust-domain.md)'s note, which was
 true when written and is no longer.
 
+**Superseded by [ADR-0014](0014-public-releases-are-parquet-plus-duckdb-views.md) (serving)** once the Iceberg retirement lands: the catalog and vended credentials this ADR contains are retired.
+
 ## Context
 
 ADR-0005 established that vended SigV4 credentials inherit the storage
