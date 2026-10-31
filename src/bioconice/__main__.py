@@ -24,6 +24,7 @@ from . import ncbi_go
 from . import ncbi_orthologs
 from . import ncbi_pubmed
 from . import obo
+from . import parity
 from . import publish
 from . import pubtator3
 from . import rnacentral
@@ -192,8 +193,20 @@ def main():
     pb.add_argument("--only", nargs="+", metavar="SCHEMA.TABLE",
                     help="build just these tables (default: every published table)")
 
+    pa = sub.add_parser("parity",
+                        help="check a release bundle against the live catalog: row counts and the "
+                             "README queries; exits non-zero on any mismatch")
+    pa.add_argument("--release", type=Path, required=True, help="release directory built by publish")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
+
+    if args.cmd == "parity":
+        import duckdb
+
+        con = duckdb.connect()
+        con.execute(publish.ATTACH_LIVE)
+        raise SystemExit(0 if parity.parity(con, args.release) else 1)
 
     if args.cmd == "publish":
         import duckdb
