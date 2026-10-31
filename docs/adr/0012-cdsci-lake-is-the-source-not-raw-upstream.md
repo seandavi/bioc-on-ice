@@ -7,6 +7,8 @@ cdsci-lake, `bioconice-bugsigdb` 2026-10-02 (59,486 rows, equal to
 acceptance condition became "the first dataset release built from cdsci-lake
 verifies against real lake data", not a verified lander on the icegate write
 path.
+**Amended by**: [ADR-0015](0015-sources-write-to-cdsci-lake-products-derive-at-release.md) —
+migrated writers live in cdsci-lake; bioc-on-ice derives its tables at release time.
 
 ## Context
 
