@@ -55,10 +55,10 @@ def parity(live, release: Path, queries=None) -> bool:
         con.execute("USE bioc.provenance")
     ok = True
 
-    def row(check, manifest, parquet, live_n, good):
+    def row(check, manifest, parquet, live_n, good, note="ok"):
         nonlocal ok
         ok &= good
-        print(f"| {check} | {manifest} | {parquet} | {live_n} | {'ok' if good else 'MISMATCH'} |", flush=True)
+        print(f"| {check} | {manifest} | {parquet} | {live_n} | {note if good else 'MISMATCH'} |", flush=True)
 
     print("| check | manifest | parquet | live | |\n| --- | ---: | ---: | ---: | --- |")
     for t in tables:
@@ -72,6 +72,9 @@ def parity(live, release: Path, queries=None) -> bool:
     for line, sql in readme_queries() if queries is None else queries:
         a, b = _rows(rel, sql), _rows(live, sql)
         size = lambda r: f"{r.total():,} rows" if isinstance(r, Counter) else r  # noqa: E731
-        row(f"README query, line {line}", "", size(a), size(b), isinstance(a, Counter) and a == b)
+        # The gate is release == live. A query that fails the same way on both sides is a
+        # README that is ahead of the lake (#176), not a bad release: pass, but say so.
+        row(f"README query, line {line}", "", size(a), size(b), a == b,
+            "ok" if isinstance(a, Counter) else "WARN: fails on both sides")
     print("PASS" if ok else "FAIL")
     return ok

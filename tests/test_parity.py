@@ -33,3 +33,11 @@ def test_readme_queries_include_the_txdb_query():
     queries = [sql for _, sql in parity.readme_queries()]
     assert any("g.symbol = 'TP53'" in q for q in queries)
     assert not any(q.lstrip().upper().startswith("INSTALL") for q in queries)
+
+
+def test_a_query_failing_on_both_sides_passes_with_a_warning(con, tmp_path, capsys):  # noqa: F811
+    out = tmp_path / "release"
+    publish.publish(con, out, out.as_uri(), ONLY)
+    capsys.readouterr()
+    assert parity.parity(con, out, [(3, "SELECT no_such_column FROM provenance.release")])
+    assert "WARN: fails on both sides" in capsys.readouterr().out
