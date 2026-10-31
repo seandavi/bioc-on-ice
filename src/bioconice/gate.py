@@ -10,6 +10,7 @@ Reads the bundle and the reference's manifest.json only.
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -175,8 +176,14 @@ def gate(release: Path, reference: str | None = DEFAULT_REFERENCE) -> bool:
             print(f"FAIL: reference {reference}: no readable manifest.json ({type(e).__name__})")
             return False
         print(f"release {manifest['release']} against {reference} (release {ref_release})")
-        # ISO dates: string order is date order. latest/ after an upload is the bundle itself.
-        if ref_release >= manifest["release"]:
+        try:
+            older = date.fromisoformat(ref_release) < date.fromisoformat(manifest["release"])
+        except (TypeError, ValueError):
+            print(f"FAIL: release ids must be YYYY-MM-DD dates: reference {ref_release!r}, "
+                  f"release {manifest['release']!r}")
+            return False
+        # latest/ after an upload is the bundle itself.
+        if not older:
             print(f"FAIL: reference release {ref_release} is not older than {manifest['release']}; "
                   f"pass --reference {PUBLIC_URL}/v<date> with an earlier release date")
             return False

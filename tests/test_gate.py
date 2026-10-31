@@ -120,3 +120,14 @@ def test_reference_defaults_to_latest(tmp_path, monkeypatch):
 def test_a_contracted_table_is_not_also_exempt():
     contracted = {name for c in gate.CONTRACTS for name in c.tables}
     assert not contracted & gate.UNCONTRACTED_TABLES
+
+
+@pytest.mark.parametrize("bad", ["0000-00-00", None])
+def test_a_malformed_release_id_is_refused(tmp_path, reference, monkeypatch, capsys, bad):
+    manifest = json.loads((reference / "manifest.json").read_text())
+    (reference / "manifest.json").write_text(json.dumps({**manifest, "release": bad}))
+    candidate = _bundle(tmp_path / "candidate", "2026-11-01", {
+        "annotation.signature_taxon": SIGNATURE_TAXON.format(n=30),
+        "provenance.release": PROVENANCE.format(n=1)})
+    assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 1
+    assert "release ids must be YYYY-MM-DD dates" in capsys.readouterr().out
