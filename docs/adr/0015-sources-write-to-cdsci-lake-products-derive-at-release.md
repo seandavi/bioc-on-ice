@@ -125,10 +125,11 @@ mouse ENA rows already in the table. Measured on release 2026-10-31:
 | of which `source = 'RNACENTRAL'` (9606, 10090) | 5,911,834 |
 | of which ENA targets | 1,918,777 (32%) |
 
-**Human and mouse only.** The join check, and every count above for
-`identifier_mapping`, covers taxa 9606 and 10090, the only taxa RNAcentral
-writes there today. Joinability for other taxa, and against tables other than
-`identifier_mapping`, was not checked.
+**Human and mouse only.** The join check and the RNAcentral subset counts
+above (`source = 'RNACENTRAL'` and its ENA targets) cover taxa 9606 and 10090,
+the only taxa RNAcentral writes to `identifier_mapping` today. The
+`identifier_mapping` total covers every taxon. Joinability for other taxa, and
+against tables other than `identifier_mapping`, was not checked.
 
 The 1,918,777 human and mouse ENA targets have **0** exact matches among the
 2,024,806 distinct ids that other sources put in `identifier_mapping` for those
