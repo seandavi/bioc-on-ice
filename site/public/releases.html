@@ -65,6 +65,8 @@
   // reconciled with the bundle builder (#189) here. row_count/bytes may be null.
   const manifestOf = (m) => ({
     publishedAt: m.published_at,
+    // the builder's commit; null outside a checkout, and only ever a hex SHA in a link
+    gitSha: /^[0-9a-f]{7,40}$/.test(m.git_sha ?? "") ? m.git_sha : null,
     tables: m.tables.map((t) => ({
       schema: t.schema, table: t.table, rows: t.row_count ?? null, bytes: t.bytes ?? null,
     })),
@@ -123,6 +125,10 @@
         : []),
       el("p", { class: "small" },
         manifest.publishedAt ? `Published ${manifest.publishedAt} · ` : "",
+        ...(manifest.gitSha
+          ? ["built from ", link(`https://github.com/seandavi/bioc-on-ice/commit/${manifest.gitSha}`,
+              manifest.gitSha.slice(0, 7)), " · "]
+          : []),
         `${manifest.tables.length} tables, ${bytes(total)}`),
       el("table", {},
         el("thead", {}, el("tr", {},

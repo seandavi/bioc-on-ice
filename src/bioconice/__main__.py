@@ -198,6 +198,15 @@ def main():
                              "README queries; exits non-zero on any mismatch")
     pa.add_argument("--release", type=Path, required=True, help="release directory built by publish")
 
+    up = sub.add_parser("upload",
+                        help="upload a built release bundle to R2 v{release}/ and latest/, "
+                             "then prune old v*/ folders (dry-run unless --apply)")
+    up.add_argument("--release", type=Path, required=True, metavar="DIR",
+                    help="bundle directory written by `bioconice publish`")
+    up.add_argument("--apply", action="store_true", help="write to the bucket (default: print the plan)")
+    up.add_argument("--retention-days", type=int, default=30,
+                    help="prune v{date}/ folders older than this (default: 30)")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -207,6 +216,12 @@ def main():
         con = duckdb.connect()
         con.execute(publish.ATTACH_LIVE)
         raise SystemExit(0 if parity.parity(con, args.release) else 1)
+
+    if args.cmd == "upload":
+        from . import upload
+        upload.upload(args.release, upload.r2_filesystem(), apply=args.apply,
+                      retention_days=args.retention_days)
+        return
 
     if args.cmd == "publish":
         import duckdb
