@@ -24,6 +24,7 @@ from . import ncbi_go
 from . import ncbi_orthologs
 from . import ncbi_pubmed
 from . import obo
+from . import publish
 from . import pubtator3
 from . import rnacentral
 from . import wikipathways
@@ -181,8 +182,29 @@ def main():
     rb.add_argument("--out", type=Path, default=None,
                     help="keep the release tree here; default is a temporary directory")
 
+    pb = sub.add_parser("publish",
+                        help="build a release bundle (Parquet, bioconice.duckdb, views.sql, "
+                             "restore.sql, manifest.json) from the live catalog, locally")
+    pb.add_argument("--out", type=Path, required=True, help="release directory to build")
+    pb.add_argument("--base-url", default=publish.DEFAULT_BASE_URL,
+                    help="public https URL the views read <schema>/<table>.parquet from "
+                         f"(default: {publish.DEFAULT_BASE_URL})")
+    pb.add_argument("--only", nargs="+", metavar="SCHEMA.TABLE",
+                    help="build just these tables (default: every published table)")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
+
+    if args.cmd == "publish":
+        import duckdb
+        from cdsci.lake.publish.release import _check_public_path
+
+        # Views in a public bundle must point at public https, never a local path.
+        _check_public_path(args.base_url, field_name="--base-url")
+        con = duckdb.connect()
+        con.execute(publish.ATTACH_LIVE)
+        publish.publish(con, args.out, args.base_url, args.only)
+        return
 
     if args.cmd == "release-bugsigdb":
         from cdsci.lake.connect import lake_connect

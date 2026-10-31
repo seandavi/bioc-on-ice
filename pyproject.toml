@@ -11,6 +11,10 @@ dependencies = [
     "mcp>=1.2,<2",
     # ADR-0013 (bioc) / dataset releases: cdsci.lake builds, verifies, and indexes releases.
     "cdsci-lake",
+    # publish.py: DuckDB binds a view by reading its Parquet, so bioconice.duckdb is built
+    # with an fsspec filesystem serving the not-yet-uploaded https URLs from the local
+    # bundle. Already installed (pyiceberg needs it); declared because we import it.
+    "fsspec",
 ]
 
 [tool.uv.sources]
