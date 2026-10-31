@@ -27,7 +27,7 @@ async function hashIp(ip: string): Promise<string> {
  *   blob7   = region
  *   blob8   = continent
  *   double1 = status code
- *   double2 = bytes transferred
+ *   double2 = bytes transferred (body bytes: a range's length, 0 for HEAD)
  *   double3 = latitude
  *   double4 = longitude
  */
@@ -50,9 +50,13 @@ export async function logUsage(
   const latitude = parseFloat(cf?.latitude ?? "0") || 0;
   const longitude = parseFloat(cf?.longitude ?? "0") || 0;
 
+  // HEAD sends no body; DuckDB HEADs every file before its range reads, so
+  // logging the object size here counted each file once more in full.
+  const bytes = request.method === "HEAD" ? 0 : bytesTransferred;
+
   env.USAGE.writeDataPoint({
     indexes: [objectKey],
     blobs: [objectKey, userAgent, hashedIp, request.method, country, city, region, continent],
-    doubles: [statusCode, bytesTransferred, latitude, longitude],
+    doubles: [statusCode, bytes, latitude, longitude],
   });
 }
