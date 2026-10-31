@@ -45,6 +45,7 @@ source = { editable = "." }
 dependencies = [
     { name = "cdsci-lake" },
     { name = "duckdb" },
+    { name = "fsspec" },
     { name = "mcp" },
     { name = "pyiceberg", extra = ["pyarrow", "sql-sqlite"] },
 ]
@@ -58,6 +59,7 @@ dev = [
 requires-dist = [
     { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?tag=v0.3.1" },
     { name = "duckdb", specifier = ">=1.4" },
+    { name = "fsspec" },
     { name = "mcp", specifier = ">=1.2,<2" },
     { name = "pyiceberg", extras = ["sql-sqlite", "pyarrow"], specifier = ">=0.9" },
 ]
