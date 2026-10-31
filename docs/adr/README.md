@@ -34,17 +34,17 @@ revisited; say by whom and where).
 
 | ADR | decision | status |
 | --- | --- | --- |
-| [0001](0001-point-in-time-lives-in-the-rows.md) | Point-in-time lives in the rows, not in Iceberg snapshots | Superseded by 0013 (dataset releases) |
+| [0001](0001-point-in-time-lives-in-the-rows.md) | Point-in-time lives in the rows, not in Iceberg snapshots | Accepted; superseded by 0013 for sources moved to dataset releases |
 | [0002](0002-land-raw-then-derive.md) | Land sources verbatim, derive downstream | Accepted |
 | [0003](0003-declared-schemas.md) | Declare Iceberg schemas; never infer from Arrow | Accepted |
 | [0004](0004-merge-recomputes-scope.md) | Merge recomputes the scope rather than using PyIceberg upsert | Accepted |
-| [0005](0005-cloudflare-account-is-the-trust-domain.md) | The Cloudflare account is the trust domain | Superseded by 0009, 0011; serving superseded by 0014 |
-| [0006](0006-full-type-2-history.md) | Attribute changes close a row and open a new one | Superseded by 0013 (dataset releases) |
+| [0005](0005-cloudflare-account-is-the-trust-domain.md) | The Cloudflare account is the trust domain | Accepted (direction superseded by 0009; Note's claim retired by 0011); serving superseded by 0014 |
+| [0006](0006-full-type-2-history.md) | Attribute changes close a row and open a new one | Accepted; superseded by 0013 for sources moved to dataset releases |
 | [0007](0007-release-manifest.md) | A release manifest, with the provenance of the version string | Accepted |
 | [0008](0008-ncbi-gene-is-keyed-by-entrez-id.md) | NCBI gene attributes live in their own Entrez-keyed table | Accepted |
 | [0009](0009-biocOnIce-moves-accounts-not-the-logs.md) | biocOnIce moves accounts, not the logs | Superseded by 0010; serving superseded by 0014 |
 | [0010](0010-logs-leave-cloudflare.md) | The logs leave Cloudflare: GCS destination, BigQuery analytics | Accepted |
 | [0011](0011-bucket-scoped-vending-tokens.md) | Anonymous read is contained by token composition, not account hygiene | Accepted; serving superseded by 0014 |
 | [0012](0012-cdsci-lake-is-the-source-not-raw-upstream.md) | cdsci-lake is the source, not raw upstream | Accepted (amended by 0013) |
-| [0013](0013-versioned-datasets-not-versioned-rows.md) | Versioned datasets, not versioned rows | Accepted |
+| [0013](0013-versioned-datasets-not-versioned-rows.md) | Versioned datasets, not versioned rows | Accepted; release layout superseded by 0014 |
 | [0014](0014-public-releases-are-parquet-plus-duckdb-views.md) | Public releases are Parquet + DuckDB views | Accepted |

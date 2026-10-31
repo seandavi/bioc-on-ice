@@ -6,7 +6,7 @@ but account creation turned out to carry a security review, an accounting
 workflow, and a permanent invoice stream. Revisits the *direction* chosen in
 [ADR-0005](0005-cloudflare-account-is-the-trust-domain.md), not its principle.
 
-**Superseded by [ADR-0014](0014-public-releases-are-parquet-plus-duckdb-views.md) (serving)** once the Iceberg retirement lands: the catalog and vended credentials this ADR contains are retired.
+**Superseded by [ADR-0014](0014-public-releases-are-parquet-plus-duckdb-views.md) (serving)** once the Iceberg retirement lands: its serving mechanism, the catalog and vended credentials, is retired.
 
 ## Context
 

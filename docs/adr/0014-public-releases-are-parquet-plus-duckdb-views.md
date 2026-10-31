@@ -24,25 +24,35 @@ The public surface is **dated, immutable releases of flat Parquet plus
 bucket `data-bioconice`, served by a Worker on `bioconice.cancerdatasci.org`.
 
 - Layout: `latest/` and `v{YYYY-MM-DD}/`. Dated folders are kept 30 days. Each
-  folder's views point at that folder's own URLs.
+  folder's views point at that folder's own URLs, and each carries its own
+  `manifest.json`. A same-day rebuild overwrites that day's folder. Bucket, host
+  and retention are confirmed by map #187.
+- For the public product this replaces [ADR-0013](0013-versioned-datasets-not-versioned-rows.md)'s
+  release layout and verification, namely per-dataset `cdsci.lake.publish`
+  output, `latest.json` and the frozen DuckLake, with one whole-product bundle
+  in the omicidx layout. ADR-0013's principle, versioned datasets and not
+  versioned rows, stands, and so does current rows only.
 - Releases carry current rows only (`valid_to IS NULL`). History follows
-  ADR-0013: the Type-2 rows stay in the Iceberg archive and are not published.
+  ADR-0013. The Type-2 Iceberg tables stay read-only behind the existing
+  catalog until phase 2 of #187 exports them once to Parquet as an archive
+  release; then the R2 Data Catalog, icegate and the PyIceberg writer are
+  removed.
 - The name stays. "On ice" now means frozen releases.
 - Iceberg, icegate and credential vending are retired. This ADR does not retire
   them; that is the later migration step.
 
-## Rejected alternatives
+## Alternatives considered
 
 **Frozen DuckLake.** A file-catalog DuckLake published beside the Parquet, as
-omicidx did first. Dropped there: three months of Worker analytics showed no
+omicidx did first. Dropped there (omicidx ADR-0004, 2026-10-21 note): three months of Worker analytics showed no
 real `ATTACH` traffic while the flat Parquet took 99% of requests, and the
 catalog's `data/` copy more than doubled each dated folder (108 GB on top of
 73 GB). Nothing here suggests bioc-on-ice readers differ, and the Parquet
 already serves DuckDB, Polars, Arrow and R without a catalog. Not measured on
 bioc-on-ice traffic.
 
-**Keep Iceberg and icegate.** No consumers of the catalog path have been
-observed. Every query pays catalog round trips before it reads a byte. Anonymous
+**Keep Iceberg and icegate.** The owner has observed no consumers of the
+catalog path; that is not yet measured on bioc-on-ice traffic. Every query pays catalog round trips before it reads a byte. Anonymous
 read needs credential vending, which is the whole of ADR-0005, 0009 and 0011:
 three ADRs spent containing a mechanism the Parquet layout does not have, since
 a public bucket of static files vends nothing.

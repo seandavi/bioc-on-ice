@@ -6,7 +6,7 @@ deployed gateway on 2026-08-07. Retires the account-inventory gate of
 [ADR-0005](0005-cloudflare-account-is-the-trust-domain.md)'s note, which was
 true when written and is no longer.
 
-**Superseded by [ADR-0014](0014-public-releases-are-parquet-plus-duckdb-views.md) (serving)** once the Iceberg retirement lands: the catalog and vended credentials this ADR contains are retired.
+**Superseded by [ADR-0014](0014-public-releases-are-parquet-plus-duckdb-views.md) (serving)** once the Iceberg retirement lands: its serving mechanism, the catalog and vended credentials, is retired.
 
 ## Context
 
