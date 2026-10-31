@@ -9,6 +9,8 @@ when written and stopped being true on 2026-07-09 — see
 [ADR-0011](0011-bucket-scoped-vending-tokens.md), which followed the Note's
 own instruction to re-check the permission groups.
 
+**Superseded by [ADR-0014](0014-public-releases-are-parquet-plus-duckdb-views.md) (serving)** once the Iceberg retirement lands: its serving mechanism, the catalog and vended credentials, is retired.
+
 ## Context
 
 biocOnIce is specified to serve anonymous public read (SPEC.md acceptance C4).
