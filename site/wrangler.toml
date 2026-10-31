@@ -25,8 +25,7 @@ run_worker_first = true
 [[r2_buckets]]
 binding = "DATA_BUCKET"
 bucket_name = "data-bioconice"
-# ponytail: local R2 under `wrangler dev` (seed with `npm run seed`); add
-# `remote = true` once the bucket exists to dev against the real data.
+remote = true  # `wrangler dev` reads the real bucket
 
 [[analytics_engine_datasets]]
 binding = "USAGE"

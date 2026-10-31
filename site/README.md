@@ -19,10 +19,14 @@ frozen releases: plain HTTPS with range requests, CORS, directory listing
 `data_bioconice_usage`. The range, conditional-request and DuckDB-Wasm
 `If-Match` handling came from omicidx with their tests.
 
-The releases page lists each release folder (`latest/`, `v{YYYY-MM-DD}/`) and,
-when one is opened, its tables from `manifest.json` (`schema`, `table`,
-`row_count`, `bytes`); a table without `bytes` falls back to the bucket
-listing of its `<schema>/` folder.
+The bucket holds the whole-product bundle decided in map #187, in the omicidx
+style: `latest/` plus dated `v{YYYY-MM-DD}/` folders, each with
+`<schema>/<table>.parquet`, `bioconice.duckdb`, `views.sql`, `restore.sql` and
+a `manifest.json`. The releases page lists those folders and, when one is
+opened, its tables from `manifest.json` (`schema`, `table`, `row_count`,
+`bytes`; a missing `bytes` falls back to the bucket listing of `<schema>/`, a
+missing `row_count` shows "–"). The field names are read in one place,
+`manifestOf` in `public/releases.html`, to reconcile with the builder (#189).
 
 ## Develop and deploy
 
@@ -31,15 +35,11 @@ cd site
 npm ci
 npm test               # route, range and conditional unit tests
 npm run typecheck
-npm run seed           # put test/fixture/manifest.json into local R2
-npx wrangler dev       # local Worker, local R2: / and /releases
+npx wrangler dev       # local Worker, real bucket (remote R2 binding)
 npx wrangler login
-npx wrangler deploy    # needs the data-bioconice bucket
+npx wrangler deploy
 ```
 
-`npm run seed` writes the fixture as `latest/` and `v2026-10-30/` manifests,
-plus a stand-in `latest/reference/genome.parquet` (the manifest's bytes) so
-the table without `bytes` exercises the listing fallback. `wrangler dev` uses
-local R2 by default; add `remote = true` to the `[[r2_buckets]]` block to read
-the real bucket. To try the data host locally:
+CI runs the tests and typecheck (`site` job). Deploy waits for the first
+bundle (#192). To try the data host locally:
 `npx wrangler dev --local-upstream data.bioconice.cancerdatasci.org`.

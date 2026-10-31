@@ -34,6 +34,11 @@ test("data host: bucket at /", () => {
   );
 });
 
+test("malformed percent-escape is a bad request, not a throw", () => {
+  assert.deepEqual(at("https://bioconice.cancerdatasci.org/data/%E0%A4%A"), { kind: "bad" });
+  assert.deepEqual(at("https://data.bioconice.cancerdatasci.org/%"), { kind: "bad" });
+});
+
 test("permanentRedirect: assets' trailing-slash 307 becomes a 301 (omicidx#233)", () => {
   const r = permanentRedirect(new Response(null, { status: 307, headers: { location: "/guides/x" } }));
   assert.equal(r.status, 301);

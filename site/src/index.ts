@@ -35,6 +35,9 @@ export default {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const target = route(new URL(request.url));
+    if (target.kind === "bad") {
+      return new Response("Bad request", { status: 400, headers: CORS_HEADERS });
+    }
     if (target.kind === "docs") {
       return permanentRedirect(await env.ASSETS.fetch(request));
     }

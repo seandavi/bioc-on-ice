@@ -6,10 +6,16 @@
  */
 export type Route =
   | { kind: "data"; key: string; base: string }
-  | { kind: "docs" };
+  | { kind: "docs" }
+  | { kind: "bad" };
 
 export function route(url: URL): Route {
-  const path = decodeURIComponent(url.pathname);
+  let path: string;
+  try {
+    path = decodeURIComponent(url.pathname);
+  } catch {
+    return { kind: "bad" }; // malformed %-escape, e.g. /data/%E0%A4%A
+  }
   if (url.hostname.startsWith("data.")) {
     return { kind: "data", key: path.slice(1), base: "" };
   }

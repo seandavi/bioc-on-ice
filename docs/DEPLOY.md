@@ -29,6 +29,7 @@ Deploy credentials, both in Secret Manager project `cdsci-infra`:
 | --- | --- | --- | --- |
 | `icegate-bioconice` | https://icegate-bioconice.seandavi.workers.dev | this repo's `icegate.yaml` + the icegate checkout | `scripts/deploy-icegate.sh` |
 | `bioconice-explorer` | https://bioconice-explorer.seandavi.workers.dev | `explorer/wrangler.jsonc` (static assets only, no script) | `cd explorer && npx wrangler@4 deploy` with the same two credentials |
+| `data-bioconice` | https://bioconice.cancerdatasci.org, https://data.bioconice.cancerdatasci.org | `site/wrangler.toml` (pages + the `data-bioconice` R2 bucket, `site/README.md`) | `cd site && npm ci && npx wrangler deploy`; not deployed yet, gated on the first release bundle (#192) |
 
 The explorer reads the catalog anonymously through icegate, so it has no secrets. Its
 DuckDB-WASM query tab stays off by default until the `bioconice` R2 bucket gets a CORS
