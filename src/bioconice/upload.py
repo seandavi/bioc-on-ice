@@ -91,15 +91,28 @@ def _expired(fs, root, keep, retention_days, today):
                   and datetime.strptime(m[1], "%Y-%m-%d").date() < cutoff)
 
 
+def _files(manifest):
+    return sorted((t["path"], t.get("sha256")) for t in manifest["tables"])
+
+
 def upload(bundle: Path, fs, root=BUCKET, apply=False, retention_days=30, today=None):
     """Upload `bundle` (a `bioconice publish` directory) to `v{release}/` and `latest/`, then prune."""
     manifest = json.loads((bundle / "manifest.json").read_text())
     dated = f"v{manifest['release']}"
     # A completed dated release (manifest.json present) is immutable: users pin it and the next
     # release is checked against it. A folder without a manifest is an interrupted upload: retry it.
-    if fs.get_file_info(f"{root}/{dated}/manifest.json").type != pafs.FileType.NotFound:
-        raise SystemExit(f"{root}/{dated}/ is a completed release; dated releases are never overwritten")
-    for folder in (dated, "latest"):
+    # A completed one with this bundle's exact files means latest/ was interrupted: finish only that.
+    folders = (dated, "latest")
+    done = f"{root}/{dated}/manifest.json"
+    if fs.get_file_info(done).type != pafs.FileType.NotFound:
+        with fs.open_input_stream(done) as f:
+            remote = json.loads(f.read())
+        if _files(remote) != _files(manifest):
+            raise SystemExit(f"{root}/{dated}/ is a completed release of other files; "
+                             "dated releases are never overwritten")
+        print(f"{root}/{dated}/ already complete with this bundle; finishing latest/", flush=True)
+        folders = ("latest",)
+    for folder in folders:
         _folder(fs, root, bundle, manifest, folder, apply)
     for name in _expired(fs, root, dated, retention_days, today or datetime.now(UTC).date()):
         print(f"delete {root}/{name}/", flush=True)

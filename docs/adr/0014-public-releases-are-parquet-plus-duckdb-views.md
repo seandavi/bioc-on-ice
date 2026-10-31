@@ -25,7 +25,9 @@ bucket `data-bioconice`, served by a Worker on `bioconice.cancerdatasci.org`.
 
 - Layout: `latest/` and `v{YYYY-MM-DD}/`. Dated folders are kept 30 days. Each
   folder's views point at that folder's own URLs, and each carries its own
-  `manifest.json`. A same-day rebuild overwrites that day's folder. Bucket, host
+  `manifest.json`. A completed dated folder is never overwritten (2026-10-31, #203):
+  users pin it and the next release is checked against it, so a second build on
+  the same day waits for the next date. Bucket, host
   and retention are confirmed by map #187.
 - For the public product this replaces [ADR-0013](0013-versioned-datasets-not-versioned-rows.md)'s
   release layout and verification, namely per-dataset `cdsci.lake.publish`

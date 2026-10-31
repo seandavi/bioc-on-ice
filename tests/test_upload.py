@@ -68,16 +68,37 @@ def test_dry_run_writes_nothing(tmp_path, capsys):
     assert out.count("put ") == 10
 
 
-def test_an_existing_dated_release_is_never_overwritten(tmp_path):
+def test_a_completed_dated_release_of_other_files_is_never_overwritten(tmp_path):
     bucket = _bucket(tmp_path)
     (bucket / f"v{RELEASE}").mkdir()
-    (bucket / f"v{RELEASE}" / "manifest.json").write_text("{}")
-    with pytest.raises(SystemExit, match="completed release"):
+    other = {"release": RELEASE, "tables": [{"path": "annotation/gene.parquet", "sha256": "other"}]}
+    (bucket / f"v{RELEASE}" / "manifest.json").write_text(json.dumps(other))
+    with pytest.raises(SystemExit, match="completed release of other files"):
         upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
-    assert (bucket / f"v{RELEASE}" / "manifest.json").read_text() == "{}"
+    assert json.loads((bucket / f"v{RELEASE}" / "manifest.json").read_text()) == other
     assert not (bucket / "latest" / "views.sql").exists()
 
 
+def test_an_interrupted_latest_upload_is_finished(tmp_path, capsys, monkeypatch):
+    bucket, bundle = _bucket(tmp_path), _bundle(tmp_path)
+    real = upload._folder
+
+    def fail_on_latest(fs, root, bundle, manifest, folder, apply):
+        if folder == "latest":
+            raise OSError("connection reset")
+        real(fs, root, bundle, manifest, folder, apply)
+    monkeypatch.setattr(upload, "_folder", fail_on_latest)
+    with pytest.raises(OSError):
+        upload.upload(bundle, BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+    monkeypatch.setattr(upload, "_folder", real)
+    dated = (bucket / f"v{RELEASE}" / "manifest.json").read_text()
+    capsys.readouterr()
+
+    upload.upload(bundle, BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+    assert (bucket / f"v{RELEASE}" / "manifest.json").read_text() == dated
+    assert json.loads((bucket / "latest" / "manifest.json").read_text())["release"] == RELEASE
+    assert f"/v{RELEASE}/" not in "".join(ln for ln in capsys.readouterr().out.splitlines()
+                                           if ln.startswith("put"))
 def test_an_interrupted_dated_upload_is_retried(tmp_path):
     bucket = _bucket(tmp_path)
     (bucket / f"v{RELEASE}" / "annotation").mkdir(parents=True)
