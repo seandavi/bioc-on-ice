@@ -365,6 +365,24 @@ what still needs a deploy.
 uv run pytest       # raw ingest -> transform -> query, on a fixture, offline
 ```
 
+## Release it
+
+A release is built locally, gated against the previous published release, then
+uploaded. The upload writes `v<date>/` and `latest/`; without `--apply` it only
+prints the plan.
+
+```sh
+uv run bioconice publish --out release/
+uv run bioconice gate --release release/        # vs latest/; exits non-zero on a failed check
+uv run bioconice upload --release release/      # dry run
+uv run bioconice upload --release release/ --apply
+```
+
+The gate (`src/bioconice/gate.py`) checks every table's columns and types and keeps
+its row count within bounds of the previous release. Tables with a contract also
+get key (not null, unique) and join checks. Tables still without one are listed
+in `UNCONTRACTED_TABLES` (#208).
+
 ## Acceptance
 
 [SPEC.md](SPEC.md#acceptance-criteria) sections A–C, checked against the live

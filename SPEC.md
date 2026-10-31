@@ -861,6 +861,15 @@ the id. Each release carries every current row of its tables; there are no
 kept unless the dataset declares `keep_last = N`, and pinned releases are never
 pruned. The first dataset is `bioconice-bugsigdb`.
 
+**Publish gate.** The public release bundle (ADR-0014) MUST pass `bioconice gate`
+before it is uploaded. The gate compares the bundle with the previous published
+release: every table's columns and types must be unchanged, and its row count
+must stay within its contract's bounds of the previous count. A table with a
+`TableContract` must also have a non-null, unique key and full coverage of the
+columns it declares as joins. A table without a contract fails the gate unless
+it is in the previous release and listed as exempt (#208). The order is
+publish, gate, dry-run upload, upload `--apply`.
+
 **Archive rule.** The Iceberg tables of a source keep their `valid_from` /
 `valid_to` rows only until the source moves to dataset releases, then receive
 no further writes and remain as a read-only archive.
