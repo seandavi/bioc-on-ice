@@ -8,7 +8,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir uv
+# git: uv fetches the cdsci-lake dependency from GitHub (pyproject [tool.uv.sources]).
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* && pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
@@ -17,11 +19,10 @@ COPY src ./src
 # at image-build time. --no-dev: pytest etc. have no place in the runtime image.
 RUN uv sync --frozen --no-dev
 
-# Pre-install DuckDB's iceberg/httpfs extensions at build time (not just
-# LOAD, INSTALL fetches the .duckdb_extension binary) so a cold container
-# start reads the lake immediately instead of first fetching two extensions
-# from extensions.duckdb.org.
-RUN uv run python -c "import duckdb; c = duckdb.connect(); c.execute('INSTALL iceberg; INSTALL httpfs;')"
+# Pre-install DuckDB's httpfs extension at build time (INSTALL fetches the
+# .duckdb_extension binary) so a cold container start ATTACHes the release
+# over https immediately instead of first fetching it from extensions.duckdb.org.
+RUN uv run python -c "import duckdb; c = duckdb.connect(); c.execute('INSTALL httpfs;')"
 
 ENV PORT=8000
 EXPOSE 8000
