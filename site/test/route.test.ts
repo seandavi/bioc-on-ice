@@ -8,6 +8,7 @@ test("site host: docs everywhere but /data", () => {
   assert.deepEqual(at("https://bioconice.cancerdatasci.org/"), { kind: "docs" });
   assert.deepEqual(at("https://bioconice.cancerdatasci.org/guides/x/"), { kind: "docs" });
   assert.deepEqual(at("https://bioconice.cancerdatasci.org/releases"), { kind: "docs" });
+  assert.deepEqual(at("https://bioconice.cancerdatasci.org/explorer/"), { kind: "docs" });
 });
 
 test("site host: /data/* strips the prefix", () => {
@@ -26,6 +27,11 @@ test("data host: bucket at /", () => {
   assert.deepEqual(
     at("https://data.bioconice.cancerdatasci.org/latest/manifest.json"),
     data("latest/manifest.json"),
+  );
+  // pages never shadow a key here: `explorer/` is a bucket path like any other
+  assert.deepEqual(
+    at("https://data.bioconice.cancerdatasci.org/explorer/app.js"),
+    data("explorer/app.js"),
   );
   // no /data alias here: a top-level `data/` key stays a key
   assert.deepEqual(

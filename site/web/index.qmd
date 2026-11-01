@@ -6,7 +6,7 @@ toc: false
 ---
 
 [Browse the releases](releases.qmd){.btn .btn-primary .me-2 .mb-2}
-[Try it in your browser](playground.qmd){.btn .btn-outline-primary .me-2 .mb-2}
+[Try it in your browser](explorer/index.qmd){.btn .btn-outline-primary .me-2 .mb-2}
 [View on GitHub](https://github.com/seandavi/bioc-on-ice){.btn .btn-link .mb-2}
 
 Bioconductor distributes annotation as software: one versioned R package per
@@ -45,10 +45,9 @@ citation](guides/versions-and-citation.qmd).
 ::: {.g-col-12 .g-col-md-6 .card .p-3}
 #### Try it in your browser {.mt-0}
 
-The [playground](playground.qmd) runs SQL against `latest/` with DuckDB-Wasm,
-and every SQL example on this site opens in the DuckDB Shell. The
-[Explorer](https://bioconice-explorer.seandavi.workers.dev) browses tables and
-column docs.
+The [Explorer](explorer/index.qmd) browses tables and column docs and runs SQL
+against `latest/` with DuckDB-Wasm, and every SQL example on this site opens in
+the DuckDB Shell.
 :::
 
 ::: {.g-col-12 .g-col-md-6 .card .p-3}

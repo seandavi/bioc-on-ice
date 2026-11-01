@@ -2,16 +2,22 @@
 // Plain JS, no framework, no build step: this file is served as-is.
 import { RECIPES, PROVENANCE_MATRIX_SQL, RELEASE_URL, VERIFIED_ON } from "./recipes.js";
 
+// The page reads the release same-origin, through the site Worker's /data/.
+// RELEASE_URL (the data host) stays in the copyable snippets, which run
+// outside the browser; the views in bioconice.duckdb read their Parquet from
+// the data host either way.
+const DATA_URL = new URL("/data/latest", location.href).href;
+
 // Every metadata field this page shows (comments, `doc`, types, row counts)
 // is read from the release's manifest.json at view time — never copied into
 // this file — so the page can never drift from what the release serves.
 async function loadManifest() {
-  const res = await fetch(`${RELEASE_URL}/manifest.json`);
+  const res = await fetch(`${DATA_URL}/manifest.json`);
   if (!res.ok) throw new Error(`manifest.json -> HTTP ${res.status}`);
   return res.json();
 }
 
-document.getElementById("catalog-endpoint").textContent = RELEASE_URL;
+document.getElementById("catalog-endpoint").textContent = DATA_URL;
 
 // ---------- sidebar: namespaces -> tables ----------
 
@@ -21,7 +27,7 @@ let currentTableEl = null;
 async function loadCatalog() {
   try {
     const manifest = await loadManifest();
-    document.getElementById("catalog-endpoint").textContent = `${RELEASE_URL} (release ${manifest.release})`;
+    document.getElementById("catalog-endpoint").textContent = `${DATA_URL} (release ${manifest.release})`;
     const byNs = {};
     for (const t of manifest.tables) (byNs[t.schema] ??= []).push(t);
     tree.innerHTML = "";
@@ -76,29 +82,27 @@ function selectTable(t, el) {
 
 // ---------- top nav ----------
 
-const navBrowse = document.getElementById("nav-browse");
-const navRecipes = document.getElementById("nav-recipes");
-const viewBrowse = document.getElementById("view-browse");
-const viewRecipes = document.getElementById("view-recipes");
+const views = ["browse", "query", "recipes"];
 
-function showBrowseView() {
-  navBrowse.setAttribute("aria-current", "page");
-  navRecipes.removeAttribute("aria-current");
-  viewBrowse.hidden = false;
-  viewRecipes.hidden = true;
+function showView(name) {
+  for (const v of views) {
+    const nav = document.getElementById(`nav-${v}`);
+    if (v === name) nav.setAttribute("aria-current", "page");
+    else nav.removeAttribute("aria-current");
+    document.getElementById(`view-${v}`).hidden = v !== name;
+  }
 }
-function showRecipesView() {
-  navRecipes.setAttribute("aria-current", "page");
-  navBrowse.removeAttribute("aria-current");
-  viewBrowse.hidden = true;
-  viewRecipes.hidden = false;
+const showBrowseView = () => showView("browse");
+const viewRecipes = document.getElementById("view-recipes");
+document.getElementById("nav-browse").addEventListener("click", showBrowseView);
+document.getElementById("nav-query").addEventListener("click", () => showView("query"));
+document.getElementById("nav-recipes").addEventListener("click", () => {
+  showView("recipes");
   if (!viewRecipes.dataset.rendered) {
     renderRecipes();
     viewRecipes.dataset.rendered = "1";
   }
-}
-navBrowse.addEventListener("click", showBrowseView);
-navRecipes.addEventListener("click", showRecipesView);
+});
 
 // ---------- table view ----------
 
@@ -123,7 +127,7 @@ function renderTable(t) {
   el.appendChild(h2);
 
   const commentP = document.createElement("p");
-  commentP.className = "muted";
+  commentP.className = "text-muted";
   commentP.textContent = t.comment || "(no table comment)";
   el.appendChild(commentP);
 
@@ -160,7 +164,7 @@ function renderTable(t) {
   if (ns === "provenance" && table === "release") {
     overview.appendChild(sectionTitle("Release × source matrix"));
     const note = document.createElement("p");
-    note.className = "muted";
+    note.className = "text-muted";
     note.textContent =
       "Rows are releases, columns are sources, cells are each source's own version string; the current " +
       "release is the lexicographically greatest one (SPEC.md's release ordering). Paste the PIVOT (without the " +
@@ -176,7 +180,7 @@ function renderTable(t) {
   const columns = document.createElement("div");
   columns.hidden = true;
   const ct = document.createElement("table");
-  ct.className = "cols";
+  ct.className = "table table-sm cols";
   ct.innerHTML = `<thead><tr><th>Column</th><th>Type</th><th>Doc</th></tr></thead>`;
   const tbody = document.createElement("tbody");
   for (const c of t.columns) {
@@ -195,7 +199,7 @@ function renderTable(t) {
   // Query panel: DuckDB-WASM, loaded on first Run
   const queryPanel = document.createElement("div");
   queryPanel.hidden = true;
-  queryPanel.appendChild(buildQueryPanel(ns, table));
+  queryPanel.appendChild(buildQueryPanel(`SELECT * FROM bioc.${ns}.${table} LIMIT 25;`));
   panels.query = queryPanel;
   el.appendChild(queryPanel);
 
@@ -217,7 +221,7 @@ function sqlBlock(sql) {
   pre.className = "sql";
   pre.textContent = sql;
   const btn = document.createElement("button");
-  btn.className = "copy-btn";
+  btn.className = "copy-btn btn btn-sm btn-outline-secondary";
   btn.type = "button";
   btn.textContent = "Copy";
   btn.addEventListener("click", () => copyText(sql, btn));
@@ -263,7 +267,7 @@ function renderRecipes() {
   h2.textContent = "Recipes";
   container.appendChild(h2);
   const intro = document.createElement("p");
-  intro.className = "muted";
+  intro.className = "text-muted";
   intro.textContent =
     "The same fixed worked queries issue #100's MCP recipes() tool serves. Each snippet is self-contained — paste it verbatim into desktop DuckDB.";
   container.appendChild(intro);
@@ -279,7 +283,7 @@ function renderRecipes() {
     div.appendChild(p);
     div.appendChild(sqlBlock(r.sql));
     const result = document.createElement("p");
-    result.className = "result";
+    result.className = "result text-muted small";
     result.textContent = `Verified ${VERIFIED_ON}: ${r.verified}`;
     div.appendChild(result);
     container.appendChild(div);
@@ -294,7 +298,7 @@ async function getDuckDB(log) {
   if (!duckdbDbPromise) {
     duckdbDbPromise = (async () => {
       const duckdb = await import(
-        "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/dist/duckdb-browser.mjs"
+        "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.33.1-dev57.0/+esm"
       );
       const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
       const workerUrl = URL.createObjectURL(
@@ -304,9 +308,15 @@ async function getDuckDB(log) {
       const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
       URL.revokeObjectURL(workerUrl);
+      // Read byte ranges only. By default DuckDB-Wasm downloads each whole
+      // Parquet file before querying it. All three flags are needed (omicidx
+      // found leaving forceFullHTTPReads unset breaks every open).
+      await db.open({
+        filesystem: { reliableHeadRequests: true, allowFullHTTPReads: false, forceFullHTTPReads: false },
+      });
       const conn = await db.connect();
-      // The release Worker serves CORS on the .duckdb file and every Parquet file its views read.
-      await conn.query(`ATTACH '${RELEASE_URL}/bioconice.duckdb' AS bioc (READ_ONLY);`);
+      await conn.query(`ATTACH '${DATA_URL}/bioconice.duckdb' AS bioc (READ_ONLY);`);
+      await conn.query("USE bioc");
       return conn;
     })();
   }
@@ -315,12 +325,13 @@ async function getDuckDB(log) {
 
 const WRITE_STATEMENT = /^\s*(insert|update|delete|merge|attach|detach|copy|pragma|create|drop|alter|call|export|import|install|load|set|vacuum)\b/i;
 
-function buildQueryPanel(ns, table) {
+function buildQueryPanel(initialSql) {
   const wrap = document.createElement("div");
   const box = document.createElement("textarea");
-  box.id = "sql-box";
+  box.className = "form-control font-monospace sql-box";
   box.setAttribute("aria-label", "SQL query");
-  box.value = `SELECT * FROM bioc.${ns}.${table} LIMIT 25;`;
+  box.rows = 8;
+  box.value = initialSql;
   wrap.appendChild(box);
 
   const controls = document.createElement("div");
@@ -330,7 +341,7 @@ function buildQueryPanel(ns, table) {
   controls.style.margin = "0.5rem 0";
 
   const runBtn = document.createElement("button");
-  runBtn.className = "copy-btn";
+  runBtn.className = "btn btn-primary btn-sm";
   runBtn.type = "button";
   runBtn.textContent = "Run";
   controls.appendChild(runBtn);
@@ -345,7 +356,7 @@ function buildQueryPanel(ns, table) {
   runBtn.addEventListener("click", async () => {
     const raw = box.value.trim();
     if (WRITE_STATEMENT.test(raw) || raw.includes(";") && raw.trim().split(";").filter(Boolean).length > 1) {
-      out.innerHTML = `<p class="warn">Refused: this box only runs a single read-only SELECT/WITH.</p>`;
+      out.innerHTML = `<div class="alert alert-danger">Refused: this box only runs a single read-only SELECT/WITH.</div>`;
       return;
     }
     const sql = `SELECT * FROM (${raw.replace(/;\s*$/, "")}) t LIMIT ${ROW_CAP}`;
@@ -358,12 +369,21 @@ function buildQueryPanel(ns, table) {
       const rows = res.toArray().map((r) => r.toJSON());
       out.innerHTML = "";
       const p = document.createElement("p");
-      p.className = "muted";
-      p.textContent = `${rows.length} row(s) in ${ms} ms${rows.length === ROW_CAP ? ` (capped at ${ROW_CAP})` : ""}`;
+      p.className = "text-muted small";
+      p.textContent = `${rows.length} row(s) in ${ms} ms${rows.length === ROW_CAP ? ` (capped at ${ROW_CAP})` : ""} · `;
+      const shell = document.createElement("a");
+      shell.href = window.bioconiceShellUrl(raw); // from /shell-links.js
+      shell.target = "_blank";
+      shell.rel = "noopener";
+      shell.textContent = "Open in DuckDB Shell ↗";
+      p.appendChild(shell);
       out.appendChild(p);
-      out.appendChild(renderResultTable(rows));
+      const scroll = document.createElement("div");
+      scroll.className = "table-responsive";
+      scroll.appendChild(renderResultTable(rows));
+      out.appendChild(scroll);
     } catch (err) {
-      out.innerHTML = `<p class="warn">${escapeHtml(err.message || String(err))}</p>`;
+      out.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message || String(err))}</div>`;
     }
   });
 
@@ -372,7 +392,7 @@ function buildQueryPanel(ns, table) {
 
 function renderResultTable(rows) {
   const t = document.createElement("table");
-  t.className = "cols";
+  t.className = "table table-sm cols";
   if (!rows.length) {
     t.innerHTML = "<tbody><tr><td>(no rows)</td></tr></tbody>";
     return t;
@@ -389,4 +409,7 @@ function renderResultTable(rows) {
   return t;
 }
 
+document.getElementById("query-box").appendChild(buildQueryPanel(`SELECT gene_id, symbol, source, gene_type
+FROM annotation.gene
+WHERE taxon_id = 9606 AND symbol = 'TP53' AND valid_to IS NULL;`));
 loadCatalog();

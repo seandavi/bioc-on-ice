@@ -26,8 +26,8 @@ website:
     left:
       - href: releases.qmd
         text: Releases
-      - href: playground.qmd
-        text: Playground
+      - href: explorer/index.qmd
+        text: Explorer
       - href: guides/versions-and-citation.qmd
         text: Versions and citation
     right:
@@ -49,10 +49,8 @@ website:
             text: BugSigDB
       - section: In the browser
         contents:
-          - href: playground.qmd
-            text: SQL playground
-          - href: https://bioconice-explorer.seandavi.workers.dev
-            text: Explorer ↗
+          - href: explorer/index.qmd
+            text: Explorer
           - href: releases.qmd
             text: Releases
 
