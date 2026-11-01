@@ -15,10 +15,9 @@ same layout. They differ in how long they last and how you use them
 | Monthly | Hugging Face dataset `seandavis/bioconice`, git tag `YYYY-MM` | never | permanently | downloading, then querying locally |
 
 `latest/` and the dated folders are served for querying in place: DuckDB
-`ATTACH`, `read_parquet`, the [playground](../playground.qmd) and the
-[Explorer](https://bioconice-explorer.seandavi.workers.dev) all read them over
-HTTPS. The monthly releases are the long-term archive and the version to cite.
-Download one, then query it locally.
+`ATTACH`, `read_parquet` and the [Explorer](../explorer/index.qmd) all read
+them over HTTPS. The monthly releases are the long-term archive and the version
+to cite. Download one, then query it locally.
 
 ::: callout-note
 `v2026-11-01` is the first official release: the first to pass the release

@@ -188,7 +188,7 @@ Serving is the public release on R2 ([Query it](#query-it)), static files
 with **anonymous public read** — no token needed. The Iceberg catalog behind
 icegate still holds the Type-2 history until phase 2 of #187 retires it.
 Browse the release — tables, column docs, row counts, copyable queries and an
-in-browser query box — at https://bioconice-explorer.seandavi.workers.dev.
+in-browser query box — at https://bioconice.cancerdatasci.org/explorer/.
 
 Not yet: the `ensembl` row of the release manifest (see below), sequence lengths,
 and everything in Milestone 2.

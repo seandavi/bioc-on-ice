@@ -33,15 +33,38 @@ The same page lists the monthly Hugging Face tags (`YYYY-MM`, ADR-0016) of
 ## The pages
 
 `web/` is a Quarto website ported from omicidx `docs/` (#215): landing page,
-releases, a DuckDB-Wasm SQL playground (OJS), the versions-and-citation guide,
+releases, the explorer, the versions-and-citation guide,
 per-source pages (`sources/bugsigdb.qmd` includes `docs/bugsigdb.md`, so the
 text lives in one place) and a 404 page, with site search and light and dark
 themes (`web/theme/`: omicidx's archify structure in slate, indigo and violet).
 `web/shell-links.js` adds "Open in DuckDB Shell ↗" under every SQL block that
 isn't marked `{.sql .no-shell}`, attaching `latest/` first when the example
 doesn't `ATTACH`. Nothing executes at render time: examples are plain code,
-so rendering needs Quarto only, no R, Python or data. The explorer
-(`../explorer/`) stays its own Worker; the playground and sidebar link to it.
+so rendering needs Quarto only, no R, Python or data.
+
+## The explorer
+
+`web/explorer/` (`/explorer/`) browses the latest release (namespaces, tables,
+table comments, column docs and types, row counts, a copyable DuckDB snippet
+per table), runs SQL in the browser with DuckDB-Wasm, and lists the fixed
+recipe queries issue #100's MCP `recipes()` tool serves. It is a Quarto page
+around plain JS (`app.js`, `recipes.js`, no build step) with `explorer.css`
+on the site theme's `--ax-*` variables. It was its own Worker,
+`bioconice-explorer`, until it moved here; the SQL playground (#219) folded
+into its Query view, and `/playground.html` redirects to it (Quarto
+`aliases`).
+
+The page reads `manifest.json` and attaches `bioconice.duckdb` same-origin
+from `/data/latest/`, so it needs the Worker: under `quarto preview` the
+catalog won't load. The views in `bioconice.duckdb` still read their Parquet
+from the data host, which serves CORS. Copyable snippets and recipes use the
+data host URL so they paste into desktop DuckDB as they are.
+
+The recipe numbers in `recipes.js` (`VERIFIED_ON`) were run against the
+2026-10-31 release with Python duckdb 1.5.5; the "Verified" line under each is
+what DuckDB returned. `tests/test_explorer_recipes.py` checks offline that
+every recipe's SQL, and the provenance matrix `PIVOT`, parses in DuckDB; the
+live numbers are not re-verified automatically.
 
 ```bash
 cd site/web

@@ -1,0 +1,65 @@
+/* The explorer's layout on top of the site theme: colours come from the
+   --ax-* variables in theme/bioconice-{light,dark}.scss, so the page follows
+   the light/dark toggle. Buttons, tables and alerts are Bootstrap's. */
+
+#explorer-nav { display: flex; gap: 0.4rem; margin: 0.5rem 0 1rem; font-family: var(--bs-font-monospace); }
+#explorer-nav button, .tabs button, .ns-button, ul.tables li button {
+  background: none; border: none; color: var(--ax-muted); font: inherit; cursor: pointer;
+}
+#explorer-nav button { padding: 0.2rem 0.8rem; border-radius: 999px; font-size: 0.9rem; }
+#explorer-nav button:hover { color: var(--ax-text); }
+#explorer-nav button[aria-current="page"] {
+  color: var(--ax-primary); font-weight: 600;
+  background: color-mix(in srgb, var(--ax-primary) 12%, transparent);
+}
+
+.explorer-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+@media (max-width: 767.98px) {
+  .explorer-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+nav#catalog {
+  border-right: 1px solid var(--ax-border);
+  max-height: 75vh;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+.ns-group { border-bottom: 1px solid var(--ax-border); }
+.ns-button {
+  width: 100%; text-align: left; color: var(--ax-text); font-family: var(--bs-font-monospace);
+  font-weight: 600; padding: 0.45rem 0.75rem; display: flex; gap: 0.4rem; align-items: baseline;
+}
+.ns-button .count { color: var(--ax-faint); font-weight: 400; font-size: 0.8em; }
+ul.tables { list-style: none; margin: 0 0 0.4rem; padding: 0; }
+ul.tables li button { width: 100%; text-align: left; padding: 0.2rem 0.75rem 0.2rem 1.5rem; border-radius: 999px; }
+.ns-button:hover, ul.tables li button:hover { color: var(--ax-primary); }
+ul.tables li button[aria-current="true"] {
+  color: var(--ax-primary); font-weight: 600;
+  background: color-mix(in srgb, var(--ax-primary) 12%, transparent);
+}
+
+#explorer-main h2 { margin-top: 0; }
+
+.tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--ax-border); margin: 1rem 0; flex-wrap: wrap; }
+.tabs button { padding: 0.4rem 0.75rem; border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--ax-text); border-bottom-color: var(--ax-accent); font-weight: 600; }
+
+table.cols td { vertical-align: top; }
+
+pre.sql { padding: 0.75rem 1rem; overflow-x: auto; }
+.copy-wrap { position: relative; }
+.copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; }
+
+.recipe { margin-bottom: 2rem; }
+.recipe h3 { margin-bottom: 0.2rem; }
+
+.status { padding: 1rem 0; color: var(--ax-muted); }
+.sql-box { font-size: 0.85rem; }
+
+#explorer-nav button:focus-visible, .tabs button:focus-visible, .ns-button:focus-visible, ul.tables li button:focus-visible {
+  outline: 2px solid var(--ax-accent); outline-offset: 2px;
+}

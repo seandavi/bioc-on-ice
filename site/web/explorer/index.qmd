@@ -1,0 +1,103 @@
+---
+title: Explorer
+description: Browse the latest bioc-on-ice release (tables, column docs, row counts) and run SQL against it in your browser with DuckDB-Wasm. Nothing to install.
+page-layout: full
+sidebar: false
+toc: false
+css: explorer.css
+resources:
+  - app.js
+  - recipes.js
+# The SQL playground (#219) folded into the Query view here.
+aliases:
+  - /playground.html
+---
+
+```{=html}
+<p class="text-muted small">Reading <code id="catalog-endpoint"></code>, anonymously.</p>
+<div id="explorer-nav" role="tablist" aria-label="Views">
+  <button id="nav-browse" aria-current="page">Browse</button>
+  <button id="nav-query">Query</button>
+  <button id="nav-recipes">Recipes</button>
+</div>
+```
+
+::: {.explorer-layout}
+
+```{=html}
+<nav id="catalog" aria-label="Namespaces and tables">
+  <div id="catalog-tree" aria-busy="true"><p class="status">Loading namespaces…</p></div>
+</nav>
+```
+
+::: {#explorer-main}
+
+::: {#view-browse}
+```{=html}
+<div id="table-view">
+  <p class="status">Select a table on the left to see its columns, row count and a copyable query, or open <b>Query</b> to run SQL.</p>
+</div>
+```
+:::
+
+::: {#view-query hidden=""}
+```{=html}
+<div id="query-box"></div>
+```
+
+The query runs in your browser with
+[DuckDB-Wasm](https://duckdb.org/docs/api/wasm/overview), against `latest/`
+attached as `bioc` (and selected with `USE bioc`, so `annotation.gene` works as
+well as `bioc.annotation.gene`). The first run downloads DuckDB itself, a few
+MB. One read-only `SELECT` or `WITH` at a time, capped at 1,000 rows.
+
+Queries that filter and use `LIMIT` are fast, because DuckDB fetches only the
+parts of each Parquet file it needs. Full scans of the big tables
+(`raw.icite__metadata` is 12 GB, `annotation.icite__citation` 8 GB) are slow
+and can run out of browser memory. For those, use DuckDB on your own machine.
+
+### Queries to try
+
+Copy one into the box, or open it in the DuckDB Shell.
+
+```sql
+-- Every table in the release, by schema
+SELECT schema_name, view_name
+FROM duckdb_views()
+WHERE database_name = 'bioc' AND NOT internal
+ORDER BY 1, 2;
+```
+
+```sql
+-- Mouse genes by source
+SELECT source, count(*) AS genes
+FROM annotation.gene
+WHERE taxon_id = 10090 AND valid_to IS NULL
+GROUP BY source;
+```
+
+```sql
+-- The provenance of this release
+SELECT release, published_at, git_sha
+FROM read_json('https://data.bioconice.cancerdatasci.org/latest/manifest.json');
+```
+
+```sql
+-- One BugSigDB signature as a list of member names
+SELECT bsdb_id, list(taxon_name ORDER BY member_index) AS members
+FROM annotation.signature_taxon
+WHERE bsdb_id = 'bsdb:83/1/1'
+GROUP BY bsdb_id;
+```
+:::
+
+::: {#view-recipes hidden=""}
+:::
+
+:::
+
+:::
+
+```{=html}
+<script type="module" src="app.js"></script>
+```

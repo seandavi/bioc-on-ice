@@ -4,7 +4,7 @@
 //
 // Verified against the 2026-10-31 release (Python duckdb 1.5.5, no browser):
 // the `verified` field is the row/count DuckDB actually returned that day, not
-// a guess — see explorer/README.md for how to re-check.
+// a guess — see site/README.md for how to re-check.
 
 export const RELEASE_URL = "https://data.bioconice.cancerdatasci.org/latest";
 export const VERIFIED_ON = "2026-10-31";
