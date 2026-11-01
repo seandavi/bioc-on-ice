@@ -44,15 +44,17 @@ bioconice-release.service` and the notifier's own journal, `journalctl --user
 ## Install (by hand: a live-system change, not CI)
 
 ```bash
+# the units run from their own clone, reset to origin/main before each run:
+git clone https://github.com/seandavi/bioc-on-ice ~/Documents/git/bioc-on-ice-release
 cd ~/Documents/git/bioc-on-ice
-cp systemd/bioconice-release.{service,timer} ~/.config/systemd/user/
+cp systemd/bioconice-{release,hf-push}.{service,timer} ~/.config/systemd/user/
 # once, shared, if not already present:
 cp ~/Documents/git/cdsci-lake/systemd/ntfy-notify@.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user start ntfy-notify@bioconice-release.service   # a test alert: check it arrives on cdsci-lake-ops
 systemctl --user start bioconice-release.service     # one real run, end to end, first
 journalctl --user -u bioconice-release.service -f
-systemctl --user enable --now bioconice-release.timer
+systemctl --user enable --now bioconice-release.timer bioconice-hf-push.timer
 systemctl --user list-timers 'bioconice-*'           # next Sunday 00:00 UTC
 ```
 

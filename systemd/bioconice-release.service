@@ -10,10 +10,14 @@ OnFailure=ntfy-notify@%N.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/home/davsean/Documents/git/bioc-on-ice
+# A dedicated clone, reset to origin/main before every run: never the working
+# checkout, whose branch and local edits would otherwise ship in a release.
+WorkingDirectory=%h/Documents/git/bioc-on-ice-release
+ExecStartPre=/usr/bin/git fetch -q origin
+ExecStartPre=/usr/bin/git checkout -q --detach origin/main
 # Optional (`-`): every credential comes from GSM through gcloud, as in the manual flow,
 # so the repo has no .env today. A CU_OPENALEX_* override would go there.
-EnvironmentFile=-/home/davsean/Documents/git/bioc-on-ice/.env
+EnvironmentFile=-%h/Documents/git/bioc-on-ice-release/.env
 # Set here, not in .env, so only the scheduled run means the shared lake (SCHEDULING.md).
 Environment=CU_OPENALEX_LAKE_BACKEND=postgres
 # The bundle is 57-94 GB; /tmp on this host is 30 GB and noexec. The script builds
