@@ -11,7 +11,7 @@ anonymously from DuckDB, R or Python without downloading anything first.
 | `annotation.signature_taxon` | 59,486 | taxon member of a signature (7,365 signatures; the other 60 list no members) |
 
 The two tables join on `bsdb_id`, e.g. `'bsdb:83/1/1'` (study/experiment/signature,
-with the `bsdb:` prefix included). Row counts are from the `v2026-10-31` release,
+with the `bsdb:` prefix included). Row counts are from the `v2026-11-01` release,
 built from BugSigDBExports `v1.3.1`. Licence: CC BY 4.0, so cite BugSigDB as its
 site asks.
 
@@ -24,7 +24,7 @@ ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bio
 ```
 
 `latest/` moves with each release. For reproducible work, pin a dated release
-instead, e.g. `https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb`.
+instead, e.g. `https://data.bioconice.cancerdatasci.org/v2026-11-01/bioconice.duckdb`.
 Only the newest 4 dated releases are kept (plus the one just uploaded, if it
 is older), about four weeks. For long-term pins use the monthly Hugging Face
 archive once it starts ([#214](https://github.com/seandavi/bioc-on-ice/issues/214)).
@@ -61,7 +61,7 @@ condition (`'EFO:0005842,EFO:0000400'`). Condition names are capitalised
 
 ## Examples
 
-These were run against `v2026-10-31`.
+These were run against `v2026-11-01`.
 
 Taxa most often reported in colorectal cancer signatures, by direction:
 
