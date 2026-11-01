@@ -1,0 +1,113 @@
+---
+title: Versions and citation
+description: latest vs dated weekly vs monthly releases, how to pin a version, and how to cite bioc-on-ice.
+---
+
+bioc-on-ice publishes three kinds of versions. They hold the same tables in the
+same layout. They differ in how long they last and how you use them
+([ADR-0016](https://github.com/seandavi/bioc-on-ice/blob/main/docs/adr/0016-release-cadence-weekly-r2-monthly-hf.md)).
+[Releases](../releases.qmd) lists the ones available now.
+
+| Version | Where | Changes? | Kept | Use it by |
+|---|---|---|---|---|
+| `latest/` | `https://data.bioconice.cancerdatasci.org/latest/` | with each weekly release | always the newest | querying in place |
+| Dated | `https://data.bioconice.cancerdatasci.org/v{YYYY-MM-DD}/` | never | the 4 newest, about four weeks | querying in place |
+| Monthly | Hugging Face dataset `seandavis/bioconice`, git tag `YYYY-MM` | never | permanently | downloading, then querying locally |
+
+`latest/` and the dated folders are served for querying in place: DuckDB
+`ATTACH`, `read_parquet`, the [playground](../playground.qmd) and the
+[Explorer](https://bioconice-explorer.seandavi.workers.dev) all read them over
+HTTPS. The monthly releases are the long-term archive and the version to cite.
+Download one, then query it locally.
+
+::: callout-note
+Releases are still made by hand, and dated folders are kept 30 days. The
+weekly schedule, keep-4 retention and the monthly Hugging Face archive start
+once a release passes the release gate
+([#214](https://github.com/seandavi/bioc-on-ice/issues/214)). Until then
+there are no monthly releases.
+:::
+
+## Which one to use
+
+- **Exploring, or building something that should track the sources:** use `latest/`.
+- **An analysis you'll rerun in the next few weeks:** pin a dated folder.
+- **A paper, a shared pipeline, a Bioconductor release, or anything you'll cite:** download a monthly release.
+
+## Pin a dated folder
+
+Replace `latest/` with a date. Each dated folder's `bioconice.duckdb` reads
+its own Parquet files, so the views stay pinned too:
+
+```{.sql .no-shell}
+ATTACH 'https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb' AS bioc (READ_ONLY);
+```
+
+To see which dates are available, open [Releases](../releases.qmd) or the
+[folder listing](https://bioconice.cancerdatasci.org/data/). Older folders are
+deleted, so use a monthly release for anything longer than a few weeks.
+
+## Use a monthly release
+
+Once a month, the first weekly release that passed the gate is copied to the
+Hugging Face dataset `seandavis/bioconice` and tagged with its month (e.g.
+`2026-11`). Files sit at the repository root in the same layout as R2
+(`annotation/gene.parquet`, …).
+
+Download the release with the [`hf` command-line
+tool](https://huggingface.co/docs/huggingface_hub/guides/cli) (in
+`huggingface_hub`; `uvx --from huggingface_hub hf` runs it without
+installing), then query the local files:
+
+```bash
+hf download seandavis/bioconice --repo-type dataset --revision 2026-11 \
+  --local-dir bioconice-2026-11
+duckdb -c "SELECT count(*) FROM 'bioconice-2026-11/annotation/gene.parquet'"
+```
+
+`--include 'annotation/*'` downloads only some of the files. A [Hugging Face
+token](https://huggingface.co/settings/tokens) (`hf auth login`) raises the
+download rate limits.
+
+Don't query the archive in place with `hf://` paths. Hugging Face limits
+anonymous requests, one query can make hundreds, and repeated queries soon fail
+with HTTP 429. For in-place queries use `latest/` or a dated folder.
+
+## Cite bioc-on-ice
+
+Cite the monthly release you used by its tag (e.g. `seandavis/bioconice@2026-11`),
+and its DOI if the dataset page for that tag shows one.
+
+If you used a dated folder instead, record its URL and the `release` and
+`git_sha` from its `manifest.json`. The folder will be gone within weeks, so a
+monthly release is the better thing to cite. Each table also names the
+upstream source and version it came from; cite those sources as they ask (for
+example, [BugSigDB](../sources/bugsigdb.qmd) is CC BY 4.0).
+
+## The manifest
+
+Every version has a `manifest.json`:
+
+```bash
+curl -s https://data.bioconice.cancerdatasci.org/latest/manifest.json
+```
+
+DuckDB reads it directly. The provenance fields of the current `latest/`:
+
+```sql
+SELECT release, published_at, git_sha
+FROM read_json('https://data.bioconice.cancerdatasci.org/latest/manifest.json');
+```
+
+And the row count of each published table:
+
+```sql
+SELECT t.schema, t."table", t.row_count
+FROM read_json('https://data.bioconice.cancerdatasci.org/latest/manifest.json'),
+     unnest(tables) AS u(t)
+ORDER BY t.schema, t."table";
+```
+
+- `release` is the release date and `git_sha` the commit of the [pipeline code](https://github.com/seandavi/bioc-on-ice) that built it.
+- `provenance` lists each upstream source with its version, URL, retrieval time and row count.
+- `tables` gives each table's `path`, `row_count`, `bytes`, `sha256`, comment and column docs.

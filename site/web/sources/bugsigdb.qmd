@@ -1,0 +1,6 @@
+---
+pagetitle: BugSigDB in biocOnIce
+description: BugSigDB's curated microbial signatures as two tables you can query anonymously from DuckDB, R or Python.
+---
+
+{{< include ../../../docs/bugsigdb.md >}}

@@ -28,3 +28,11 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
+
+  # The public pages (site/web). Examples aren't executed: Quarto only.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: quarto-dev/quarto-actions/setup@v2
+      - run: quarto render site/web
