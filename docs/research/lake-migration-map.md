@@ -100,9 +100,9 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 | A3 | `raw.complexportal__complex` | 20,579 | Complex Portal | lake (this PR; was `bioc.*`) | `complexportal.complex` (src/cdsci/lake/sources/complexportal, cdsci-lake PR) | no `landed_in` (frozen, #222) | new source module ✅ step 7 |
 | A4 | `raw.metadata` | 40,737,811 | iCite | Iceberg `bioc.*` | `icite.metadata` (src/cdsci/lake/sources/icite) | same 17 columns and types (it is the lake table's old reverse-ETL copy); lake 41,172,752 rows vs 40,737,811 (newer snapshot, within bounds) | repoint-only |
 | A5 | `annotation.pubmed__article` | 41,336,046 | PubMed | lake | `omicidx.pubmed_article` (omicidx producer) | already lake-backed; rename to `pubmed.article` with cdsci-lake#136 (ADR-0026) | repoint-only (rename) |
-| B1 | `annotation.wikipathways__gene_pathway` | 76,046 | WikiPathways | Iceberg `bioc.*` | — | release SELECT over the new lake table | new source module |
-| B1 | `annotation.wikipathways__pathway` | 1,957 | WikiPathways | Iceberg `bioc.*` | — | release SELECT over the new lake table | new source module |
-| B1 | `raw.wikipathways__gmt` | 1,957 | WikiPathways | Iceberg `bioc.*` | — | no lake source | new source module |
+| B1 | `annotation.wikipathways__gene_pathway` | 76,046 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | release SELECT over the new lake table (`wikipathways.RELEASE`); frozen `valid_from` (#222) | new source module |
+| B1 | `annotation.wikipathways__pathway` | 1,957 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | release SELECT over the new lake table (`wikipathways.RELEASE`); frozen `valid_from` (#222) | new source module |
+| B1 | `raw.wikipathways__gmt` | 1,957 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | no `landed_in` (frozen, #222); one version, not accumulated | new source module |
 | B2 | `clinical.gwas_catalog__association` | 1,192,472 | GWAS Catalog | Iceberg `bioc.*` | — | release SELECT | new source module |
 | B2 | `clinical.gwas_catalog__study` | 230,057 | GWAS Catalog | Iceberg `bioc.*` | — | release SELECT | new source module |
 | B2 | `raw.gwas_catalog__associations` | 1,192,604 | GWAS Catalog | Iceberg `bioc.*` | — | no lake source | new source module |

@@ -69,6 +69,10 @@ BUNDLE = DatasetContract(
         declared_contract("annotation.complexportal__complex"),
         declared_contract("annotation.complexportal__participant", references={
             "complex_ac": "annotation.complexportal__complex.complex_ac"}),
+        declared_contract("raw.wikipathways__gmt", ("file_name", "line_number")),
+        declared_contract("annotation.wikipathways__pathway"),
+        declared_contract("annotation.wikipathways__gene_pathway", references={
+            "pathway_id": "annotation.wikipathways__pathway.pathway_id"}),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -98,8 +102,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
     "annotation.transcript",
-    "annotation.wikipathways__gene_pathway",
-    "annotation.wikipathways__pathway",
     "clinical.gwas_catalog__association",
     "clinical.gwas_catalog__study",
     "ontology.relationship",
@@ -145,7 +147,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.pubtator3__mutation",
     "raw.pubtator3__species",
     "raw.rnacentral__id_mapping",
-    "raw.wikipathways__gmt",
     "reference.genome",
     "resource.bedbase__bedfile",
     "resource.bedbase__bedset",
