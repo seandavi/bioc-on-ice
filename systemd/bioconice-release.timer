@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly biocOnIce release (ADR-0016)
+Documentation=https://github.com/seandavi/bioc-on-ice/issues/213
+
+[Timer]
+# Sundays 00:00 UTC (ADR-0016). The host is America/Denver, so UTC is explicit. No
+# jitter: a release is dated by its UTC day.
+OnCalendar=Sun *-*-* 00:00:00 UTC
+# A missed Sunday (box off) runs on next boot, dated that day.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

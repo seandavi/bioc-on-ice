@@ -1,0 +1,34 @@
+# The weekly release (ADR-0016, #213): publish -> gate -> upload dry run -> upload --apply,
+# in scripts/release.sh, which stops at the first failing step. Copied from omicidx's
+# systemd/omicidx-downstream.service; convention: monode/infrastructure's SCHEDULING.md.
+[Unit]
+Description=Publish, gate and upload the weekly biocOnIce release to R2
+Documentation=https://github.com/seandavi/bioc-on-ice/issues/213
+After=network-online.target
+Wants=network-online.target
+OnFailure=ntfy-notify@%N.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/davsean/Documents/git/bioc-on-ice
+# Optional (`-`): every credential comes from GSM through gcloud, as in the manual flow,
+# so the repo has no .env today. A CU_OPENALEX_* override would go there.
+EnvironmentFile=-/home/davsean/Documents/git/bioc-on-ice/.env
+# Set here, not in .env, so only the scheduled run means the shared lake (SCHEDULING.md).
+Environment=CU_OPENALEX_LAKE_BACKEND=postgres
+# The bundle is 57-94 GB; /tmp on this host is 30 GB and noexec. The script builds
+# $TMPDIR/bioconice-release-<date>/, which /data's 7-day tmpfiles cleanup then removes.
+Environment=TMPDIR=/data/davsean/tmp
+# NOT `/usr/bin/env uv`: systemd --user's PATH lacks ~/.local/bin, so `env uv` exits 127,
+# and `systemd-analyze verify` does not catch it. `uv run` puts `bioconice` on the
+# script's PATH.
+ExecStart=%h/.local/bin/uv run scripts/release.sh
+# RuntimeMaxSec= has no effect on Type=oneshot. Publish took 22 min for the 57 GB bundle
+# (2026-10-30) and about 40 min for 94 GB (2026-10-31). The upload sends the bundle twice
+# (v<date>/ and latest/) and has not been timed; 12 h is a ceiling to tighten after the
+# first hand run, well inside the weekly period.
+TimeoutStartSec=43200
+Nice=10
+
+[Install]
+WantedBy=default.target

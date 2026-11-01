@@ -391,6 +391,10 @@ older than the bundle: once `latest/` is this release, pass
 `--reference https://data.bioconice.cancerdatasci.org/v<date>` instead. The README
 queries run on the bundle as warnings only.
 
+The weekly release (Sundays 00:00 UTC, ADR-0016) runs these four steps as
+`scripts/release.sh` from a systemd `--user` timer on onclappc02; see
+[`systemd/README.md`](systemd/README.md) for the units, install and recovery.
+
 ## Acceptance
 
 [SPEC.md](SPEC.md#acceptance-criteria) sections A–C, checked against the live
