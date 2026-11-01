@@ -1,0 +1,32 @@
+# Monthly Hugging Face archive (#214, ADR-0016): push the week's gated release bundle to
+# hf.co/datasets/seandavis/bioconice as one commit tagged YYYY-MM. Copied from omicidx's
+# systemd/omicidx-hf-release.service. Not installed: copy (not symlink) into
+# ~/.config/systemd/user/ by hand, and start it once before trusting the timer.
+[Unit]
+Description=Push the monthly biocOnIce release to Hugging Face (seandavis/bioconice)
+Documentation=https://github.com/seandavi/bioc-on-ice/issues/214
+After=network-online.target
+Wants=network-online.target
+OnFailure=ntfy-notify@%N.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/davsean/Documents/git/bioc-on-ice
+# HF_TOKEN, if set here; otherwise hf-push reads GSM secret cdsci-huggingface-token
+# (project cdsci-infra) through gcloud.
+EnvironmentFile=-/home/davsean/Documents/git/bioc-on-ice/.env
+# The Xet upload stages chunks under TMPDIR; /tmp on this host is small and noexec.
+Environment=TMPDIR=/data/davsean/tmp
+# The bundle directory the weekly release (#213) builds and gates. It must be that
+# unit's `publish --out`. No gate.json there (the release failed the gate) fails this
+# unit, and OnFailure notifies.
+# NOT `/usr/bin/env uv`: systemd --user PATH lacks ~/.local/bin.
+ExecStart=%h/.local/bin/uv run bioconice hf-push --release /data/davsean/bioconice-release --apply
+# RuntimeMaxSec= has no effect on Type=oneshot. A bundle is about 57 GB, about 94 GB with
+# PubMed, all uploaded; 12h covers a slow upload. A run that times out is re-run as-is:
+# the upload is Xet-deduplicated and the tag is only created after the commit.
+TimeoutStartSec=43200
+Nice=10
+
+[Install]
+WantedBy=default.target

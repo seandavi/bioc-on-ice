@@ -5,12 +5,14 @@ columns and types unchanged, row count within bounds, key not null and unique, j
 coverage. This module supplies bioc-on-ice's contracts and its exemption list, refuses a
 reference that is not older than the bundle, checks the bundle's manifest.json against its
 own Parquet, runs the README queries on the bundle (optional), and prints the report.
-Reads the bundle and the reference's manifest.json only.
+Reads the bundle and the reference's manifest.json only. A pass leaves gate.json in the
+bundle, bound to its manifest.json by sha256: `bioconice hf-push` pushes only such a bundle.
 """
 
+import hashlib
 import json
 import re
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
@@ -31,6 +33,9 @@ BUNDLE = DatasetContract(
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
 DEFAULT_REFERENCE = f"{PUBLIC_URL}/latest"
+# Proof of a pass, in the bundle. Re-running the gate later is no substitute: once uploaded,
+# latest/ is the bundle itself, and the gate refuses a reference that is not older.
+GATE_FILE = "gate.json"
 
 # Tables with no TableContract yet (#208). They get only the column and row-count checks:
 # no key or join checks. Writing a contract for one means deleting its line here.
@@ -162,10 +167,16 @@ def bundle_checks(con, tables, queries):
     return checks
 
 
+def manifest_sha256(release: Path) -> str:
+    return hashlib.sha256((release / "manifest.json").read_bytes()).hexdigest()
+
+
 def gate(release: Path, reference: str | None = DEFAULT_REFERENCE) -> bool:
     """Print the gate report for the bundle `release` against `reference` (a release base
-    URL or directory); True when every required check passes."""
+    URL or directory); True when every required check passes, and then write gate.json."""
+    (release / GATE_FILE).unlink(missing_ok=True)
     manifest = json.loads((release / "manifest.json").read_text())
+    ref_release = None
     con = release_con(release, manifest["tables"])
     if reference is not None:
         try:
@@ -203,4 +214,9 @@ def gate(release: Path, reference: str | None = DEFAULT_REFERENCE) -> bool:
             print(f"  {status:4}  {check}" + (f"  ({c.detail})" if c.detail else ""))
     failed = sum(c.required and not c.passed for c in checks)
     print(f"FAIL: {failed} required check(s) failed" if failed else "PASS")
+    if not failed:
+        (release / GATE_FILE).write_text(json.dumps({
+            "release": manifest["release"], "manifest_sha256": manifest_sha256(release),
+            "reference": reference, "reference_release": ref_release,
+            "passed_at": datetime.now(UTC).isoformat(timespec="seconds")}, indent=2) + "\n")
     return not failed

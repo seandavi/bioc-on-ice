@@ -1,0 +1,18 @@
+[Unit]
+Description=Monthly biocOnIce Hugging Face archive
+Documentation=https://github.com/seandavi/bioc-on-ice/issues/214
+
+[Timer]
+# The Monday after the month's first Sunday, 12:00 UTC: after the first Sunday 00:00 UTC
+# weekly release (#213) has built, gated and uploaded. That bundle becomes the month's tag.
+# The first Sunday falls on day 1-7, so that Monday on day 2-8; the first Monday (1-7)
+# would fire on day 1 before the release in months that start on a Monday. If
+# the tag already exists, the push does nothing, so a re-fire is harmless. If the first
+# Sunday's release failed the gate, push the next one that passes by hand:
+# `uv run bioconice hf-push --release <dir> --apply`.
+OnCalendar=Mon *-*-02..08 12:00:00 UTC
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

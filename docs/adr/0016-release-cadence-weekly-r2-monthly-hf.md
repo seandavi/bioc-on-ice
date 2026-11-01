@@ -139,5 +139,15 @@ All paths are in [seandavi/omicidx](https://github.com/seandavi/omicidx) at
 - A one-off release pushes the oldest weekly release out early.
 - Reproducing a release older than four weeks means downloading its monthly
   tag. Weekly releases between two monthly tags are not archived.
-- Still open: the Hugging Face repo name, what `views.sql` the archive ships
-  when its users query local files, and whether DOIs are minted.
+- Settled by the owner with #214: the repo is `seandavis/bioconice`. The archive
+  ships the Parquet, `manifest.json`, `gate.json`, and a `views.sql` and
+  `restore.sql` over paths relative to the download directory, but not
+  `bioconice.duckdb`, whose views read R2 `latest/`. The card's licence is
+  `other` (mixed upstream terms, see `manifest.json` provenance). DOIs are not
+  minted for now.
+- The push tells a gated release from an ungated one by proof the gate leaves
+  in the bundle. A pass writes `gate.json` with the sha256 of the bundle's
+  `manifest.json`, and `bioconice hf-push` refuses a bundle without a matching
+  one. Re-running the gate at push time was rejected: after the upload,
+  `latest/` is the bundle itself, and the gate refuses a reference that is not
+  older.

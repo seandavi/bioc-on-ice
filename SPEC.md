@@ -864,7 +864,8 @@ the id. Each release carries every current row of its tables; there are no
 publish gate. R2 keeps the 4 newest `v{YYYY-MM-DD}/` folders, counted, not
 aged; one-off releases count toward the 4, `latest/` does not. R2 is for
 querying in place. Each month the first weekly release that passed the gate is
-copied to a Hugging Face dataset repo as one commit tagged `YYYY-MM`. Tags are
+copied to the Hugging Face dataset repo `seandavis/bioconice` as one commit
+tagged `YYYY-MM`. Tags are
 never deleted, and they replace pinned releases: nothing on R2 is pinned. A
 Bioconductor release cites the nearest `YYYY-MM` tag. Monthly releases are
 downloaded and queried locally, never queried in place through `hf://`,
@@ -879,7 +880,9 @@ columns it declares as joins. A table without a contract fails the gate unless
 it is in the previous release and listed as exempt (#208). The reference MUST be
 an older release than the bundle, and the bundle's `manifest.json` MUST match its
 Parquet (row counts, columns, types). The order is publish, gate, dry-run upload,
-upload `--apply`.
+upload `--apply`. A pass leaves `gate.json` in the bundle, bound to its
+`manifest.json` by sha256; only a bundle with a matching one is copied to Hugging
+Face.
 
 **Archive rule.** The Iceberg tables of a source keep their `valid_from` /
 `valid_to` rows only until the source moves to dataset releases, then receive

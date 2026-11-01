@@ -391,6 +391,22 @@ older than the bundle: once `latest/` is this release, pass
 `--reference https://data.bioconice.cancerdatasci.org/v<date>` instead. The README
 queries run on the bundle as warnings only.
 
+A pass writes `gate.json` into the bundle, bound to its `manifest.json` by sha256.
+Once a month that bundle is archived on Hugging Face, as one commit tagged
+`YYYY-MM` of its release date
+([ADR-0016](docs/adr/0016-release-cadence-weekly-r2-monthly-hf.md)):
+
+```sh
+uv run bioconice hf-push --release release/          # dry run
+uv run bioconice hf-push --release release/ --apply  # seandavis/bioconice@YYYY-MM
+```
+
+`hf-push` refuses a bundle without a matching `gate.json` or whose Parquet does
+not match the manifest sha256s, and does nothing if the tag already exists. The
+token is `HF_TOKEN`, else GSM secret `cdsci-huggingface-token` (project
+`cdsci-infra`). `systemd/bioconice-hf-push.{service,timer}` runs it on the
+Monday after each month's first Sunday; the units are not installed yet.
+
 ## Acceptance
 
 [SPEC.md](SPEC.md#acceptance-criteria) sections A–C, checked against the live
