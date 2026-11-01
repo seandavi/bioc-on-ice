@@ -18,8 +18,8 @@ from bioconice.__main__ import main
 class FakeHub:
     """The HfApi calls hf_push makes; `files` None means the repo does not exist."""
 
-    def __init__(self, tags=(), files=None):
-        self.tags, self.files, self.calls = list(tags), files, []
+    def __init__(self, tags=(), files=None, fail_tag=False):
+        self.tags, self.files, self.calls, self.fail_tag = list(tags), files, [], fail_tag
 
     def create_repo(self, repo, **kw):
         self.calls.append(("create_repo", repo, kw))
@@ -44,6 +44,10 @@ class FakeHub:
 
     def create_tag(self, repo, **kw):
         self.calls.append(("create_tag", repo, kw))
+        if self.fail_tag:
+            self.fail_tag = False
+            raise OSError("tag failed")
+        self.tags.append(kw["tag"])
 
 
 @pytest.fixture
@@ -125,6 +129,25 @@ def test_a_proof_for_another_manifest_is_refused(gated):
     with pytest.raises(SystemExit, match="is for another manifest.json"):
         hf.hf_push(gated, hub, apply=True)
     assert [c[0] for c in hub.calls] == ["create_repo"]
+
+
+def test_parquet_changed_after_the_gate_is_refused(gated):
+    (gated / "annotation/signature_taxon.parquet").write_bytes(b"not the gated file")
+    hub = FakeHub(files=[".gitattributes"])
+    with pytest.raises(SystemExit, match="signature_taxon.parquet does not match its manifest"):
+        hf.hf_push(gated, hub, apply=True)
+    assert [c[0] for c in hub.calls] == ["create_repo"]
+
+
+def test_a_failed_tag_is_retried_by_the_next_run(gated):
+    hub = FakeHub(files=[".gitattributes"], fail_tag=True)
+    with pytest.raises(OSError, match="tag failed"):
+        hf.hf_push(gated, hub, apply=True)
+    hf.hf_push(gated, hub, apply=True)  # no tag yet: commit again (a no-op on the Hub), then tag
+    assert [c[0] for c in hub.calls] == ["create_repo", "create_commit", "create_tag"] * 2
+    assert hub.tags == ["2026-11"]
+    hf.hf_push(gated, hub, apply=True)  # tagged: nothing more
+    assert [c[0] for c in hub.calls][6:] == ["create_repo"]
 
 
 def test_upload_ignores_the_gate_proof(gated, tmp_path, capsys):

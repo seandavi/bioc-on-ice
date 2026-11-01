@@ -3,6 +3,7 @@
 Bundles are tiny Parquet + manifest.json in the `bioconice publish` layout, under tmp_path.
 """
 
+import hashlib
 import json
 import sys
 
@@ -30,8 +31,10 @@ def _bundle(root, release, tables):
         (root / schema).mkdir(parents=True, exist_ok=True)
         n = con.execute(f"COPY ({sql}) TO '{root / rel}' (FORMAT parquet)").fetchone()[0]
         cols = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{root / rel}')").fetchall()
+        with (root / rel).open("rb") as f:
+            sha256 = hashlib.file_digest(f, "sha256").hexdigest()
         entries.append({"schema": schema, "table": table, "path": rel, "row_count": n,
-                        "comment": None,
+                        "sha256": sha256, "comment": None,
                         "columns": [{"name": c[0], "type": c[1], "doc": None} for c in cols]})
     (root / "manifest.json").write_text(json.dumps({"release": release, "tables": entries}))
     return root

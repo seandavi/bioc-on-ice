@@ -3,7 +3,8 @@ hf.co/datasets/seandavis/bioconice as one commit, tagged `YYYY-MM` of its releas
 
 omicidx's flows/hf_release.py without Prefect or the R2 download: the bundle is the local
 directory `bioconice publish` wrote and `bioconice gate` passed (its gate.json matches its
-manifest.json). It pushes the Parquet, manifest.json and gate.json as they are. It also
+manifest.json, and each Parquet file its manifest sha256). It pushes the Parquet,
+manifest.json and gate.json as they are. It also
 generates three files: views.sql and restore.sql, which read paths relative to the download
 directory (the bundle's copies read R2 `latest/`), and README.md, the dataset card. It does
 not push bioconice.duckdb, because that file's views read R2 `latest/`. Users download a
@@ -13,6 +14,7 @@ If the tag already exists, the push does nothing, so a re-fired timer is harmles
 are never deleted. DOIs are not minted.
 """
 
+import hashlib
 import json
 import os
 from datetime import date
@@ -190,6 +192,14 @@ def hf_push(release: Path, api, repo=REPO, apply=False):
     if gate.get("manifest_sha256") != manifest_sha256(release):
         raise SystemExit(f"{release}/{GATE_FILE} is for another manifest.json; "
                          "re-run `bioconice gate` on this bundle")
+    # gate.json binds manifest.json, not the Parquet: re-hash every file against its manifest
+    # sha256. Streamed. Disk-bound on onclappc02 (sha256 1.6 GB/s, cold reads ~250 MB/s):
+    # about 6 minutes for a 94 GB bundle, against an hours-long upload.
+    for t in manifest["tables"]:
+        with (release / t["path"]).open("rb") as f:
+            if hashlib.file_digest(f, "sha256").hexdigest() != t["sha256"]:
+                raise SystemExit(f"{release}/{t['path']} does not match its manifest.json "
+                                 "sha256; re-publish and re-gate this bundle")
 
     tables = [{**t, "bytes": (release / t["path"]).stat().st_size} for t in manifest["tables"]]
     generated = {

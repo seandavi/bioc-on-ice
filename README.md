@@ -401,11 +401,11 @@ uv run bioconice hf-push --release release/          # dry run
 uv run bioconice hf-push --release release/ --apply  # seandavis/bioconice@YYYY-MM
 ```
 
-`hf-push` refuses a bundle without a matching `gate.json`, and does nothing if
-the tag already exists. The token is `HF_TOKEN`, else GSM secret
-`cdsci-huggingface-token` (project `cdsci-infra`).
-`systemd/bioconice-hf-push.{service,timer}` runs it on the first Monday of each
-month; the units are not installed yet.
+`hf-push` refuses a bundle without a matching `gate.json` or whose Parquet does
+not match the manifest sha256s, and does nothing if the tag already exists. The
+token is `HF_TOKEN`, else GSM secret `cdsci-huggingface-token` (project
+`cdsci-infra`). `systemd/bioconice-hf-push.{service,timer}` runs it on the
+Monday after each month's first Sunday; the units are not installed yet.
 
 ## Acceptance
 
