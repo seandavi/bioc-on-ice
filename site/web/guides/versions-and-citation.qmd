@@ -21,12 +21,12 @@ HTTPS. The monthly releases are the long-term archive and the version to cite.
 Download one, then query it locally.
 
 ::: callout-note
-Only the newest 4 dated releases are kept. Releases are still made by hand;
+`v2026-11-01` is the first official release: the first to pass the release
+gate. Earlier, ungated releases were removed. It is also the first monthly
+Hugging Face release (`2026-11`). Only the newest 4 dated releases are kept;
 the weekly schedule
-([#213](https://github.com/seandavi/bioc-on-ice/issues/213)) and the monthly
-Hugging Face archive
-([#214](https://github.com/seandavi/bioc-on-ice/issues/214)) start once a
-release passes the release gate. Until then there are no monthly releases.
+([#213](https://github.com/seandavi/bioc-on-ice/issues/213)) runs from the
+following Sunday.
 :::
 
 ## Which one to use
@@ -41,7 +41,7 @@ Replace `latest/` with a date. Each dated folder's `bioconice.duckdb` reads
 its own Parquet files, so the views stay pinned too:
 
 ```{.sql .no-shell}
-ATTACH 'https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb' AS bioc (READ_ONLY);
+ATTACH 'https://data.bioconice.cancerdatasci.org/v2026-11-01/bioconice.duckdb' AS bioc (READ_ONLY);
 ```
 
 To see which dates are available, open [Releases](../releases.qmd) or the

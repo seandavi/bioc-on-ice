@@ -210,7 +210,7 @@ ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bio
 `bioconice.duckdb` holds only views, one per table, named as before
 (`bioc.annotation.gene`), over the release's Parquet files. `latest/` moves
 with each release; pin one by its dated folder
-(`https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb`).
+(`https://data.bioconice.cancerdatasci.org/v2026-11-01/bioconice.duckdb`).
 Only the newest 4 dated folders are kept (plus the one just uploaded, if it
 is older), about four weeks once releases go weekly; a monthly archive on
 Hugging Face, tagged `YYYY-MM`, becomes the copy to cite

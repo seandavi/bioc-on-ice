@@ -12,7 +12,7 @@ The server attaches the public release
 (`https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb`, ADR-0014)
 read-only and reads table docs and row counts from that folder's
 `manifest.json`. Set `BIOCONICE_RELEASE_URL` to a dated folder
-(`.../v2026-10-31`) to pin one release. Before #193 it went through icegate;
+(`.../v2026-11-01`) to pin one release. Before #193 it went through icegate;
 that is what the 2026-09-18 notes below verified.
 
 ```sh
