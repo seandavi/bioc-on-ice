@@ -25,7 +25,7 @@ ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bio
 
 `latest/` moves with each release. For reproducible work, pin a dated release
 instead, e.g. `https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb`.
-Dated releases are kept for 30 days; the list is at
+Only the last 4 dated releases are kept, about four weeks; the list is at
 <https://bioconice.cancerdatasci.org/releases>.
 
 Each table is also a plain Parquet file that any Parquet reader can open:

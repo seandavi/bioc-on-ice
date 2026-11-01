@@ -1,8 +1,6 @@
 """`bioconice upload`: a bundle into a local directory standing in for the R2 bucket, offline."""
 
 import json
-from datetime import date
-
 import duckdb
 import pytest
 from fsspec.implementations.local import LocalFileSystem
@@ -28,7 +26,9 @@ def _bundle(tmp_path):
 
 def _bucket(tmp_path):
     bucket = tmp_path / "bucket"
-    for d in ("v2026-09-01", "v2026-09-30", "v2026-10-29", "vnotadate", "latest"):
+    # weekly releases plus a one-off (10-29); with v{RELEASE} that is 6 dated folders
+    for d in ("v2026-10-04", "v2026-10-11", "v2026-10-18", "v2026-10-25", "v2026-10-29",
+              "vnotadate", "latest"):
         (bucket / d).mkdir(parents=True)
         (bucket / d / "manifest.json").write_text("{}")
     return bucket
@@ -36,8 +36,7 @@ def _bucket(tmp_path):
 
 def test_each_folder_reads_its_own_parquet_and_manifest_goes_last(tmp_path, capsys):
     bucket = _bucket(tmp_path)
-    upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True,
-                  today=date(2026, 10, 30))
+    upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True)
 
     for folder in (f"v{RELEASE}", "latest"):
         url = f"{upload.PUBLIC_URL}/{folder}/annotation/gene.parquet"
@@ -52,19 +51,20 @@ def test_each_folder_reads_its_own_parquet_and_manifest_goes_last(tmp_path, caps
     puts = [line.split()[1] for line in capsys.readouterr().out.splitlines() if line.startswith("put")]
     assert puts[4] == f"{bucket}/v{RELEASE}/manifest.json" and puts[-1] == f"{bucket}/latest/manifest.json"
     assert all("/latest/" not in p for p in puts[:5]) and all("/latest/" in p for p in puts[5:])
-    # 30 days before 2026-10-30 is 2026-09-30: only the folder before that goes
+    # keep 4 of 6, the one-off counted; latest/ and non-dated names are untouched
     assert sorted(p.name for p in bucket.iterdir()) == [
-        "latest", "v2026-09-30", "v2026-10-29", f"v{RELEASE}", "vnotadate"]
+        "latest", "v2026-10-18", "v2026-10-25", "v2026-10-29", f"v{RELEASE}", "vnotadate"]
 
 
 def test_dry_run_writes_nothing(tmp_path, capsys):
     bucket = _bucket(tmp_path)
     before = sorted(p.relative_to(bucket) for p in bucket.rglob("*"))
-    upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), today=date(2026, 10, 30))
+    upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket))
 
     assert sorted(p.relative_to(bucket) for p in bucket.rglob("*")) == before
     out = capsys.readouterr().out
-    assert f"delete {bucket}/v2026-09-01/" in out and "v2026-09-30/" not in out
+    assert [ln for ln in out.splitlines() if ln.startswith("delete")] == [
+        f"delete {bucket}/v2026-10-04/", f"delete {bucket}/v2026-10-11/"]
     assert out.count("put ") == 10
 
 
@@ -74,7 +74,7 @@ def test_a_completed_dated_release_of_other_files_is_never_overwritten(tmp_path)
     other = {"release": RELEASE, "tables": [{"path": "annotation/gene.parquet", "sha256": "other"}]}
     (bucket / f"v{RELEASE}" / "manifest.json").write_text(json.dumps(other))
     with pytest.raises(SystemExit, match="completed release of other files"):
-        upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+        upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True)
     assert json.loads((bucket / f"v{RELEASE}" / "manifest.json").read_text()) == other
     assert not (bucket / "latest" / "views.sql").exists()
 
@@ -89,19 +89,27 @@ def test_an_interrupted_latest_upload_is_finished(tmp_path, capsys, monkeypatch)
         real(fs, root, bundle, manifest, folder, apply)
     monkeypatch.setattr(upload, "_folder", fail_on_latest)
     with pytest.raises(OSError):
-        upload.upload(bundle, BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+        upload.upload(bundle, BUCKET_FS, str(bucket), apply=True)
     monkeypatch.setattr(upload, "_folder", real)
     dated = (bucket / f"v{RELEASE}" / "manifest.json").read_text()
     capsys.readouterr()
 
-    upload.upload(bundle, BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+    upload.upload(bundle, BUCKET_FS, str(bucket), apply=True)
     assert (bucket / f"v{RELEASE}" / "manifest.json").read_text() == dated
     assert json.loads((bucket / "latest" / "manifest.json").read_text())["release"] == RELEASE
     assert f"/v{RELEASE}/" not in "".join(ln for ln in capsys.readouterr().out.splitlines()
                                            if ln.startswith("put"))
+
+
+def test_the_release_being_uploaded_is_kept_even_if_older(tmp_path):
+    bucket = _bucket(tmp_path)
+    assert upload._expired(BUCKET_FS, str(bucket), "v2026-10-01", keep=2) == [
+        "v2026-10-04", "v2026-10-11", "v2026-10-18"]
+
+
 def test_an_interrupted_dated_upload_is_retried(tmp_path):
     bucket = _bucket(tmp_path)
     (bucket / f"v{RELEASE}" / "annotation").mkdir(parents=True)
     (bucket / f"v{RELEASE}" / "annotation" / "gene.parquet").write_text("partial")
-    upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+    upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True)
     assert json.loads((bucket / f"v{RELEASE}" / "manifest.json").read_text())["release"] == RELEASE

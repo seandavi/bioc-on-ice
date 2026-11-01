@@ -207,8 +207,8 @@ def main():
     up.add_argument("--release", type=Path, required=True, metavar="DIR",
                     help="bundle directory written by `bioconice publish`")
     up.add_argument("--apply", action="store_true", help="write to the bucket (default: print the plan)")
-    up.add_argument("--retention-days", type=int, default=30,
-                    help="prune v{date}/ folders older than this (default: 30)")
+    up.add_argument("--keep", type=int, default=4,
+                    help="keep the newest N v{date}/ folders, this release included (default: 4)")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
@@ -219,7 +219,7 @@ def main():
     if args.cmd == "upload":
         from . import upload
         upload.upload(args.release, upload.r2_filesystem(), apply=args.apply,
-                      retention_days=args.retention_days)
+                      keep=args.keep)
         return
 
     if args.cmd == "publish":
