@@ -125,7 +125,7 @@ npm run typecheck
 quarto render web      # the pages the Worker serves
 npx wrangler dev       # local Worker, real bucket (remote R2 binding)
 npx wrangler login
-npx wrangler deploy
+npm run deploy         # quarto render web && wrangler deploy
 ```
 
 CI runs the tests and typecheck (`site` job) and renders the pages (`docs`

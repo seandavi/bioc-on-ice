@@ -168,18 +168,23 @@ Loading releases…
     return d;
   }
 
+  // Weekly renders as soon as R2 answers; a slow Hugging Face never holds it up.
   async function main() {
-    const [listing, monthly] = await Promise.all([getJson(DATA), monthlyTags().catch(() => [])]);
+    const monthly = monthlyTags().catch(() => []);
+    const listing = await getJson(DATA);
     const dated = listing.directories.filter((d) => /^v\d{4}-\d{2}-\d{2}\/$/.test(d)).sort().reverse();
+    const monthlyBody = el("div", {}, "Loading monthly releases…");
     root.replaceChildren(
       el("h2", { id: "weekly" }, "Weekly (query in place)"),
       release("latest/", "the newest release", () => r2Folder("latest/")),
       ...dated.map((d) => release(d, "", () => r2Folder(d))),
       el("h2", { id: "monthly" }, "Monthly (download and cite)"),
-      ...(monthly.length
-        ? monthly.map((t) => release(t, `· ${HF}@${t}`, () => hfRelease(t)))
-        : [el("p", {}, "No monthly releases yet.")]),
+      monthlyBody,
     );
+    const tags = await monthly;
+    monthlyBody.replaceChildren(...(tags.length
+      ? tags.map((t) => release(t, `· ${HF}@${t}`, () => hfRelease(t)))
+      : [el("p", {}, "No monthly releases yet.")]));
   }
   main().catch((e) => root.replaceChildren(el("p", { class: "text-danger" }, `Couldn't load the release list: ${e.message}`)));
 })();
