@@ -1,0 +1,80 @@
+---
+title: Ask an assistant (MCP)
+description: bioconice-mcp gives an MCP-capable assistant read-only SQL access to the public release. It runs on your machine, with no account and no token.
+---
+
+`bioconice-mcp` is a [Model Context Protocol](https://modelcontextprotocol.io)
+server. It gives an AI assistant the same read-only access as a DuckDB
+`ATTACH` on the release. The assistant can list tables, read column docs,
+run guarded SQL and adapt worked recipes.
+
+The server runs locally over stdio. Your assistant starts it as a subprocess,
+and queries run on your machine, in DuckDB, against the public
+`https://data.bioconice.cancerdatasci.org/latest/` release. No hosted endpoint
+is offered: bioc-on-ice publishes data and does not run queries for you.
+
+You need [`uv`](https://docs.astral.sh/uv/) installed. It provides `uvx`.
+
+## Install
+
+### Claude Code
+
+```bash
+claude mcp add bioconice -- uvx --from git+https://github.com/seandavi/bioc-on-ice bioconice-mcp
+```
+
+This writes to Claude Code's config only (`~/.claude.json`). Add
+`--scope project` to write the project's `.mcp.json` instead, so everyone
+working in that repository gets the server.
+
+### Claude Desktop
+
+Add the server to `claude_desktop_config.json` (Settings → Developer → Edit
+Config; on macOS,
+`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{"mcpServers": {"bioconice": {"command": "/absolute/path/to/uvx", "args": ["--from", "git+https://github.com/seandavi/bioc-on-ice", "bioconice-mcp"]}}}
+```
+
+Use the path that `which uvx` prints for `command`. Desktop is a GUI app that
+does not inherit your shell's `PATH`, so a bare `uvx` fails with
+`spawn uvx ENOENT`. Quit Desktop fully and reopen it to load the change. The
+server's log is `~/Library/Logs/Claude/mcp-server-bioconice.log`.
+
+Claude Code and Claude Desktop keep separate configs. Adding the server to one
+does not add it to the other.
+
+### Any other MCP client
+
+Any client that launches stdio servers can run the same command:
+
+```bash
+uvx --from git+https://github.com/seandavi/bioc-on-ice bioconice-mcp
+```
+
+To pin a dated release instead of `latest/`, set
+`BIOCONICE_RELEASE_URL=https://data.bioconice.cancerdatasci.org/v2026-11-01`
+in the server's environment (see [Versions and
+citation](versions-and-citation.qmd)).
+
+## Tools
+
+The assistant reads these descriptions itself. This list is for you.
+
+| Tool | What it returns |
+|---|---|
+| `list_tables(namespace="")` | Every table in the release, or one namespace's: namespace, table, comment, row count and business key. The assistant calls it first. |
+| `describe_table(table)` | One table's columns: type and doc from the release's `manifest.json`, plus the Bioregistry identifier prefix, coordinate convention and business-key membership declared in biocOnIce's schemas. `table` is `namespace.table`, e.g. `annotation.ncbi__gene`. |
+| `resolve_release(...)` | A release id and its `valid_from`/`valid_to` predicate, from a release id, a source version (`ensembl=`, `icite=`, `ncbi_date=`, or `source=` with `source_version=`). An unknown version errors with the list of known ones. The release holds current rows only, so a past release's predicate returns only rows still current today. |
+| `query(sql, limit=1000, current=False)` | `columns`, `rows`, `row_count` and `truncated`. Only one `SELECT` or `WITH` statement is accepted. Write statements, `ATTACH`, `COPY`, `INSTALL`/`LOAD`, `PRAGMA`, `SET` and a second statement are all rejected before DuckDB sees them. `limit` defaults to 1000 and must be 1–10000 (anything else is an error); a result with more rows than `limit` comes back truncated, with `truncated: true`. `current=True` keeps only current rows, so the SELECT list must include `valid_to`. Tables are named `b.<namespace>.<table>`. |
+| `recipes()` | Worked SQL for common joins, each run against live data: gene → citing literature, datasets by cell-type rollup (a recursive `is_a` closure), gene models at a release, one taxon's coverage. |
+
+It also serves one resource, `bioconice://docs/{table}`: the
+`describe_table` output as Markdown, plus the `ATTACH` line.
+
+## Example prompts
+
+- "Using bioconice, how many papers cite the PubMed papers NCBI links to human TP53?"
+- "Which human blood datasets carry T cells or any T cell subtype? Walk the Cell Ontology, don't list terms by hand."
+- "Which tables have Ensembl gene coordinates, and are they 0- or 1-based?"

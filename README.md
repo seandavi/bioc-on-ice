@@ -188,7 +188,7 @@ Serving is the public release on R2 ([Query it](#query-it)), static files
 with **anonymous public read** — no token needed. The Iceberg catalog behind
 icegate still holds the Type-2 history until phase 2 of #187 retires it.
 Browse the release — tables, column docs, row counts, copyable queries and an
-in-browser query box — at https://bioconice-explorer.seandavi.workers.dev.
+in-browser query box — at https://bioconice.cancerdatasci.org/explorer/.
 
 Not yet: the `ensembl` row of the release manifest (see below), sequence lengths,
 and everything in Milestone 2.
@@ -331,7 +331,9 @@ anonymous, read-only access the "Query it" section above describes by hand:
 `list_tables`, `describe_table` (live column docs, not a copy of them),
 `resolve_release`, a guarded `query`, and a fixed set of worked `recipes`
 (gene → citing literature, dataset by cell-type rollup, ...). No account, no
-token, same as the raw DuckDB `ATTACH`.
+token, same as the raw DuckDB `ATTACH`. The server runs locally over stdio:
+queries execute on your machine against the public release. No hosted
+endpoint is offered.
 
 **Claude Desktop** (`claude_desktop_config.json`) and **Claude Code**
 (`claude mcp add`, or `.mcp.json`) read the same shape:
@@ -346,22 +348,9 @@ For Claude Code specifically, that is also one command:
 claude mcp add bioconice -- uvx --from git+https://github.com/seandavi/bioc-on-ice bioconice-mcp
 ```
 
-The two apps keep **separate** config files, and adding the server to one does
-not add it to the other. `claude mcp add` writes Claude Code's config only
-(`~/.claude.json`). Claude Desktop reads `claude_desktop_config.json` (Settings
-→ Developer → Edit Config; on macOS,
-`~/Library/Application Support/Claude/claude_desktop_config.json`). In that
-file give `command` as the absolute path that `which uvx` prints: Desktop is a
-GUI app and does not inherit the shell's `PATH`, so a bare `uvx` fails with
-`spawn uvx ENOENT`. Quit Desktop fully and reopen it to load the change; its
-per-server log is `~/Library/Logs/Claude/mcp-server-bioconice.log`.
-
-Once the docker-compose deployment in [`mcp/`](mcp/) is live, the same
-clients can instead point at the hosted URL:
-`{"mcpServers": {"bioconice": {"url": "https://bioconice-mcp.cancerdatasci.org/mcp"}}}`
-— see [`mcp/README.md`](mcp/README.md) for the deploy steps and what was
-verified locally (docker build + a live `/health` and MCP handshake) versus
-what still needs a deploy.
+The [MCP guide](https://bioconice.cancerdatasci.org/guides/mcp.html) covers
+Claude Desktop's config (it needs an absolute `uvx` path), each tool and what
+it returns, and example prompts.
 
 ## Develop
 

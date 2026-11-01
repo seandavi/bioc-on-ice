@@ -11,10 +11,14 @@ OnFailure=ntfy-notify@%N.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/home/davsean/Documents/git/bioc-on-ice
+# A dedicated clone, reset to origin/main before every run: never the working
+# checkout, whose branch and local edits would otherwise ship in a release.
+WorkingDirectory=%h/Documents/git/bioc-on-ice-release
+ExecStartPre=/usr/bin/git fetch -q origin
+ExecStartPre=/usr/bin/git checkout -q --detach origin/main
 # HF_TOKEN, if set here; otherwise hf-push reads GSM secret cdsci-huggingface-token
 # (project cdsci-infra) through gcloud.
-EnvironmentFile=-/home/davsean/Documents/git/bioc-on-ice/.env
+EnvironmentFile=-%h/Documents/git/bioc-on-ice-release/.env
 # The Xet upload stages chunks under TMPDIR; /tmp on this host is small and noexec.
 Environment=TMPDIR=/data/davsean/tmp
 # A symlink scripts/release.sh (#213) repoints to each bundle it has gated and uploaded. No gate.json there (the release failed the gate) fails this
