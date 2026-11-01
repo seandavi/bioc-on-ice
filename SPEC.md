@@ -870,6 +870,17 @@ Bioconductor release cites the nearest `YYYY-MM` tag. Monthly releases are
 downloaded and queried locally, never queried in place through `hf://`,
 because anonymous Hugging Face reads are rate-limited (HTTP 429).
 
+**Publish gate.** The public release bundle (ADR-0014) MUST pass `bioconice gate`
+before it is uploaded. The gate compares the bundle with the previous published
+release: every table's columns and types must be unchanged, and its row count
+must stay within its contract's bounds of the previous count. A table with a
+`TableContract` must also have a non-null, unique key and full coverage of the
+columns it declares as joins. A table without a contract fails the gate unless
+it is in the previous release and listed as exempt (#208). The reference MUST be
+an older release than the bundle, and the bundle's `manifest.json` MUST match its
+Parquet (row counts, columns, types). The order is publish, gate, dry-run upload,
+upload `--apply`.
+
 **Archive rule.** The Iceberg tables of a source keep their `valid_from` /
 `valid_to` rows only until the source moves to dataset releases, then receive
 no further writes and remain as a read-only archive.

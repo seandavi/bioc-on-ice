@@ -11,6 +11,7 @@ from . import complexportal
 from . import encode
 from . import ensembl
 from . import eqtlcatalogue
+from . import gate
 from . import gwas_catalog
 from . import hgnc
 from . import icite
@@ -24,7 +25,6 @@ from . import ncbi_go
 from . import ncbi_orthologs
 from . import ncbi_pubmed
 from . import obo
-from . import parity
 from . import publish
 from . import pubtator3
 from . import rnacentral
@@ -193,10 +193,13 @@ def main():
     pb.add_argument("--only", nargs="+", metavar="SCHEMA.TABLE",
                     help="build just these tables (default: every published table)")
 
-    pa = sub.add_parser("parity",
-                        help="check a release bundle against the live catalog: row counts and the "
-                             "README queries; exits non-zero on any mismatch")
-    pa.add_argument("--release", type=Path, required=True, help="release directory built by publish")
+    ga = sub.add_parser("gate",
+                        help="check a release bundle against the previous published release: "
+                             "columns, row counts, keys, joins; exits non-zero on a failed check")
+    ga.add_argument("--release", type=Path, required=True, metavar="DIR",
+                    help="bundle directory written by `bioconice publish`")
+    ga.add_argument("--reference", default=gate.DEFAULT_REFERENCE, metavar="URL_OR_DIR",
+                    help=f"previous release, its base URL or directory (default: {gate.DEFAULT_REFERENCE})")
 
     up = sub.add_parser("upload",
                         help="upload a built release bundle to R2 v{release}/ and latest/, "
@@ -210,8 +213,8 @@ def main():
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
-    if args.cmd == "parity":
-        raise SystemExit(0 if parity.parity(publish.connect(), args.release) else 1)
+    if args.cmd == "gate":
+        raise SystemExit(0 if gate.gate(args.release, args.reference) else 1)
 
     if args.cmd == "upload":
         from . import upload
