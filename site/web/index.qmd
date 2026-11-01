@@ -54,9 +54,9 @@ column docs.
 ::: {.g-col-12 .g-col-md-6 .card .p-3}
 #### Ask an assistant {.mt-0}
 
-The [MCP server](https://github.com/seandavi/bioc-on-ice#ask-an-assistant)
-gives an AI assistant the same read-only access, hosted at
-`https://bioconice-mcp.cancerdatasci.org/mcp`.
+The [MCP server](guides/mcp.qmd)
+gives an AI assistant the same read-only access. It runs on your machine:
+`uvx --from git+https://github.com/seandavi/bioc-on-ice bioconice-mcp`.
 :::
 
 :::

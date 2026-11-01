@@ -11,28 +11,22 @@ Table comments, column docs and row counts are read from the release's own
 does not carry business keys or identifier prefixes; those come from the
 declarations in schemas.py, which the release was built from.
 
-Two transports, one implementation: `bioconice-mcp` runs stdio by default
-(for `uvx`/Claude Desktop/Claude Code); set `BIOCONICE_MCP_TRANSPORT=streamable-http`
-(what `mcp/` runs in the Cloudflare Container) to serve the same tools over
-HTTP instead.
+`bioconice-mcp` runs locally over stdio (for `uvx`/Claude Desktop/Claude
+Code): queries execute on the user's machine, in DuckDB, against the public R2
+release. There is no hosted endpoint — biocOnIce does not serve query compute.
 """
 
-import argparse
 import functools
 import json
 import logging
 import os
 import re
-import sys
 import time
 import urllib.error
 import urllib.request
 
 import duckdb
 from mcp.server.fastmcp import FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
-from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 from .schemas import TABLES as DECLARED
 
@@ -42,14 +36,7 @@ ATTACH_SQL = f"ATTACH '{RELEASE_URL}/bioconice.duckdb' AS b (READ_ONLY)"
 MAX_LIMIT = 10_000
 DEFAULT_LIMIT = 1000
 
-# The streamable-HTTP transport refuses requests whose Host it was not told about
-# (DNS-rebinding protection, HTTP 421). Behind Traefik the Host is the public
-# hostname, so it must be listed; BIOCONICE_MCP_ALLOWED_HOSTS adds more.
-ALLOWED_HOSTS = ["localhost:*", "127.0.0.1:*", "bioconice-mcp.cancerdatasci.org",
-                 *filter(None, os.environ.get("BIOCONICE_MCP_ALLOWED_HOSTS", "").split(","))]
-
 mcp = FastMCP(
-
     "bioconice",
     instructions=(
         "Bioconductor gene/transcript/exon annotation, NCBI Gene, iCite citations, "
@@ -61,9 +48,6 @@ mcp = FastMCP(
         "answer 'as of an earlier release' questions; that history lives in the frozen "
         "Iceberg archive, not here."
     ),
-    transport_security=TransportSecuritySettings(
-        allowed_hosts=ALLOWED_HOSTS,
-        allowed_origins=[f"https://{h}" for h in ALLOWED_HOSTS if ":*" not in h] + ["http://localhost:*"])
 )
 
 
@@ -388,9 +372,9 @@ RECIPES = [
 
 
 # --------------------------------------------------------------------------
-# Tool-call log: one JSON line per call on stdout — tool, arguments (truncated),
-# milliseconds, rows returned, error. Traefik logs the request; this logs what
-# the request meant. Read with `docker logs bioconice-mcp`, or ship it.
+# Tool-call log: one JSON line per call — tool, arguments (truncated),
+# milliseconds, rows returned, error. Silent unless the caller configures a
+# handler for the `bioconice.mcp` logger (never on stdout: that is the stdio channel).
 # --------------------------------------------------------------------------
 
 _log = logging.getLogger("bioconice.mcp")
@@ -579,47 +563,10 @@ def docs_resource(table: str) -> str:
     return "\n".join(lines)
 
 
-@mcp.custom_route("/health/live", methods=["GET"])
-async def live(request: Request) -> JSONResponse:
-    """Liveness: the process is up and serving. Never touches the lake, so an
-    uptime check on this tells 'our container died' apart from 'the release is unreachable'."""
-    return JSONResponse({"status": "ok"})
-
-
-@mcp.custom_route("/health", methods=["GET"])
-@mcp.custom_route("/health/ready", methods=["GET"])
-async def health(request: Request) -> JSONResponse:
-    """Readiness: the release is reachable and DuckDB can still resolve a release.
-    The compose healthcheck uses this; /health is kept as its alias."""
-    try:
-        release = max(r[0] for r in _provenance_rows())
-    except Exception as e:
-        return JSONResponse({"status": "error", "detail": str(e)}, status_code=503)
-    return JSONResponse({"status": "ok", "release": release})
-
-
 def main():
-    """Entry point for the `bioconice-mcp` console script.
-
-    Defaults to stdio (what `uvx` / Claude Desktop / Claude Code expect).
-    `--http` serves the same tools over streamable HTTP instead, plus
-    `GET /health` — that's what mcp/Dockerfile's container runs.
-    """
-    parser = argparse.ArgumentParser(prog="bioconice-mcp")
-    parser.add_argument("--http", action="store_true",
-                         help="serve streamable HTTP (with /health) instead of stdio")
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
-    args = parser.parse_args()
-
-    if args.http:
-        # One JSON line per tool call on stdout, alongside uvicorn's access lines.
-        logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout, force=True)
-        mcp.settings.host = args.host
-        mcp.settings.port = args.port
-        mcp.run(transport="streamable-http")
-    else:
-        mcp.run(transport="stdio")
+    """Entry point for the `bioconice-mcp` console script: stdio, which is what
+    `uvx` / Claude Desktop / Claude Code expect."""
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
