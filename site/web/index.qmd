@@ -1,0 +1,66 @@
+---
+title: Bioconductor annotation without the packages
+pagetitle: bioc-on-ice
+description: Biological annotation and pointers to public data resources, published as dated releases of Parquet tables that any language can query. No package, no account, no token.
+toc: false
+---
+
+[Browse the releases](releases.qmd){.btn .btn-primary .me-2 .mb-2}
+[Try it in your browser](playground.qmd){.btn .btn-outline-primary .me-2 .mb-2}
+[View on GitHub](https://github.com/seandavi/bioc-on-ice){.btn .btn-link .mb-2}
+
+Bioconductor distributes annotation as software: one versioned R package per
+organism per release. bioc-on-ice publishes the same knowledge as open tables
+that R, Python, DuckDB, a browser or an AI assistant can query directly. That
+covers gene annotation for every species at once (NCBI Gene across 51,796 taxa,
+Ensembl across 276 species), identifier mappings, GO and other ontologies,
+orthologs, interactions, pathways, GWAS associations and literature links.
+Each row names the source that asserts it, so providers sit side by side
+instead of being reconciled into one view.
+
+```sql
+-- DuckDB (CLI, R or Python): no download, no credentials
+ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bioc (READ_ONLY);
+SHOW ALL TABLES;
+```
+
+::: {.grid .mt-4}
+
+::: {.g-col-12 .g-col-md-6 .card .p-3}
+#### Get the data {.mt-0}
+
+Every table is a plain Parquet file plus a view in `bioconice.duckdb`, served
+over HTTPS with range requests. [Releases](releases.qmd) lists every version,
+its tables, sizes and row counts.
+:::
+
+::: {.g-col-12 .g-col-md-6 .card .p-3}
+#### Cite a release {.mt-0}
+
+Weekly releases are for querying in place. Monthly releases on Hugging Face
+are the permanent copy to cite. See [Versions and
+citation](guides/versions-and-citation.qmd).
+:::
+
+::: {.g-col-12 .g-col-md-6 .card .p-3}
+#### Try it in your browser {.mt-0}
+
+The [playground](playground.qmd) runs SQL against `latest/` with DuckDB-Wasm,
+and every SQL example on this site opens in the DuckDB Shell. The
+[Explorer](https://bioconice-explorer.seandavi.workers.dev) browses tables and
+column docs.
+:::
+
+::: {.g-col-12 .g-col-md-6 .card .p-3}
+#### Ask an assistant {.mt-0}
+
+The [MCP server](https://github.com/seandavi/bioc-on-ice#ask-an-assistant)
+gives an AI assistant the same read-only access, hosted at
+`https://bioconice-mcp.cancerdatasci.org/mcp`.
+:::
+
+:::
+
+Large data stays where it lives: the `resource` tables catalog datasets in
+CELLxGENE, ENCODE, BEDbase and the eQTL Catalogue and point at the original
+files. Per-source guides: [BugSigDB](sources/bugsigdb.qmd).

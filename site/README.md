@@ -5,7 +5,7 @@ serves the whole public site (#191):
 
 | URL | Serves |
 |---|---|
-| `https://bioconice.cancerdatasci.org/` | pages in `public/` (Workers static assets): landing and `/releases` |
+| `https://bioconice.cancerdatasci.org/` | the Quarto site in `web/`, rendered to `web/_site/` (Workers static assets) |
 | `https://bioconice.cancerdatasci.org/data/*` | the `data-bioconice` R2 bucket, `/data` stripped from the key |
 | `https://data.bioconice.cancerdatasci.org/*` | the same bucket at `/` |
 
@@ -26,7 +26,28 @@ a `manifest.json`. The releases page lists those folders and, when one is
 opened, its tables from `manifest.json` (`schema`, `table`, `row_count`,
 `bytes`; a missing `bytes` falls back to the bucket listing of `<schema>/`, a
 missing `row_count` shows "–"). The field names are read in one place,
-`manifestOf` in `public/releases.html`, to reconcile with the builder (#189).
+`manifestOf` in `web/releases.qmd`, to reconcile with the builder (#189).
+The same page lists the monthly Hugging Face tags (`YYYY-MM`, ADR-0016) of
+`seandavis/bioconice`, or "No monthly releases yet" until that repo exists.
+
+## The pages
+
+`web/` is a Quarto website ported from omicidx `docs/` (#215): landing page,
+releases, a DuckDB-Wasm SQL playground (OJS), the versions-and-citation guide,
+per-source pages (`sources/bugsigdb.qmd` includes `docs/bugsigdb.md`, so the
+text lives in one place) and a 404 page, with site search and light and dark
+themes (`web/theme/`: omicidx's archify structure in slate, indigo and violet).
+`web/shell-links.js` adds "Open in DuckDB Shell ↗" under every SQL block that
+isn't marked `{.sql .no-shell}`, attaching `latest/` first when the example
+doesn't `ATTACH`. Nothing executes at render time: examples are plain code,
+so rendering needs Quarto only, no R, Python or data. The explorer
+(`../explorer/`) stays its own Worker; the playground and sidebar link to it.
+
+```bash
+cd site/web
+quarto preview         # local preview, re-renders on save (no /data/: releases won't load)
+quarto render          # build _site/, which the Worker serves
+```
 
 ## Usage
 
@@ -99,13 +120,15 @@ FORMAT TabSeparated
 ```bash
 cd site
 npm ci
-npm test               # route, range, conditional and analytics unit tests
+npm test               # route, range, conditional, analytics and shell-link tests
 npm run typecheck
+quarto render web      # the pages the Worker serves
 npx wrangler dev       # local Worker, real bucket (remote R2 binding)
 npx wrangler login
 npx wrangler deploy
 ```
 
-CI runs the tests and typecheck (`site` job). Deploy waits for the first
+CI runs the tests and typecheck (`site` job) and renders the pages (`docs`
+job). Deploy waits for the first
 bundle (#192). To try the data host locally:
 `npx wrangler dev --local-upstream data.bioconice.cancerdatasci.org`.

@@ -1,0 +1,25 @@
+/*-- scss:defaults --*/
+// Slate-50 canvas, indigo-700 primary, violet-600 accent. Text colours are
+// WCAG AA (>= 4.5:1) on both the canvas and the white panel.
+$body-bg: #f8fafc;
+$body-color: #0f172a;
+$primary: #4338ca;
+$link-color: #4338ca;
+$border-color: #e2e8f0;
+$text-muted: #475569;
+$navbar-bg: #312e81;
+$navbar-fg: #e0e7ff;
+$navbar-hl: #ffffff;
+$sidebar-bg: transparent;
+$footer-bg: transparent;
+$code-block-bg: #ffffff;
+$code-color: #7c3aed;
+
+/*-- scss:rules --*/
+:root {
+  --ax-bg: #f8fafc; --ax-panel: #ffffff; --ax-border: #e2e8f0; --ax-grid-dot: #dcdff5;
+  --ax-text: #0f172a; --ax-muted: #475569; --ax-faint: #64748b;
+  --ax-primary: #4338ca; --ax-accent: #7c3aed;
+  --ax-emerald: #059669; --ax-amber: #d97706; --ax-rose: #e11d48; --ax-orange: #ea580c; --ax-slate: #64748b;
+  --ax-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(49, 46, 129, 0.06);
+}
