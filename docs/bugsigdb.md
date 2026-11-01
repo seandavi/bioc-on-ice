@@ -25,11 +25,10 @@ ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bio
 
 `latest/` moves with each release. For reproducible work, pin a dated release
 instead, e.g. `https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb`.
-The last 4 weekly releases are kept (30 days until
-[#216](https://github.com/seandavi/bioc-on-ice/issues/216) lands); for
-long-term pins use the monthly Hugging Face archive once it starts
-([#214](https://github.com/seandavi/bioc-on-ice/issues/214)). Both are listed
-at <https://bioconice.cancerdatasci.org/releases>.
+Only the newest 4 dated releases are kept (plus the one just uploaded, if it
+is older), about four weeks. For long-term pins use the monthly Hugging Face
+archive once it starts ([#214](https://github.com/seandavi/bioc-on-ice/issues/214)).
+Both are listed at <https://bioconice.cancerdatasci.org/releases>.
 
 Each table is also a plain Parquet file that any Parquet reader can open:
 

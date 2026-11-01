@@ -21,11 +21,12 @@ HTTPS. The monthly releases are the long-term archive and the version to cite.
 Download one, then query it locally.
 
 ::: callout-note
-Releases are still made by hand, and dated folders are kept 30 days. The
-weekly schedule, keep-4 retention and the monthly Hugging Face archive start
-once a release passes the release gate
-([#214](https://github.com/seandavi/bioc-on-ice/issues/214)). Until then
-there are no monthly releases.
+Only the newest 4 dated releases are kept. Releases are still made by hand;
+the weekly schedule
+([#213](https://github.com/seandavi/bioc-on-ice/issues/213)) and the monthly
+Hugging Face archive
+([#214](https://github.com/seandavi/bioc-on-ice/issues/214)) start once a
+release passes the release gate. Until then there are no monthly releases.
 :::
 
 ## Which one to use

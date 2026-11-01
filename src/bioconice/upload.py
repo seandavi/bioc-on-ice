@@ -4,15 +4,15 @@ omicidx's publish_bundle without Prefect. Each folder gets the bundle's Parquet 
 own views.sql, restore.sql and bioconice.duckdb, regenerated for that folder's public URL,
 so a pinned `v{release}/` keeps reading its own Parquet and `latest/` reads `latest/`.
 manifest.json goes last in each folder: it marks the folder complete. Then `v*/` folders
-older than the retention window are pruned. Dry-run unless `apply`: everything is built
-and listed, nothing is written to the bucket.
+other than the newest `keep` and this release are pruned (ADR-0016). Dry-run unless
+`apply`: everything is built and listed, nothing is written to the bucket.
 """
 
 import json
 import re
 import tempfile
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from pyarrow import fs as pafs
@@ -21,7 +21,7 @@ from . import publish
 
 BUCKET = "data-bioconice"
 PUBLIC_URL = "https://data.bioconice.cancerdatasci.org"
-DATED = re.compile(r"v(\d{4}-\d{2}-\d{2})")
+DATED = re.compile(r"v\d{4}-\d{2}-\d{2}")
 
 
 def r2_filesystem():
@@ -82,21 +82,31 @@ def _folder(fs, root, bundle, manifest, folder, apply):
             _put(fs, tmp / name, f"{root}/{folder}/{name}", apply)
 
 
-def _expired(fs, root, keep, retention_days, today):
-    """`v{date}` folders under `root` older than the window; `keep` never is."""
-    cutoff = today - timedelta(days=retention_days)
-    names = [i.base_name for i in fs.get_file_info(pafs.FileSelector(root))
-             if i.type == pafs.FileType.Directory]
-    return sorted(n for n in names if (m := DATED.fullmatch(n)) and n != keep
-                  and datetime.strptime(m[1], "%Y-%m-%d").date() < cutoff)
+def _dated(name):
+    """True for `v{YYYY-MM-DD}` naming a real calendar date; anything else is never pruned."""
+    try:
+        return bool(DATED.fullmatch(name)) and bool(datetime.strptime(name[1:], "%Y-%m-%d"))
+    except ValueError:
+        return False
+
+
+def _expired(fs, root, current, keep):
+    """`v{date}` folders under `root` beyond the newest `keep`, `current` counted; `current` never is."""
+    names = {i.base_name for i in fs.get_file_info(pafs.FileSelector(root))
+             if i.type == pafs.FileType.Directory}
+    newest = sorted(filter(_dated, names | {current}), reverse=True)
+    return sorted(n for n in newest[keep:] if n != current)
 
 
 def _files(manifest):
     return sorted((t["path"], t.get("sha256")) for t in manifest["tables"])
 
 
-def upload(bundle: Path, fs, root=BUCKET, apply=False, retention_days=30, today=None):
+def upload(bundle: Path, fs, root=BUCKET, apply=False, keep=4):
     """Upload `bundle` (a `bioconice publish` directory) to `v{release}/` and `latest/`, then prune."""
+    # keep < 1 would prune every release but this one, and a negative slice the wrong ones.
+    if not isinstance(keep, int) or keep < 1:
+        raise SystemExit(f"--keep must be an integer >= 1, got {keep!r}")
     manifest = json.loads((bundle / "manifest.json").read_text())
     dated = f"v{manifest['release']}"
     # A completed dated release (manifest.json present) is immutable: users pin it and the next
@@ -114,7 +124,7 @@ def upload(bundle: Path, fs, root=BUCKET, apply=False, retention_days=30, today=
         folders = ("latest",)
     for folder in folders:
         _folder(fs, root, bundle, manifest, folder, apply)
-    for name in _expired(fs, root, dated, retention_days, today or datetime.now(UTC).date()):
+    for name in _expired(fs, root, dated, keep):
         print(f"delete {root}/{name}/", flush=True)
         if apply:
             fs.delete_dir(f"{root}/{name}")
