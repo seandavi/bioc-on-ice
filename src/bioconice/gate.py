@@ -16,20 +16,60 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
-from cdsci.lake.contracts import DatasetContract
+from cdsci.lake.contracts import (
+    ColumnContract,
+    DatasetContract,
+    TableContract,
+    TemporalModel,
+)
 from cdsci.lake.publish.release import AcceptanceCheck
 from cdsci.lake.publish.verify import verify_release_over_release
+from pyiceberg.types import ListType
 
 from .publish import PUBMED_ARTICLE, _lit
 from .release import BUGSIGDB
+from .schemas import TABLES as DECLARED
 from .upload import PUBLIC_URL
 
 README = Path(__file__).parents[2] / "README.md"
+_ARROW = {"string": "string", "int": "int32", "long": "int64", "boolean": "bool",
+          "double": "double"}
+
+
+def _arrow(t):
+    return f"list<{_arrow(t.element_type)}>" if isinstance(t, ListType) else _ARROW[str(t)]
+
+
+def declared_contract(name, primary_key=None, references=None, license=None):
+    """A TableContract from the table's declaration in schemas.py: its comment, columns,
+    docs and licence (`license` where it declares none), keyed by `primary_key` (default:
+    its business key)."""
+    d = DECLARED[name]
+    key = tuple(primary_key or d.business_key)
+    return TableContract(
+        name=name, description=d.comment, grain=f"one row per ({', '.join(key)})",
+        primary_key=key, temporal_model=TemporalModel.UPSERT_LATEST_SNAPSHOT,
+        owner="bioc-on-ice", license=license or d.properties["bioc.license"],
+        columns=tuple(ColumnContract(f.name, _arrow(f.field_type), f.doc or "", not f.required)
+                      for f in d.schema.fields),
+        references=references or {})
+
+
 # The bundle's own tables that have a contract outside a dataset release of their own.
 BUNDLE = DatasetContract(
     id="bioconice", title="biocOnIce release bundle",
     description="Tables of the bioconice publish bundle", publisher="bioc-on-ice",
-    tables={PUBMED_ARTICLE.name: PUBMED_ARTICLE})
+    tables={c.name: c for c in (
+        PUBMED_ARTICLE,
+        # Read from cdsci-lake since #183 step 7: one version per source, so the raw
+        # tables are keyed without their version column.
+        declared_contract("raw.hgnc__complete_set", ("hgnc_id",)),
+        declared_contract("annotation.hgnc__gene"),
+        declared_contract("raw.complexportal__complex", ("complex_ac",)),
+        declared_contract("annotation.complexportal__complex"),
+        declared_contract("annotation.complexportal__participant", references={
+            "complex_ac": "annotation.complexportal__complex.complex_ac"}),
+    )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
 DEFAULT_REFERENCE = f"{PUBLIC_URL}/latest"
@@ -43,11 +83,8 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.cellosaurus__cell_line",
     "annotation.cellosaurus__disease",
     "annotation.cellosaurus__xref",
-    "annotation.complexportal__complex",
-    "annotation.complexportal__participant",
     "annotation.exon",
     "annotation.gene",
-    "annotation.hgnc__gene",
     "annotation.icite__citation",
     "annotation.icite__metrics",
     "annotation.icite__publication",
@@ -75,7 +112,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.bugsigdb__full_dump",
     "raw.cellosaurus__release",
     "raw.cellxgene__dataset",
-    "raw.complexportal__complex",
     "raw.encode__experiment",
     "raw.encode__file",
     "raw.ensembl__gtf",
@@ -83,7 +119,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.eqtlcatalogue__tabix_ftp_paths",
     "raw.gwas_catalog__associations",
     "raw.gwas_catalog__studies",
-    "raw.hgnc__complete_set",
     "raw.icite__metadata",
     "raw.intact__mitab",
     "raw.metadata",

@@ -103,6 +103,28 @@ def land_raw(cat, release, url=None):
     return version, n
 
 
+def _gene(src):
+    """annotation.hgnc__gene's columns, from a table shaped like raw.hgnc__complete_set."""
+    return f"""
+        SELECT hgnc_id, {TAXON} AS taxon_id, symbol, name, locus_group, locus_type, status,
+               location, alias_symbol, alias_name, prev_symbol, prev_name,
+               date_approved_reserved, date_symbol_changed, date_name_changed
+        FROM {src}
+    """
+
+
+# Read from cdsci-lake (#183 step 7): lake.hgnc.gene is raw.hgnc__complete_set without
+# landed_in, one HGNC version at a time. landed_in and valid_from are frozen at the last
+# Iceberg load ('2026.09', every current row) and valid_to is NULL, so the released schema
+# is unchanged until the schema-change release drops all three (#222).
+FROZEN_RELEASE = "'2026.09'"
+RELEASE = {
+    "raw.hgnc__complete_set": f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.hgnc.gene",
+    "annotation.hgnc__gene": f"SELECT *, {FROZEN_RELEASE} AS valid_from, NULL::VARCHAR AS valid_to "
+                             f"FROM ({_gene('lake.hgnc.gene')})",
+}
+
+
 def transform(cat, release, version):
     """Phase 2: HGNC's nomenclature record per gene, and its cross-references.
 
@@ -116,12 +138,7 @@ def transform(cat, release, version):
     # date_modified is left in raw on purpose: it moves when ANY upstream field
     # changes, so carrying it would open a new version row for edits to columns
     # this table does not have.
-    gene = con.sql(f"""
-        SELECT hgnc_id, {TAXON} AS taxon_id, symbol, name, locus_group, locus_type, status,
-               location, alias_symbol, alias_name, prev_symbol, prev_name,
-               date_approved_reserved, date_symbol_changed, date_name_changed
-        FROM raw
-    """).to_arrow_table()
+    gene = con.sql(_gene("raw")).to_arrow_table()
 
     # HGNC ids keep their 'HGNC:' prefix, the form ncbi.transform already writes
     # under this namespace, so the two writers' rows join. omim_id is the one

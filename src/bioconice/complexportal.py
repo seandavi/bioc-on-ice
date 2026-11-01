@@ -141,15 +141,13 @@ NAMESPACE = f"""CASE WHEN id LIKE 'CHEBI:%' THEN 'CHEBI' WHEN id LIKE 'CPX-%' TH
                      WHEN regexp_matches(id, '{UNIPROT}') THEN 'UNIPROT' END"""
 
 
-def transform(cat, release, version):
-    """Phase 2: the complex record, and its participants one per row."""
-    con = duckdb.connect()
-    con.register("raw", cat.load_table("raw.complexportal__complex").scan(
-        row_filter=EqualTo("complexportal_version", version)).to_arrow())
+def _complex(src):
+    """annotation.complexportal__complex, from a table shaped like raw.complexportal__complex.
 
-    # 'ECO:0000353(physical interaction evidence …)' and 'psi-mi:"MI:0469"(IntAct)'
-    # are split into id and label; the '|'-lists stay as published (module docstring).
-    complex_ = con.sql(r"""
+    'ECO:0000353(physical interaction evidence …)' and 'psi-mi:"MI:0469"(IntAct)' are
+    split into id and label; the '|'-lists stay as published (module docstring).
+    """
+    return rf"""
         SELECT complex_ac, taxonomy_identifier::INTEGER AS taxon_id, recommended_name AS name,
                aliases, file LIKE '%\_predicted.tsv' ESCAPE '\' AS predicted,
                regexp_extract(evidence_code, '^(ECO:[0-9]+)', 1) AS evidence_code,
@@ -158,15 +156,20 @@ def transform(cat, release, version):
                cross_references, description, complex_properties AS properties,
                ligand, disease, agonist, antagonist, comment,
                regexp_extract(source, '\((.*)\)$', 1) AS curated_by
-        FROM raw
-    """).to_arrow_table()
+        FROM {src}
+    """
 
-    # 'P04637(0)|[P02400,P05319](1)|CHEBI:29105(2)': '|' separates participants,
-    # '(n)' is the stoichiometry with (0) upstream's 'unknown', '[a,b]' a molecule
-    # set. A token that is not 'id(n)' yields a NULL id and fails the cast rather
-    # than vanishing. No taxon here: the complex's is the pathogen's for a
-    # host-pathogen complex, so it is not every participant's.
-    participant = con.sql(rf"""
+
+def _participant(src):
+    """annotation.complexportal__participant, one row per (complex, molecule).
+
+    'P04637(0)|[P02400,P05319](1)|CHEBI:29105(2)': '|' separates participants,
+    '(n)' is the stoichiometry with (0) upstream's 'unknown', '[a,b]' a molecule
+    set. A token that is not 'id(n)' yields a NULL id and fails the cast rather
+    than vanishing. No taxon here: the complex's is the pathogen's for a
+    host-pathogen complex, so it is not every participant's.
+    """
+    return rf"""
         SELECT complex_ac, id AS participant_id, {NAMESPACE} AS participant_namespace,
                NULLIF(stoichiometry, 0) AS stoichiometry,
                CASE WHEN token LIKE '[%' THEN token END AS molecule_set
@@ -175,8 +178,34 @@ def transform(cat, release, version):
               FROM (SELECT complex_ac,
                            NULLIF(regexp_extract(p, '^(.+)\([0-9]+\)$', 1), '') AS token,
                            TRY_CAST(regexp_extract(p, '\(([0-9]+)\)$', 1) AS INTEGER) AS stoichiometry
-                    FROM (SELECT complex_ac, unnest(str_split(participants, '|')) AS p FROM raw)))
-    """).to_arrow_table()
+                    FROM (SELECT complex_ac, unnest(str_split(participants, '|')) AS p FROM {src})))
+    """
+
+
+# Read from cdsci-lake (#183 step 7): lake.complexportal.complex is raw.complexportal__complex
+# without landed_in, one release at a time. landed_in and valid_from are frozen at the last
+# Iceberg load ('2026.09', every current row) and valid_to is NULL, so the released schema is
+# unchanged until the schema-change release drops all three (#222).
+FROZEN_RELEASE = "'2026.09'"
+_CURRENT = f"{FROZEN_RELEASE} AS valid_from, NULL::VARCHAR AS valid_to"
+RELEASE = {
+    "raw.complexportal__complex":
+        f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.complexportal.complex",
+    "annotation.complexportal__complex":
+        f"SELECT *, {_CURRENT} FROM ({_complex('lake.complexportal.complex')})",
+    "annotation.complexportal__participant":
+        f"SELECT *, {_CURRENT} FROM ({_participant('lake.complexportal.complex')})",
+}
+
+
+def transform(cat, release, version):
+    """Phase 2: the complex record, and its participants one per row."""
+    con = duckdb.connect()
+    con.register("raw", cat.load_table("raw.complexportal__complex").scan(
+        row_filter=EqualTo("complexportal_version", version)).to_arrow())
+
+    complex_ = con.sql(_complex("raw")).to_arrow_table()
+    participant = con.sql(_participant("raw")).to_arrow_table()
 
     # Complex Portal is these tables' only writer, so its scope is the whole table.
     return {

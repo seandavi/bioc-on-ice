@@ -173,3 +173,10 @@ def test_every_column_is_documented(cat, tsv):
         assert table.properties.get("comment"), identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+def test_release_selects_over_the_lake_reproduce_the_lander(cat, tsv, release_matches_lander):
+    """#183 step 7: the release reads lake.hgnc.gene, not these Iceberg tables."""
+    hgnc.ingest(cat, REL, tsv)
+    release_matches_lander(cat, {"lake.hgnc.gene": "raw.hgnc__complete_set"}, hgnc.RELEASE,
+                           "2026.09")
