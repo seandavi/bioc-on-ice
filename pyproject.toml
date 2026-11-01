@@ -15,6 +15,9 @@ dependencies = [
     # with an fsspec filesystem serving the not-yet-uploaded https URLs from the local
     # bundle. Already installed (pyiceberg needs it); declared because we import it.
     "fsspec",
+    # hf.py (#214, ADR-0016): the monthly Hugging Face archive is one create_commit + tag,
+    # uploaded through Xet (hf-xet comes with it), as omicidx's hf_release does. Same pin.
+    "huggingface-hub>=2.2.0",
 ]
 
 [tool.uv.sources]
