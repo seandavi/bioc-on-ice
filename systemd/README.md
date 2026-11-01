@@ -32,6 +32,12 @@ one from `cdsci-lake/systemd/` (already installed on onclappc02) and is not
 copied here. The alert title is `cdsci-lake job failed:
 bioconice-release.service`.
 
+The notifier fetches its ntfy token from GSM through the same `gcloud` login
+the release uses, so an expired login fails the release *and* silences its
+alert. A missing alert is not a clean run: check `systemctl --user status
+bioconice-release.service` and the notifier's own journal, `journalctl --user
+-u ntfy-notify@bioconice-release.service`.
+
 ## Install (by hand: a live-system change, not CI)
 
 ```bash
@@ -40,6 +46,7 @@ cp systemd/bioconice-release.{service,timer} ~/.config/systemd/user/
 # once, shared, if not already present:
 cp ~/Documents/git/cdsci-lake/systemd/ntfy-notify@.service ~/.config/systemd/user/
 systemctl --user daemon-reload
+systemctl --user start ntfy-notify@bioconice-release.service   # a test alert: check it arrives on cdsci-lake-ops
 systemctl --user start bioconice-release.service     # one real run, end to end, first
 journalctl --user -u bioconice-release.service -f
 systemctl --user enable --now bioconice-release.timer
@@ -56,14 +63,21 @@ the repo moves and systemd silently stops loading it. Re-copy and
 ## Recovery
 
 A failed run leaves its bundle in `/data/davsean/tmp/bioconice-release-<date>/`.
+Only one run at a time: a run started while another holds
+`$TMPDIR/bioconice-release.lock` exits 1 (and alerts) without touching anything.
 
 - **Upload failed** (network, R2): re-run `systemctl --user start
-  bioconice-release.service`. A complete bundle (one with `manifest.json`) is
-  not rebuilt, and `upload` never overwrites a completed `v<date>/`: it
-  finishes only `latest/` if that was interrupted.
+  bioconice-release.service`. A complete bundle (one whose `manifest.json`
+  parses) is not rebuilt, and `upload` never overwrites a completed
+  `v<date>/`: it skips any folder already complete with this bundle and
+  finishes the rest.
+- **Pruning failed** (after `latest/` was uploaded): a re-run sees `latest/`
+  is today's and re-runs only `upload --apply`, which skips both folders and
+  prunes. If the bundle is gone, next week's run prunes instead.
 - **Gate failed**: read the report in the journal. A re-run gates the same
   bundle again. If the cause is in the data, fix it and delete the bundle
   directory so the re-run rebuilds it.
-- **Publish failed**: the bundle has no `manifest.json`, so a re-run rebuilds it.
-
-Once `latest/` is that day's release, a re-run does nothing.
+- **Publish failed or was killed**: the bundle has no `manifest.json` (publish
+  removes a stale one first and writes the new one atomically, last), so a
+  re-run rebuilds it. A truncated `manifest.json` from an older publish does
+  not parse and is rebuilt too.

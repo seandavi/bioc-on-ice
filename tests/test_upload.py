@@ -105,3 +105,13 @@ def test_an_interrupted_dated_upload_is_retried(tmp_path):
     (bucket / f"v{RELEASE}" / "annotation" / "gene.parquet").write_text("partial")
     upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
     assert json.loads((bucket / f"v{RELEASE}" / "manifest.json").read_text())["release"] == RELEASE
+
+
+def test_a_rerun_after_a_complete_upload_only_prunes(tmp_path, capsys):
+    bucket, bundle = _bucket(tmp_path), _bundle(tmp_path)
+    upload.upload(bundle, BUCKET_FS, str(bucket), apply=True, today=date(2026, 10, 30))
+    capsys.readouterr()
+    upload.upload(bundle, BUCKET_FS, str(bucket), apply=True, today=date(2026, 11, 2))
+    out = capsys.readouterr().out
+    assert "put " not in out and f"delete {bucket}/v2026-09-30/" in out
+    assert not (bucket / "v2026-09-30").exists()

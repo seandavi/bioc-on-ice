@@ -1,5 +1,6 @@
 """scripts/release.sh, the weekly release chain (#213), with `bioconice` and `curl` stubbed."""
 
+import fcntl
 import os
 import subprocess
 from datetime import UTC, datetime
@@ -43,14 +44,38 @@ def test_release_never_uploads_after_a_failed_step(tmp_path, fail):
     assert not any(c.startswith("upload") for c in calls)
 
 
-def test_release_reuses_a_complete_bundle(tmp_path):
+def _bundle(tmp_path, manifest='{"tables": []}'):
     d = tmp_path / f"bioconice-release-{TODAY}"
     d.mkdir()
-    (d / "manifest.json").write_text("{}")
+    (d / "manifest.json").write_text(manifest)
+    return d
+
+
+def test_release_reuses_a_complete_bundle(tmp_path):
+    d = _bundle(tmp_path)
     rc, calls = _run(tmp_path)
     assert rc == 0
     assert calls[0] == f"gate --release {d}"
 
 
-def test_release_is_a_no_op_once_latest_is_today(tmp_path):
+def test_release_rebuilds_a_bundle_with_a_truncated_manifest(tmp_path):
+    d = _bundle(tmp_path, '{"release": "20')
+    rc, calls = _run(tmp_path)
+    assert rc == 0
+    assert calls[0] == f"publish --out {d}"
+
+
+def test_release_only_prunes_once_latest_is_today(tmp_path):
+    d = _bundle(tmp_path)
+    assert _run(tmp_path, latest=TODAY) == (0, [f"upload --release {d} --apply"])
+
+
+def test_release_is_a_no_op_once_latest_is_today_without_a_bundle(tmp_path):
     assert _run(tmp_path, latest=TODAY) == (0, [])
+
+
+def test_a_second_release_run_exits_while_the_first_holds_the_lock(tmp_path):
+    with open(tmp_path / "bioconice-release.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        rc, calls = _run(tmp_path)
+    assert rc == 1 and calls == []

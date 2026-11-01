@@ -101,17 +101,23 @@ def upload(bundle: Path, fs, root=BUCKET, apply=False, retention_days=30, today=
     dated = f"v{manifest['release']}"
     # A completed dated release (manifest.json present) is immutable: users pin it and the next
     # release is checked against it. A folder without a manifest is an interrupted upload: retry it.
-    # A completed one with this bundle's exact files means latest/ was interrupted: finish only that.
-    folders = (dated, "latest")
-    done = f"{root}/{dated}/manifest.json"
-    if fs.get_file_info(done).type != pafs.FileType.NotFound:
+    # A folder already complete with this bundle is skipped, so a re-run finishes what an
+    # interrupted one left (latest/, or only the pruning) without sending the bundle again.
+    folders = []
+    for folder in (dated, "latest"):
+        done = f"{root}/{folder}/manifest.json"
+        if fs.get_file_info(done).type == pafs.FileType.NotFound:
+            folders.append(folder)
+            continue
         with fs.open_input_stream(done) as f:
             remote = json.loads(f.read())
-        if _files(remote) != _files(manifest):
+        if remote.get("release") == manifest["release"] and _files(remote) == _files(manifest):
+            print(f"{root}/{folder}/ already complete with this bundle", flush=True)
+        elif folder == dated:
             raise SystemExit(f"{root}/{dated}/ is a completed release of other files; "
                              "dated releases are never overwritten")
-        print(f"{root}/{dated}/ already complete with this bundle; finishing latest/", flush=True)
-        folders = ("latest",)
+        else:
+            folders.append(folder)
     for folder in folders:
         _folder(fs, root, bundle, manifest, folder, apply)
     for name in _expired(fs, root, dated, retention_days, today or datetime.now(UTC).date()):
