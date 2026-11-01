@@ -19,7 +19,8 @@ from cdsci.lake.contracts import ColumnContract, TableContract, TemporalModel
 from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.local import LocalFileSystem
 
-from .release import SIGNATURE_TAXON
+from . import complexportal, hgnc
+from .release import SIGNATURE_TAXON, SIGNATURE_TAXON_SELECT
 from .schemas import TABLES as DECLARED
 
 DEFAULT_BASE_URL = "https://data.bioconice.cancerdatasci.org/latest"
@@ -37,11 +38,15 @@ def _current(name, d):
     return f"SELECT * FROM bioc.{name}" + (" WHERE valid_to IS NULL" if versioned else "")
 
 
+# Declared tables already read from cdsci-lake (#183): each source module's RELEASE.
+FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE}
+
 # Every table of the live catalog except annotation.identifier_mapping__pre_repair.
-TABLES = [(*name.split("."), _current(name, d)) for name, d in DECLARED.items()] + [
-    # Live but not declared in schemas.py: signature_taxon is written from the
-    # bioconice-bugsigdb release contract (release.py); raw.metadata has no writer here.
-    ("annotation", "signature_taxon", "SELECT * FROM bioc.annotation.signature_taxon"),
+TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))
+          for name, d in DECLARED.items()] + [
+    # Not declared in schemas.py: signature_taxon is the bioconice-bugsigdb release
+    # contract's table (release.py), read from the lake; raw.metadata has no writer here.
+    ("annotation", "signature_taxon", SIGNATURE_TAXON_SELECT),
     ("raw", "metadata", "SELECT * FROM bioc.raw.metadata"),
     # From cdsci-lake (#194); becomes lake.pubmed.article with seandavi/cdsci-lake#136.
     ("annotation", "pubmed__article", "SELECT * FROM lake.omicidx.pubmed_article"),

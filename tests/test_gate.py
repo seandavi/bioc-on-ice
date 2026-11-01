@@ -135,3 +135,12 @@ def test_a_malformed_release_id_is_refused(tmp_path, reference, monkeypatch, cap
         "provenance.release": PROVENANCE.format(n=1)})
     assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 1
     assert "release ids must be YYYY-MM-DD dates" in capsys.readouterr().out
+
+
+def test_every_declared_table_with_a_key_gets_a_contract():
+    """declared_contract maps every column type schemas.py uses, for the tables still to migrate."""
+    for name, d in gate.DECLARED.items():
+        if d.business_key:
+            c = gate.declared_contract(name, license="test")
+            assert c.primary_key == d.business_key and len(c.columns) == len(d.schema.fields)
+    assert gate.declared_contract("raw.hgnc__complete_set", ("hgnc_id",)).columns[0].nullable is False

@@ -90,11 +90,14 @@ BUGSIGDB = DatasetContract(
     tables={"annotation.signature_taxon": SIGNATURE_TAXON},
 )
 
-_SELECT = (
+# Also the release bundle's annotation.signature_taxon (publish.TABLES), unpinned until
+# #183 step 10 pins the whole bundle to one lake snapshot (ADR-0015).
+SIGNATURE_TAXON_SELECT = (
     "SELECT bsdb_id, CAST(member_index AS BIGINT) AS member_index, taxon_rank, taxon_name, "
     "CAST(ncbitaxon_id AS BIGINT) AS ncbitaxon_id, taxon_lineage, taxon_lineage_ids "
-    "FROM lake.bugsigdb.signature_taxon AT (VERSION => {sid})"
+    "FROM lake.bugsigdb.signature_taxon"
 )
+_SELECT = SIGNATURE_TAXON_SELECT + " AT (VERSION => {sid})"
 
 
 def release_bugsigdb(con, out: Path | None = None, *, today: date | None = None) -> ReleaseManifest:
