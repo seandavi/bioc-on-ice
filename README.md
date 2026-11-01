@@ -211,9 +211,9 @@ ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bio
 (`bioc.annotation.gene`), over the release's Parquet files. `latest/` moves
 with each release; pin one by its dated folder
 (`https://data.bioconice.cancerdatasci.org/v2026-10-31/bioconice.duckdb`).
-Dated folders are kept 30 days for now. Once releases go weekly, only the
-last 4 are kept, about four weeks, and a monthly archive on Hugging Face,
-tagged `YYYY-MM`, becomes the copy to cite
+Only the newest 4 dated folders are kept (plus the one just uploaded, if it
+is older), about four weeks once releases go weekly; a monthly archive on
+Hugging Face, tagged `YYYY-MM`, becomes the copy to cite
 ([ADR-0016](docs/adr/0016-release-cadence-weekly-r2-monthly-hf.md)). The
 releases, with row counts and checksums, are at
 https://bioconice.cancerdatasci.org/releases. For a local copy (about 57 GB),
@@ -391,7 +391,23 @@ older than the bundle: once `latest/` is this release, pass
 `--reference https://data.bioconice.cancerdatasci.org/v<date>` instead. The README
 queries run on the bundle as warnings only.
 
-The weekly release (Sundays 00:00 UTC, ADR-0016) runs these four steps as
+A pass writes `gate.json` into the bundle, bound to its `manifest.json` by sha256.
+Once a month that bundle is archived on Hugging Face, as one commit tagged
+`YYYY-MM` of its release date
+([ADR-0016](docs/adr/0016-release-cadence-weekly-r2-monthly-hf.md)):
+
+```sh
+uv run bioconice hf-push --release release/          # dry run
+uv run bioconice hf-push --release release/ --apply  # seandavis/bioconice@YYYY-MM
+```
+
+`hf-push` refuses a bundle without a matching `gate.json` or whose Parquet does
+not match the manifest sha256s, and does nothing if the tag already exists. The
+token is `HF_TOKEN`, else GSM secret `cdsci-huggingface-token` (project
+`cdsci-infra`). `systemd/bioconice-hf-push.{service,timer}` runs it on the
+Monday after each month's first Sunday; the units are not installed yet.
+
+The weekly release (Sundays 00:00 UTC, ADR-0016) runs the four commands above as
 `scripts/release.sh` from a systemd `--user` timer on onclappc02; see
 [`systemd/README.md`](systemd/README.md) for the units, install and recovery.
 

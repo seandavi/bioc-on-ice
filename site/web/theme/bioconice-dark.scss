@@ -1,0 +1,35 @@
+/*-- scss:defaults --*/
+// Slate canvas (#0f172a), deep indigo fills (#312e81 / #4338ca), violet
+// accent (#8b5cf6). Indigo-700 is too dark for text here (2.1:1), so text in
+// the primary colour uses indigo-300 and links violet-400 (>= 6:1).
+$body-bg: #0f172a;
+$body-color: #e2e8f0;
+$primary: #4338ca;
+$link-color: #a78bfa;
+$border-color: #2a3352;
+$text-muted: #94a3b8;
+$navbar-bg: rgba(30, 27, 75, 0.9);
+$navbar-fg: #cbd5e1;
+// Not a distinct colour: with one shared sidebar Quarto marks the first
+// navbar item active on every page (omicidx has the same).
+$navbar-hl: #ffffff;
+$sidebar-bg: transparent;
+$footer-bg: transparent;
+$code-block-bg: #151d38;
+$code-color: #c4b5fd;
+
+/*-- scss:rules --*/
+:root {
+  --ax-bg: #0f172a; --ax-panel: #151d38; --ax-border: #2a3352; --ax-grid-dot: rgba(139, 92, 246, 0.16);
+  --ax-text: #e2e8f0; --ax-muted: #94a3b8; --ax-faint: #94a3b8;
+  --ax-primary: #a5b4fc; --ax-accent: #8b5cf6;
+  --ax-emerald: #34d399; --ax-amber: #fbbf24; --ax-rose: #fb7185; --ax-orange: #fb923c; --ax-slate: #94a3b8;
+  --ax-shadow: 0 1px 0 rgba(255, 255, 255, 0.02), 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+// Bootstrap derives outline buttons from $primary / $secondary, unreadable here.
+.btn-outline-primary {
+  --bs-btn-color: #a5b4fc; --bs-btn-border-color: #818cf8;
+  --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #4338ca; --bs-btn-hover-border-color: #4338ca;
+  --bs-btn-active-color: #fff; --bs-btn-active-bg: #312e81; --bs-btn-active-border-color: #312e81;
+}
+.btn-outline-secondary { --bs-btn-color: #cbd5e1; --bs-btn-border-color: #64748b; }

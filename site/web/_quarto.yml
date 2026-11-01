@@ -1,0 +1,76 @@
+# The public bioc-on-ice site (#215), ported from omicidx docs/. Served by the
+# Worker in ../ (wrangler.toml `[assets]`); see ../README.md.
+project:
+  type: website
+  output-dir: _site
+  render:
+    - "*.qmd"
+    - "guides/*.qmd"
+    - "sources/*.qmd"
+  resources:
+    - shell-links.js
+
+website:
+  title: "bioc-on-ice"
+  site-url: "https://bioconice.cancerdatasci.org"
+  description: "Bioconductor annotation without the packages: dated releases of Parquet tables plus a DuckDB database, queryable over anonymous HTTPS."
+  favicon: favicon.svg
+  # The one GA4 property shared by every site.
+  google-analytics: "G-KLLV1GCF4E"
+  repo-url: https://github.com/seandavi/bioc-on-ice
+  repo-subdir: site/web
+  repo-branch: main
+  repo-actions: [edit, issue]
+  search: true
+  navbar:
+    left:
+      - href: releases.qmd
+        text: Releases
+      - href: playground.qmd
+        text: Playground
+      - href: guides/versions-and-citation.qmd
+        text: Versions and citation
+    right:
+      - icon: github
+        href: https://github.com/seandavi/bioc-on-ice
+        aria-label: GitHub repository
+  sidebar:
+    style: docked
+    contents:
+      - section: Overview
+        contents:
+          - href: index.qmd
+            text: Home
+          - href: guides/versions-and-citation.qmd
+            text: Versions and citation
+      - section: Sources
+        contents:
+          - href: sources/bugsigdb.qmd
+            text: BugSigDB
+      - section: In the browser
+        contents:
+          - href: playground.qmd
+            text: SQL playground
+          - href: https://bioconice-explorer.seandavi.workers.dev
+            text: Explorer ↗
+          - href: releases.qmd
+            text: Releases
+
+format:
+  html:
+    # bioc-infrastructure's archify theme on cosmo, in indigo/violet so the
+    # site doesn't read as omicidx (theme/*.scss).
+    theme:
+      light: [cosmo, theme/archify.scss, theme/bioconice-light.scss]
+      dark: [cosmo, theme/archify.scss, theme/bioconice-dark.scss]
+    respect-user-color-scheme: true
+    # Quarto's WCAG-AA highlight style; switches to a11y-dark in dark mode.
+    highlight-style: a11y
+    grid:
+      sidebar-width: 250px
+      body-width: 880px
+      margin-width: 220px
+    toc: true
+    code-copy: true
+    # "Open in DuckDB Shell" under every SQL example.
+    include-after-body: shell-links.html
