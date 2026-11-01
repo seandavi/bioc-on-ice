@@ -55,7 +55,7 @@ def build_card(tag, manifest, gate, tables, repo=REPO):
     return f"""---
 license: other
 license_name: mixed-upstream-terms
-license_link: manifest.json
+license_link: https://huggingface.co/datasets/{repo}/blob/{tag}/manifest.json
 pretty_name: biocOnIce
 tags:
 - biology
