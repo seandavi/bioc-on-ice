@@ -227,6 +227,19 @@ function sqlBlock(sql) {
   btn.addEventListener("click", () => copyText(sql, btn));
   wrap.appendChild(pre);
   wrap.appendChild(btn);
+  // shell-links.js decorates only the page's static SQL; these blocks are built later.
+  if (window.bioconiceShellUrl) {
+    const a = document.createElement("a");
+    a.href = window.bioconiceShellUrl(sql);
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.className = "shell-link";
+    a.textContent = "Open in DuckDB Shell ↗";
+    const p = document.createElement("p");
+    p.className = "small text-end";
+    p.append(a);
+    wrap.appendChild(p);
+  }
   return wrap;
 }
 
