@@ -20,6 +20,9 @@ set -euo pipefail
 public=https://data.bioconice.cancerdatasci.org
 today=$(date -u +%F)
 dir=${TMPDIR:?set TMPDIR to scratch with room for a bundle (~94 GB)}/bioconice-release-$today
+# The newest uploaded (so gated) bundle, for the monthly hf-push unit (#214), which runs the
+# day after the first Sunday's release: well inside TMPDIR's 7-day cleanup.
+link=${BIOCONICE_RELEASE_LINK:-/data/davsean/bioconice-release}
 exec 9>"$TMPDIR/bioconice-release.lock"
 flock 9
 exec > >(tee -a "$dir.log") 2>&1
@@ -45,4 +48,5 @@ log "upload, dry run"
 bioconice upload --release "$dir"
 log "upload --apply"
 bioconice upload --release "$dir" --apply
-log "done"
+ln -sfn "$dir" "$link"
+log "done; $link -> $dir"

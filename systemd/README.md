@@ -14,7 +14,10 @@ onclappc02 are deployment artifacts. The pattern is omicidx's
 `scripts/release.sh` runs the README's "Release it" commands on
 `$TMPDIR/bioconice-release-<UTC date>/` and stops at the first failing step,
 so a bundle that fails the gate is never uploaded. Its output goes to the
-journal and to `$TMPDIR/bioconice-release-<date>.log`.
+journal and to `$TMPDIR/bioconice-release-<date>.log`. After a successful
+upload it points the symlink `/data/davsean/bioconice-release` at the bundle;
+`bioconice-hf-push.service` pushes whatever that names, so it only ever sees a
+gated, uploaded bundle.
 
 - Credentials come from GSM (project `cdsci-infra`) through `gcloud`, the same
   way as the manual flow, so the gcloud login on this host must be current.

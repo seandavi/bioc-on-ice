@@ -21,7 +21,8 @@ def _env(tmp_path, latest="2026-10-25", fail=None):
         f'#!/bin/sh\necho "$*" >> {tmp_path}/calls\n[ "$1" != "{fail}" ]\n')
     for f in bin_.iterdir():
         f.chmod(0o755)
-    return {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "TMPDIR": str(tmp_path)}
+    return {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}", "TMPDIR": str(tmp_path),
+            "BIOCONICE_RELEASE_LINK": str(tmp_path / "bioconice-release")}
 
 
 def _calls(tmp_path):
@@ -40,7 +41,9 @@ def test_release_runs_publish_gate_dry_run_then_apply(tmp_path):
     assert rc == 0
     assert calls == [f"publish --out {d}", f"gate --release {d}",
                      f"upload --release {d}", f"upload --release {d} --apply"]
-    assert (tmp_path / f"bioconice-release-{TODAY}.log").read_text().endswith("done\n")
+    assert f"done; {tmp_path}/bioconice-release -> {d}" in (
+        tmp_path / f"bioconice-release-{TODAY}.log").read_text()
+    assert (tmp_path / "bioconice-release").resolve() == d.resolve()
 
 
 @pytest.mark.parametrize("fail", ["publish", "gate"])
@@ -48,6 +51,7 @@ def test_release_never_uploads_after_a_failed_step(tmp_path, fail):
     rc, calls = _run(tmp_path, fail=fail)
     assert rc != 0
     assert calls[-1].startswith(fail)
+    assert not (tmp_path / "bioconice-release").exists()  # hf-push never sees an ungated bundle
     assert not any(c.startswith("upload") for c in calls)
 
 
