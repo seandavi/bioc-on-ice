@@ -58,7 +58,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?rev=631ffc9006ace5165d833c2d6390170bac4b7650" },
+    { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?rev=85ca723be65db6a0c014ef16ed9783f54de71bae" },
     { name = "duckdb", specifier = ">=1.4" },
     { name = "fsspec" },
     { name = "huggingface-hub", specifier = ">=2.2.0" },
@@ -81,7 +81,7 @@ wheels = [
 [[package]]
 name = "cdsci-lake"
 version = "0.4.2"
-source = { git = "https://github.com/seandavi/cdsci-lake?rev=631ffc9006ace5165d833c2d6390170bac4b7650#631ffc9006ace5165d833c2d6390170bac4b7650" }
+source = { git = "https://github.com/seandavi/cdsci-lake?rev=85ca723be65db6a0c014ef16ed9783f54de71bae#85ca723be65db6a0c014ef16ed9783f54de71bae" }
 dependencies = [
     { name = "duckdb" },
     { name = "httpx" },
