@@ -23,7 +23,9 @@ The public surface is **dated, immutable releases of flat Parquet plus
 `bioconice.duckdb`, `views.sql`, `restore.sql` and `manifest.json`**, in the R2
 bucket `data-bioconice`, served by a Worker on `bioconice.cancerdatasci.org`.
 
-- Layout: `latest/` and `v{YYYY-MM-DD}/`. Dated folders are kept 30 days. Each
+- Layout: `latest/` and `v{YYYY-MM-DD}/`. Dated folders are kept 30 days
+  (amended by [ADR-0016](0016-release-cadence-weekly-r2-monthly-hf.md): weekly
+  releases, the last 4 kept, monthly archive on Hugging Face). Each
   folder's views point at that folder's own URLs, and each carries its own
   `manifest.json`. A completed dated folder is never overwritten (2026-10-31, #203):
   users pin it and the next release is checked against it, so a second build on

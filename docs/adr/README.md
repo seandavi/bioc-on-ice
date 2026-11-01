@@ -47,5 +47,6 @@ revisited; say by whom and where).
 | [0011](0011-bucket-scoped-vending-tokens.md) | Anonymous read is contained by token composition, not account hygiene | Accepted; serving superseded by 0014 |
 | [0012](0012-cdsci-lake-is-the-source-not-raw-upstream.md) | cdsci-lake is the source, not raw upstream | Accepted (amended by 0013, 0015) |
 | [0013](0013-versioned-datasets-not-versioned-rows.md) | Versioned datasets, not versioned rows | Accepted; release layout superseded by 0014 |
-| [0014](0014-public-releases-are-parquet-plus-duckdb-views.md) | Public releases are Parquet + DuckDB views | Accepted |
+| [0014](0014-public-releases-are-parquet-plus-duckdb-views.md) | Public releases are Parquet + DuckDB views | Accepted; retention amended by 0016 |
 | [0015](0015-sources-write-to-cdsci-lake-products-derive-at-release.md) | Sources write to cdsci-lake; the product derives at release time | Accepted |
+| [0016](0016-release-cadence-weekly-r2-monthly-hf.md) | Release cadence: weekly on R2, monthly on Hugging Face | Accepted |
