@@ -12,7 +12,8 @@ folders, kept 30 days, and left the cadence open. Nothing publishes on a
 schedule yet: `bioconice publish` and `bioconice upload` are run by hand. The
 release gate (`bioconice gate`, #210) is not merged.
 
-A bundle is 57 GB (80 tables, `latest/manifest.json` of release 2026-10-31).
+A bundle is 57 GB (80 tables, `latest/manifest.json` of release 2026-10-31), and
+about 94 GB once `annotation.pubmed__article` (37 GB) is in it (#194).
 Consecutive releases share most of their bytes whenever their sources have not
 updated in between. R2 does not deduplicate, so each dated folder is a full
 copy.
@@ -59,9 +60,9 @@ last 4 dated releases.**
 ## Alternatives considered
 
 **Daily releases on R2.** Daily releases with the current 30-day window keep
-31 dated folders plus `latest/`, about 1.8 TB at today's 57 GB per bundle. Most
+31 dated folders plus `latest/`, about 3 TB at 94 GB per bundle. Most
 of those uploads re-send the same bytes as the day before. Weekly with
-keep 4 holds five copies, about 285 GB. The cost is that a source update can
+keep 4 holds five copies, about 470 GB. The cost is that a source update can
 take up to a week to reach `latest/`; the owner judged that acceptable.
 
 **Quarterly releases on Hugging Face.** Fewer archive copies, but a user could
