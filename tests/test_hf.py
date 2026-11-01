@@ -97,6 +97,9 @@ def test_apply_is_one_commit_tagged_yyyy_mm_with_local_views(gated, tmp_path, mo
     card = added["README.md"].decode()
     assert "hf download seandavis/bioconice --repo-type dataset --revision 2026-11" in card
     assert "hf://" not in card.replace("Do not query `hf://` paths in place", "")
+    # The Hub rejects card metadata whose license_link is not an https URL.
+    assert ("license_link: https://huggingface.co/datasets/seandavis/bioconice/blob/2026-11/"
+            "manifest.json\n") in card
 
     # The archived SQL reads the downloaded files, relative to the download directory.
     download = tmp_path / "download"
