@@ -64,6 +64,19 @@ def test_bundle_attaches_with_current_rows_and_docs(con, tmp_path):
     assert local.sql("SELECT count(*) FROM annotation.exon").fetchone()[0] == want["annotation.exon"]
 
 
+def test_a_failed_publish_leaves_no_manifest_from_an_earlier_run(con, tmp_path, monkeypatch):
+    out = tmp_path / "release"
+    out.mkdir()
+    (out / "manifest.json").write_text('{"tables": []}')
+
+    def killed(*a):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(publish, "_build_db", killed)
+    with pytest.raises(KeyboardInterrupt):
+        publish.publish(con, out, out.as_uri(), ONLY)
+    assert not (out / "manifest.json").exists()
+
+
 def test_views_keep_the_https_url_before_it_is_uploaded(con, tmp_path):
     out = tmp_path / "release"
     publish.publish(con, out, "https://data.example.org/latest/", ["annotation.gene"])

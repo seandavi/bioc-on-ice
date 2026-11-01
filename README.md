@@ -380,6 +380,7 @@ uv run bioconice publish --out release/
 uv run bioconice gate --release release/        # vs latest/; exits non-zero on a failed check
 uv run bioconice upload --release release/      # dry run
 uv run bioconice upload --release release/ --apply
+uv run bioconice upload --prune-only --apply    # only the keep-4 pruning, around latest/
 ```
 
 The gate (`src/bioconice/gate.py`) checks every table's columns and types and keeps
@@ -406,6 +407,10 @@ not match the manifest sha256s, and does nothing if the tag already exists. The
 token is `HF_TOKEN`, else GSM secret `cdsci-huggingface-token` (project
 `cdsci-infra`). `systemd/bioconice-hf-push.{service,timer}` runs it on the
 Monday after each month's first Sunday; the units are not installed yet.
+
+The weekly release (Sundays 00:00 UTC, ADR-0016) runs the four commands above as
+`scripts/release.sh` from a systemd `--user` timer on onclappc02; see
+[`systemd/README.md`](systemd/README.md) for the units, install and recovery.
 
 ## Acceptance
 

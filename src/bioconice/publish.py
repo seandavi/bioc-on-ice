@@ -207,13 +207,15 @@ def publish(con, out: Path, base_url: str = DEFAULT_BASE_URL, only=None) -> dict
     """Build one release bundle in `out` from `con`, which has the source attached as `bioc`.
 
     Each table streams to `<schema>/<table>.parquet` (ZSTD) through COPY, so nothing is
-    materialised in Python. manifest.json is written last: it marks the bundle complete.
+    materialised in Python. manifest.json is written last, atomically: it marks the bundle
+    complete, so a stale one from an earlier run is removed first.
     """
     selected = [t for t in TABLES if only is None or f"{t[0]}.{t[1]}" in only]
     unknown = set(only or ()) - {f"{s}.{t}" for s, t, _ in TABLES}
     if unknown:
         raise ValueError(f"not a published table: {sorted(unknown)}")
     base_url = base_url.rstrip("/")
+    (out / "manifest.json").unlink(missing_ok=True)
     # Row order is not part of the bundle, and keeping it makes COPY buffer much more.
     con.execute("SET preserve_insertion_order = false")
     tables = []
@@ -247,7 +249,8 @@ def publish(con, out: Path, base_url: str = DEFAULT_BASE_URL, only=None) -> dict
     (out / "views.sql").write_text(views)
     (out / "restore.sql").write_text(restore_sql(tables, base_url))
     _build_db(out / DB_FILE, views, base_url, out)
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (out / "manifest.json.tmp").write_text(json.dumps(manifest, indent=2) + "\n")
+    (out / "manifest.json.tmp").replace(out / "manifest.json")
     print(f"{len(tables)} tables, {sum(t['row_count'] for t in tables):,} rows, "
           f"{sum(t['bytes'] for t in tables):,} bytes -> {out}")
     return manifest
