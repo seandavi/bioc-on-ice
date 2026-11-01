@@ -64,16 +64,18 @@ the repo moves and systemd silently stops loading it. Re-copy and
 
 A failed run leaves its bundle in `/data/davsean/tmp/bioconice-release-<date>/`.
 Only one run at a time: a run started while another holds
-`$TMPDIR/bioconice-release.lock` exits 1 (and alerts) without touching anything.
+`$TMPDIR/bioconice-release.lock` waits for it, then sees `latest/` is today's
+release and only prunes.
 
 - **Upload failed** (network, R2): re-run `systemctl --user start
   bioconice-release.service`. A complete bundle (one whose `manifest.json`
-  parses) is not rebuilt, and `upload` never overwrites a completed
-  `v<date>/`: it skips any folder already complete with this bundle and
-  finishes the rest.
+  parses) is not rebuilt. `upload` skips a `v<date>/` already complete with
+  this bundle (and never overwrites one of other files), and always rewrites
+  `latest/`, so a retry also repairs a `latest/` half-overwritten by a later
+  interrupted upload.
 - **Pruning failed** (after `latest/` was uploaded): a re-run sees `latest/`
-  is today's and re-runs only `upload --apply`, which skips both folders and
-  prunes. If the bundle is gone, next week's run prunes instead.
+  is today's and runs only `upload --prune-only --apply`, which needs no
+  bundle and prunes around the release `latest/` serves.
 - **Gate failed**: read the report in the journal. A re-run gates the same
   bundle again. If the cause is in the data, fix it and delete the bundle
   directory so the re-run rebuilds it.

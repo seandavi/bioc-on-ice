@@ -13,13 +13,13 @@ RELEASE = "2026-10-30"
 BUCKET_FS = pafs.PyFileSystem(pafs.FSSpecHandler(LocalFileSystem(auto_mkdir=True)))
 
 
-def _bundle(tmp_path):
-    out = tmp_path / "release"
+def _bundle(tmp_path, release=RELEASE, gene_id=1):
+    out = tmp_path / f"release-{release}"
     (out / "annotation").mkdir(parents=True)
-    duckdb.sql(f"COPY (SELECT 1 AS gene_id) TO '{out}/annotation/gene.parquet' (FORMAT parquet)")
+    duckdb.sql(f"COPY (SELECT {gene_id} AS gene_id) TO '{out}/annotation/gene.parquet' (FORMAT parquet)")
     table = {"schema": "annotation", "table": "gene", "path": "annotation/gene.parquet",
-             "row_count": 1, "comment": None, "columns": []}
-    manifest = {"release": RELEASE, "base_url": "https://example.org/x", "tables": [table]}
+             "row_count": 1, "comment": None, "columns": [], "sha256": str(gene_id)}
+    manifest = {"release": release, "base_url": "https://example.org/x", "tables": [table]}
     (out / "manifest.json").write_text(json.dumps(manifest))
     return out
 
@@ -143,3 +143,82 @@ def test_a_partial_listing_prunes_less_never_more(tmp_path):
             return [i for i in BUCKET_FS.get_file_info(selector) if i.base_name < "v2026-10-25"]
     assert upload._expired(Partial(), str(bucket), f"v{RELEASE}", keep=4) == []
     assert full == ["v2026-10-04", "v2026-10-11"]
+
+
+def test_retrying_a_after_an_interrupted_b_repairs_latest(tmp_path, monkeypatch):
+    bucket = _bucket(tmp_path)
+    a, b = _bundle(tmp_path), _bundle(tmp_path, release="2026-11-06", gene_id=2)
+    upload.upload(a, BUCKET_FS, str(bucket), apply=True)
+    real = upload._put
+
+    def cut_after_latest_parquet(fs, local, key, apply):
+        real(fs, local, key, apply)
+        if key.endswith("/latest/annotation/gene.parquet"):
+            raise OSError("connection reset")
+    monkeypatch.setattr(upload, "_put", cut_after_latest_parquet)
+    with pytest.raises(OSError):
+        upload.upload(b, BUCKET_FS, str(bucket), apply=True)
+    monkeypatch.setattr(upload, "_put", real)
+    latest = bucket / "latest"
+    # B's bytes under A's manifest: the state a skip on matching manifests would have left
+    assert json.loads((latest / "manifest.json").read_text())["release"] == RELEASE
+    assert (latest / "annotation/gene.parquet").read_bytes() != (a / "annotation/gene.parquet").read_bytes()
+
+    upload.upload(a, BUCKET_FS, str(bucket), apply=True)
+    assert json.loads((latest / "manifest.json").read_text())["release"] == RELEASE
+    assert (latest / "annotation/gene.parquet").read_bytes() == (a / "annotation/gene.parquet").read_bytes()
+
+
+def _live(bucket, release=RELEASE):
+    (bucket / f"v{release}").mkdir(exist_ok=True)
+    (bucket / "latest" / "manifest.json").write_text(json.dumps({"release": release}))
+
+
+def test_prune_only_dry_run_lists_and_deletes_nothing(tmp_path, capsys):
+    bucket = _bucket(tmp_path)
+    _live(bucket)
+    before = sorted(p.relative_to(bucket) for p in bucket.rglob("*"))
+    upload.prune(BUCKET_FS, str(bucket))
+    assert sorted(p.relative_to(bucket) for p in bucket.rglob("*")) == before
+    out = capsys.readouterr().out
+    assert "put " not in out
+    assert [ln for ln in out.splitlines() if ln.startswith("delete")] == [
+        f"delete {bucket}/v2026-10-04/", f"delete {bucket}/v2026-10-11/"]
+
+
+def test_prune_only_apply_keeps_the_newest_four_and_latest(tmp_path):
+    bucket = _bucket(tmp_path)
+    _live(bucket)
+    upload.prune(BUCKET_FS, str(bucket), apply=True)
+    assert sorted(p.name for p in bucket.iterdir()) == [
+        "latest", "v2026-10-18", "v2026-10-25", "v2026-10-29", f"v{RELEASE}", "vnotadate"]
+
+
+def test_prune_only_keeps_the_release_latest_serves_even_if_older(tmp_path):
+    bucket = _bucket(tmp_path)
+    _live(bucket, "2026-10-04")
+    upload.prune(BUCKET_FS, str(bucket), apply=True, keep=1)
+    assert sorted(p.name for p in bucket.iterdir()) == [
+        "latest", "v2026-10-04", "v2026-10-29", "vnotadate"]
+
+
+@pytest.mark.parametrize("latest", [None, "{}", '{"release": "nope"}'])
+def test_prune_only_refuses_without_a_dated_latest(tmp_path, latest):
+    bucket = _bucket(tmp_path)
+    if latest is None:
+        (bucket / "latest" / "manifest.json").unlink()
+    else:
+        (bucket / "latest" / "manifest.json").write_text(latest)
+    before = sorted(p.relative_to(bucket) for p in bucket.rglob("*"))
+    with pytest.raises(SystemExit):
+        upload.prune(BUCKET_FS, str(bucket), apply=True)
+    assert sorted(p.relative_to(bucket) for p in bucket.rglob("*")) == before
+
+
+@pytest.mark.parametrize("keep", [0, -1, 2.0])
+def test_prune_only_refuses_keep_below_one(tmp_path, keep):
+    bucket = _bucket(tmp_path)
+    _live(bucket)
+    with pytest.raises(SystemExit, match="--keep must be an integer >= 1"):
+        upload.prune(BUCKET_FS, str(bucket), apply=True, keep=keep)
+    assert (bucket / "v2026-10-04").exists()

@@ -4,8 +4,8 @@ omicidx's publish_bundle without Prefect. Each folder gets the bundle's Parquet 
 own views.sql, restore.sql and bioconice.duckdb, regenerated for that folder's public URL,
 so a pinned `v{release}/` keeps reading its own Parquet and `latest/` reads `latest/`.
 manifest.json goes last in each folder: it marks the folder complete. Then `v*/` folders
-other than the newest `keep` and this release are pruned (ADR-0016). Dry-run unless
-`apply`: everything is built and listed, nothing is written to the bucket.
+other than the newest `keep` and this release are pruned (ADR-0016); `prune` does only
+that. Dry-run unless `apply`: everything is built and listed, nothing is written to the bucket.
 """
 
 import json
@@ -102,11 +102,37 @@ def _files(manifest):
     return sorted((t["path"], t.get("sha256")) for t in manifest["tables"])
 
 
-def upload(bundle: Path, fs, root=BUCKET, apply=False, keep=4):
-    """Upload `bundle` (a `bioconice publish` directory) to `v{release}/` and `latest/`, then prune."""
+def _check_keep(keep):
     # keep < 1 would prune every release but this one, and a negative slice the wrong ones.
     if not isinstance(keep, int) or keep < 1:
         raise SystemExit(f"--keep must be an integer >= 1, got {keep!r}")
+
+
+def _prune(fs, root, current, keep, apply):
+    for name in _expired(fs, root, current, keep):
+        print(f"delete {root}/{name}/", flush=True)
+        if apply:
+            fs.delete_dir(f"{root}/{name}")
+
+
+def prune(fs, root=BUCKET, apply=False, keep=4):
+    """Only the pruning, around the release `latest/` serves; no bundle needed."""
+    _check_keep(keep)
+    done = f"{root}/latest/manifest.json"
+    if fs.get_file_info(done).type == pafs.FileType.NotFound:
+        raise SystemExit(f"{done} not found; nothing to prune around")
+    with fs.open_input_stream(done) as f:
+        current = f"v{json.loads(f.read()).get('release')}"
+    if not _dated(current):
+        raise SystemExit(f"{done} names no dated release ({current!r}); not pruning")
+    _prune(fs, root, current, keep, apply)
+    if not apply:
+        print("dry run: nothing deleted; --apply to prune")
+
+
+def upload(bundle: Path, fs, root=BUCKET, apply=False, keep=4):
+    """Upload `bundle` (a `bioconice publish` directory) to `v{release}/` and `latest/`, then prune."""
+    _check_keep(keep)
     manifest = json.loads((bundle / "manifest.json").read_text())
     dated = f"v{manifest['release']}"
     # A completed dated release (manifest.json present) is immutable: users pin it and the next
@@ -124,9 +150,6 @@ def upload(bundle: Path, fs, root=BUCKET, apply=False, keep=4):
         folders = ("latest",)
     for folder in folders:
         _folder(fs, root, bundle, manifest, folder, apply)
-    for name in _expired(fs, root, dated, keep):
-        print(f"delete {root}/{name}/", flush=True)
-        if apply:
-            fs.delete_dir(f"{root}/{name}")
+    _prune(fs, root, dated, keep, apply)
     if not apply:
         print("dry run: nothing written; --apply to upload")

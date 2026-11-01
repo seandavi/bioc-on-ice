@@ -204,8 +204,11 @@ def main():
     up = sub.add_parser("upload",
                         help="upload a built release bundle to R2 v{release}/ and latest/, "
                              "then prune old v*/ folders (dry-run unless --apply)")
-    up.add_argument("--release", type=Path, required=True, metavar="DIR",
-                    help="bundle directory written by `bioconice publish`")
+    what = up.add_mutually_exclusive_group(required=True)
+    what.add_argument("--release", type=Path, metavar="DIR",
+                      help="bundle directory written by `bioconice publish`")
+    what.add_argument("--prune-only", action="store_true",
+                      help="upload nothing; only prune, around the release latest/ serves")
     up.add_argument("--apply", action="store_true", help="write to the bucket (default: print the plan)")
     up.add_argument("--keep", type=int, default=4,
                     help="keep the newest N v{date}/ folders, this release counted, "
@@ -227,8 +230,11 @@ def main():
 
     if args.cmd == "upload":
         from . import upload
-        upload.upload(args.release, upload.r2_filesystem(), apply=args.apply,
-                      keep=args.keep)
+        if args.prune_only:
+            upload.prune(upload.r2_filesystem(), apply=args.apply, keep=args.keep)
+        else:
+            upload.upload(args.release, upload.r2_filesystem(), apply=args.apply,
+                          keep=args.keep)
         return
 
     if args.cmd == "hf-push":

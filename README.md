@@ -380,6 +380,7 @@ uv run bioconice publish --out release/
 uv run bioconice gate --release release/        # vs latest/; exits non-zero on a failed check
 uv run bioconice upload --release release/      # dry run
 uv run bioconice upload --release release/ --apply
+uv run bioconice upload --prune-only --apply    # only the keep-4 pruning, around latest/
 ```
 
 The gate (`src/bioconice/gate.py`) checks every table's columns and types and keeps
