@@ -208,7 +208,8 @@ def main():
                     help="bundle directory written by `bioconice publish`")
     up.add_argument("--apply", action="store_true", help="write to the bucket (default: print the plan)")
     up.add_argument("--keep", type=int, default=4,
-                    help="keep the newest N v{date}/ folders, this release included (default: 4)")
+                    help="keep the newest N v{date}/ folders, this release counted, "
+                         "plus this release if it is older (default: 4)")
 
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()

@@ -113,3 +113,33 @@ def test_an_interrupted_dated_upload_is_retried(tmp_path):
     (bucket / f"v{RELEASE}" / "annotation" / "gene.parquet").write_text("partial")
     upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True)
     assert json.loads((bucket / f"v{RELEASE}" / "manifest.json").read_text())["release"] == RELEASE
+
+
+def test_folders_that_are_not_real_dates_are_never_pruned_or_counted(tmp_path):
+    bucket = _bucket(tmp_path)
+    for d in ("v2026-00-00", "v9999-99-99", "v2026-02-30"):
+        (bucket / d).mkdir()
+    # the same two go as without them: v9999-99-99 holds no retention slot
+    assert upload._expired(BUCKET_FS, str(bucket), f"v{RELEASE}", keep=4) == [
+        "v2026-10-04", "v2026-10-11"]
+
+
+@pytest.mark.parametrize("keep", [0, -1, 2.0])
+def test_keep_below_one_is_refused_before_touching_the_bucket(tmp_path, capsys, keep):
+    bucket = _bucket(tmp_path)
+    before = sorted(p.relative_to(bucket) for p in bucket.rglob("*"))
+    with pytest.raises(SystemExit, match="--keep must be an integer >= 1"):
+        upload.upload(_bundle(tmp_path), BUCKET_FS, str(bucket), apply=True, keep=keep)
+    assert sorted(p.relative_to(bucket) for p in bucket.rglob("*")) == before
+    assert capsys.readouterr().out == ""
+
+
+def test_a_partial_listing_prunes_less_never_more(tmp_path):
+    bucket = _bucket(tmp_path)
+    full = upload._expired(BUCKET_FS, str(bucket), f"v{RELEASE}", keep=4)
+
+    class Partial:  # a truncated listing: the newest folders missing
+        def get_file_info(self, selector):
+            return [i for i in BUCKET_FS.get_file_info(selector) if i.base_name < "v2026-10-25"]
+    assert upload._expired(Partial(), str(bucket), f"v{RELEASE}", keep=4) == []
+    assert full == ["v2026-10-04", "v2026-10-11"]
