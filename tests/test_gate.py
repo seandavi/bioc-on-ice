@@ -31,7 +31,8 @@ def _bundle(root, release, tables):
         n = con.execute(f"COPY ({sql}) TO '{root / rel}' (FORMAT parquet)").fetchone()[0]
         cols = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{root / rel}')").fetchall()
         entries.append({"schema": schema, "table": table, "path": rel, "row_count": n,
-                        "columns": [{"name": c[0], "type": c[1]} for c in cols]})
+                        "comment": None,
+                        "columns": [{"name": c[0], "type": c[1], "doc": None} for c in cols]})
     (root / "manifest.json").write_text(json.dumps({"release": release, "tables": entries}))
     return root
 

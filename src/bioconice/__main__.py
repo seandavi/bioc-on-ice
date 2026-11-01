@@ -210,6 +210,14 @@ def main():
     up.add_argument("--retention-days", type=int, default=30,
                     help="prune v{date}/ folders older than this (default: 30)")
 
+    hp = sub.add_parser("hf-push",
+                        help="push a gated release bundle to Hugging Face as one commit tagged "
+                             "YYYY-MM; does nothing if the tag exists (dry-run unless --apply)")
+    hp.add_argument("--release", type=Path, required=True, metavar="DIR",
+                    help="bundle directory that passed `bioconice gate` (has gate.json)")
+    hp.add_argument("--apply", action="store_true",
+                    help="create the repo if needed and push (default: print the plan)")
+
     sub.add_parser("tables", help="list catalog tables")
     args = p.parse_args()
 
@@ -220,6 +228,13 @@ def main():
         from . import upload
         upload.upload(args.release, upload.r2_filesystem(), apply=args.apply,
                       retention_days=args.retention_days)
+        return
+
+    if args.cmd == "hf-push":
+        from huggingface_hub import HfApi
+
+        from . import hf
+        hf.hf_push(args.release, HfApi(token=hf.hf_token()), apply=args.apply)
         return
 
     if args.cmd == "publish":
