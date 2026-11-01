@@ -326,27 +326,3 @@ def test_tool_calls_are_logged_as_json(caplog):
     with caplog.at_level(logging.INFO, logger="bioconice.mcp"), pytest.raises(ValueError):
         failing()
     assert json.loads(caplog.records[-1].getMessage())["error"].startswith("ValueError")
-
-
-def test_liveness_never_touches_the_lake():
-    from starlette.testclient import TestClient
-    from bioconice import mcp as m
-    client = TestClient(m.mcp.streamable_http_app())
-    r = client.get("/health/live")
-    assert r.status_code == 200 and r.json() == {"status": "ok"}
-
-
-def test_public_hostname_is_an_allowed_host():
-    from starlette.testclient import TestClient
-    from bioconice import mcp as m
-    assert "bioconice-mcp.cancerdatasci.org" in m.ALLOWED_HOSTS
-    init = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}}
-    headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
-    # as a context manager, so the lifespan runs and starts the session manager's task group
-    with TestClient(m.mcp.streamable_http_app()) as client:
-        # the public hostname is accepted; an unknown one is refused with 421
-        ok = client.post("/mcp", json=init, headers={**headers, "Host": "bioconice-mcp.cancerdatasci.org"})
-        assert ok.status_code == 200, ok.text[:200]
-        bad = client.post("/mcp", json=init, headers={**headers, "Host": "evil.example"})
-        assert bad.status_code == 421

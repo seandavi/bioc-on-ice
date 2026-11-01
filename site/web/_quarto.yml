@@ -43,6 +43,8 @@ website:
             text: Home
           - href: guides/versions-and-citation.qmd
             text: Versions and citation
+          - href: guides/mcp.qmd
+            text: Ask an assistant (MCP)
       - section: Sources
         contents:
           - href: sources/bugsigdb.qmd

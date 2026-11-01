@@ -35,9 +35,9 @@ The explorer reads the catalog anonymously through icegate, so it has no secrets
 DuckDB-WASM query tab stays off by default until the `bioconice` R2 bucket gets a CORS
 policy allowing browser reads (explorer/README.md). First deployed 2026-09-18.
 
-The MCP server is **not** a Worker: it runs on onclappc02 as a docker compose service
-behind Traefik (`mcp/README.md`), the platform's pattern for services that need a real
-engine. Live since 2026-09-18 at https://bioconice-mcp.cancerdatasci.org (proxied DNS, Cloudflare edge TLS).
+The MCP server is not deployed anywhere: `bioconice-mcp` runs locally over stdio, so
+queries execute on the user's machine against the public release. The hosted
+instance (2026-09-18 to 2026-11) was retired because biocOnIce does not serve query compute (#224).
 
 ## Deploy
 
