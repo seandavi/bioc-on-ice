@@ -48,7 +48,9 @@ TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))
     # Not declared in schemas.py: signature_taxon is the bioconice-bugsigdb release
     # contract's table (release.py), read from the lake; raw.metadata has no writer here.
     ("annotation", "signature_taxon", SIGNATURE_TAXON_SELECT),
-    ("raw", "metadata", "SELECT * FROM bioc.raw.metadata"),
+    # iCite metadata straight from cdsci-lake (#183 wave A): the Iceberg copy was its old
+    # reverse-ETL export, same 17 columns and types.
+    ("raw", "metadata", "SELECT * FROM lake.icite.metadata"),
     # From cdsci-lake (#194); becomes lake.pubmed.article with seandavi/cdsci-lake#136.
     ("annotation", "pubmed__article", "SELECT * FROM lake.omicidx.pubmed_article"),
 ]
