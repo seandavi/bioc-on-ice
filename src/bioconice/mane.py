@@ -108,6 +108,42 @@ def land_raw(cat, release, url=None):
     return version, n
 
 
+def _transcript(src):
+    """annotation.mane__transcript's columns, from a table shaped like raw.ncbi__mane_summary.
+
+    The gene's name, its Ensembl version and the GRCh38 placement stay in raw:
+    they are facts about the gene and the assembly that other tables own, and
+    carrying them would open a new version row here whenever they moved.
+    'GeneID:7157' loses its prefix to join annotation.ncbi__gene; 'HGNC:11998'
+    keeps it, the form the HGNC namespace already uses.
+    """
+    return f"""
+        SELECT split_part(ensembl_nuc, '.', 1) AS ensembl_transcript_id, {TAXON} AS taxon_id,
+               split_part(ensembl_nuc, '.', 2) AS ensembl_transcript_version,
+               refseq_nuc AS refseq_rna, mane_status,
+               replace(ncbi_geneid, 'GeneID:', '') AS gene_id,
+               split_part(ensembl_gene, '.', 1) AS ensembl_gene_id, hgnc_id, symbol,
+               refseq_prot AS refseq_protein,
+               split_part(ensembl_prot, '.', 1) AS ensembl_protein_id,
+               split_part(ensembl_prot, '.', 2) AS ensembl_protein_version
+        FROM {src}
+    """
+
+
+# Read from cdsci-lake (#183): lake.mane.transcript is raw.ncbi__mane_summary without
+# landed_in, one MANE release at a time. landed_in and valid_from are frozen at the last
+# Iceberg load ('2026.09', every current row) and valid_to is NULL, so the released schema
+# is unchanged until the schema-change release drops all three (#222). The identifier_mapping
+# slice stays on Iceberg, written by transform().
+FROZEN_RELEASE = "'2026.09'"
+RELEASE = {
+    "raw.ncbi__mane_summary": f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.mane.transcript",
+    "annotation.mane__transcript": f"SELECT *, {FROZEN_RELEASE} AS valid_from, "
+                                   f"NULL::VARCHAR AS valid_to "
+                                   f"FROM ({_transcript('lake.mane.transcript')})",
+}
+
+
 def transform(cat, release, version):
     """Phase 2: the matched pairs, and RefSeq -> Ensembl transcript cross-references.
 
@@ -117,22 +153,7 @@ def transform(cat, release, version):
     con.register("raw", cat.load_table("raw.ncbi__mane_summary").scan(
         row_filter=EqualTo("mane_version", version)).to_arrow())
 
-    # The gene's name, its Ensembl version and the GRCh38 placement stay in raw:
-    # they are facts about the gene and the assembly that other tables own, and
-    # carrying them would open a new version row here whenever they moved.
-    # 'GeneID:7157' loses its prefix to join annotation.ncbi__gene; 'HGNC:11998'
-    # keeps it, the form the HGNC namespace already uses.
-    transcript = con.sql(f"""
-        SELECT split_part(ensembl_nuc, '.', 1) AS ensembl_transcript_id, {TAXON} AS taxon_id,
-               split_part(ensembl_nuc, '.', 2) AS ensembl_transcript_version,
-               refseq_nuc AS refseq_rna, mane_status,
-               replace(ncbi_geneid, 'GeneID:', '') AS gene_id,
-               split_part(ensembl_gene, '.', 1) AS ensembl_gene_id, hgnc_id, symbol,
-               refseq_prot AS refseq_protein,
-               split_part(ensembl_prot, '.', 1) AS ensembl_protein_id,
-               split_part(ensembl_prot, '.', 2) AS ensembl_protein_version
-        FROM raw
-    """).to_arrow_table()
+    transcript = con.sql(_transcript("raw")).to_arrow_table()
 
     # One direction, like every other writer. Both MANE statuses are matched
     # pairs; the status itself is in annotation.mane__transcript.

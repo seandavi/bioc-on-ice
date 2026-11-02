@@ -162,3 +162,10 @@ def test_every_column_is_documented(cat, tsv):
         assert table.properties.get("comment"), identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+def test_release_selects_over_the_lake_reproduce_the_lander(cat, tsv, release_matches_lander):
+    """#183: the release reads lake.mane.transcript, not these Iceberg tables."""
+    mane.ingest(cat, REL, url=tsv)
+    release_matches_lander(cat, {"lake.mane.transcript": "raw.ncbi__mane_summary"},
+                           mane.RELEASE, "2026.09")

@@ -82,6 +82,8 @@ BUNDLE = DatasetContract(
         declared_contract("clinical.gwas_catalog__study"),
         declared_contract("clinical.gwas_catalog__association", references={
             "study_accession": "clinical.gwas_catalog__study.study_accession"}),
+        declared_contract("raw.ncbi__mane_summary", ("refseq_nuc", "ensembl_nuc")),
+        declared_contract("annotation.mane__transcript"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -103,7 +105,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.icite__publication",
     "annotation.identifier_mapping",
     "annotation.interaction",
-    "annotation.mane__transcript",
     "annotation.ncbi__gene",
     "annotation.ncbi__gene_go",
     "annotation.ncbi__gene_pubmed",
@@ -137,7 +138,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.ncbi__gene_history",
     "raw.ncbi__gene_info",
     "raw.ncbi__gene_orthologs",
-    "raw.ncbi__mane_summary",
     "raw.obo__cl",
     "raw.obo__doid",
     "raw.obo__efo",
