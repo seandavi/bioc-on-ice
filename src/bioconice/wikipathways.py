@@ -114,28 +114,19 @@ def land_raw(cat, release, url=None):
     return version, n
 
 
-def transform(cat, release, version):
-    """Phase 2: one row per pathway, and one per (pathway, gene).
-
-    Scoped to `version`'s rows: raw accumulates every landed version. The three
-    `error()`s fail the moment a row is built, before anything is written: a set
-    name that is not the four packed fields, or that disagrees with its file's
-    date or species; a species with no taxon id; a gene id that is not an
-    Entrez GeneID.
-    """
-    con = duckdb.connect()
-    con.register("raw", cat.load_table("raw.wikipathways__gmt").scan(
-        row_filter=EqualTo("wikipathways_version", version)).to_arrow())
-
+def _pathway_gmt(src):
+    """Each GMT line of `src` (a table shaped like raw.wikipathways__gmt) with its packed set
+    name taken apart. The three `error()`s fail the moment a row is built: a set name that
+    is not the four packed fields, or that disagrees with its file's date or species; a
+    species with no taxon id."""
     taxon = " ".join(f"WHEN '{name}' THEN {tid}" for name, tid in TAXA.items())
     # The release date is left in raw on purpose: it moves on every line every
     # month, so carrying it would open a new version row for every pathway.
-    con.execute(f"""
-        CREATE TABLE p AS
+    return f"""
         WITH x AS (
             SELECT *, regexp_extract(name, '^(.*)%WikiPathways_([0-9]{{8}})%(WP[0-9]+)%([^%]+)$',
                                      ['name', 'date', 'pathway_id', 'species']) AS f
-            FROM raw
+            FROM {src}
         )
         SELECT CASE WHEN f.date = wikipathways_version AND f.species = replace(species, '_', ' ')
                     THEN f.pathway_id
@@ -147,18 +138,57 @@ def transform(cat, release, version):
                END AS taxon_id,
                f.name AS name, f.species AS species, description AS url, genes
         FROM x
-    """)
-    pathway = con.sql("SELECT pathway_id, taxon_id, name, species, url FROM p").to_arrow_table()
+    """
 
-    # DISTINCT: a GMT line repeats a gene once per node that draws it, and
-    # membership is a set.
-    gene = con.sql("""
+
+def _pathway(src):
+    """annotation.wikipathways__pathway's columns, from a table shaped like raw.wikipathways__gmt."""
+    return f"SELECT pathway_id, taxon_id, name, species, url FROM ({_pathway_gmt(src)})"
+
+
+def _gene_pathway(src):
+    """annotation.wikipathways__gene_pathway's columns, one row per (pathway, Entrez gene).
+
+    DISTINCT: a GMT line repeats a gene once per node that draws it, and membership is a
+    set. A gene id that is not an Entrez GeneID fails the row.
+    """
+    return f"""
         SELECT DISTINCT pathway_id, taxon_id,
                CASE WHEN regexp_full_match(g, '[0-9]+') THEN g
                     ELSE error('wikipathways: ' || pathway_id || ' lists a gene id that is '
                                || 'not an Entrez GeneID: ' || g) END AS gene_id
-        FROM (SELECT pathway_id, taxon_id, unnest(str_split(genes, '\t')) AS g FROM p)
-    """).to_arrow_table()
+        FROM (SELECT pathway_id, taxon_id, unnest(str_split(genes, '\t')) AS g
+              FROM ({_pathway_gmt(src)}))
+    """
+
+
+# Read from cdsci-lake (#183): lake.wikipathways.gene_set is raw.wikipathways__gmt without
+# landed_in, one release at a time. landed_in and valid_from are frozen at the last Iceberg
+# load ('2026.09', every current row) and valid_to is NULL, so the released schema is
+# unchanged until the schema-change release drops all three (#222).
+FROZEN_RELEASE = "'2026.09'"
+_CURRENT = f"{FROZEN_RELEASE} AS valid_from, NULL::VARCHAR AS valid_to"
+RELEASE = {
+    "raw.wikipathways__gmt":
+        f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.wikipathways.gene_set",
+    "annotation.wikipathways__pathway":
+        f"SELECT *, {_CURRENT} FROM ({_pathway('lake.wikipathways.gene_set')})",
+    "annotation.wikipathways__gene_pathway":
+        f"SELECT *, {_CURRENT} FROM ({_gene_pathway('lake.wikipathways.gene_set')})",
+}
+
+
+def transform(cat, release, version):
+    """Phase 2: one row per pathway, and one per (pathway, gene).
+
+    Scoped to `version`'s rows: raw accumulates every landed version. Each row is
+    checked as it is built (_pathway_gmt, _gene_pathway), before anything is written.
+    """
+    con = duckdb.connect()
+    con.register("raw", cat.load_table("raw.wikipathways__gmt").scan(
+        row_filter=EqualTo("wikipathways_version", version)).to_arrow())
+    pathway = con.sql(_pathway("raw")).to_arrow_table()
+    gene = con.sql(_gene_pathway("raw")).to_arrow_table()
 
     # WikiPathways is these tables' only writer and every species lands
     # together, so the scope is the whole table: a species file that vanishes
