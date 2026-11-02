@@ -240,6 +240,10 @@ GWAS_LICENCE = ("NHGRI-EBI GWAS Catalog, release <gwas_catalog_release>, under E
                 "use or redistribution, attribution expected. Not a formal open licence.")
 _GWAS_PROPERTIES = {"bioc.column.pubmed_id.prefix": "pubmed",
                     "bioc.license": "LicenseRef-EMBL-EBI-Terms-of-Use"}
+# MANE, a joint NCBI / EMBL-EBI product on NCBI's FTP site with no licence file: NCBI's
+# Molecular Data Usage policy places no restrictions on use or distribution and asks for
+# attribution; submitters may hold rights. Not a formal open licence, nor public domain.
+MANE_LICENSE = "LicenseRef-NCBI-Molecular-Data-Usage"
 _NA_NR = "'NA' and 'NR' are the curators' \"not applicable\" and \"not reported\", kept as published."
 
 # Column docs for the two GWAS Catalog downloads, in each file's column order — the
@@ -2272,8 +2276,10 @@ TABLES = {
                 "Every column is the unparsed string; an empty cell is NULL. Query "
                 "annotation.mane__transcript instead. A joint NCBI / EMBL-EBI product, published "
                 "on NCBI's FTP site without a licence file; NCBI places no restrictions on use or "
-                "distribution of its molecular data.",
-        properties={"bioc.column.hgnc_id.prefix": "hgnc"},
+                "distribution of its molecular data and asks for attribution "
+                "(https://www.ncbi.nlm.nih.gov/home/about/policies/). Not public domain.",
+        properties={"bioc.column.hgnc_id.prefix": "hgnc",
+                    "bioc.license": MANE_LICENSE},
     ),
     "annotation.mane__transcript": TableDef(
         schema=Schema(
@@ -2325,8 +2331,11 @@ TABLES = {
                 "Ensembl ids are split into id and version, each the way the rest of the catalog "
                 "writes them. The same pairs are in annotation.identifier_mapping as REFSEQ_RNA -> "
                 "ENSEMBL_TRANSCRIPT under source = 'MANE'. Gene name and GRCh38 coordinates stay "
-                "in raw.ncbi__mane_summary.",
-        properties={"bioc.column.ensembl_transcript_id.prefix": "ensembl",
+                "in raw.ncbi__mane_summary. Licence as raw.ncbi__mane_summary: NCBI places no "
+                "restrictions on use and asks for attribution "
+                "(https://www.ncbi.nlm.nih.gov/home/about/policies/).",
+        properties={"bioc.license": MANE_LICENSE,
+                    "bioc.column.ensembl_transcript_id.prefix": "ensembl",
                     "bioc.column.ensembl_gene_id.prefix": "ensembl",
                     "bioc.column.ensembl_protein_id.prefix": "ensembl",
                     "bioc.column.gene_id.prefix": "ncbigene",
