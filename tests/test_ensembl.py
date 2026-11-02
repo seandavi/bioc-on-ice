@@ -454,6 +454,30 @@ def test_bugsigdb_manifest_uses_the_release_tag_not_a_date(cat):
     assert m["row_count"] == 2
 
 
+def test_bugsigdb_release_reads_the_typed_lake_table_back_as_published(cat):
+    """lake.bugsigdb.signatures types pmid, year, the sample sizes and curated_date (#183 B3);
+    the release SELECT must give back the lander's text, 'NA' NULLs and unpadded days included."""
+    import importlib
+
+    import duckdb
+
+    from bioconice import bugsigdb
+    lake_ingest = importlib.import_module("cdsci.lake.sources.bugsigdb.ingest")
+    bugsigdb.land_raw(cat, "2026.08", version="v1.3.1", url=str(BSDB))
+    con = duckdb.connect()
+    con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.bugsigdb")
+    con.execute("CREATE TABLE lake.bugsigdb.signatures AS "
+                + lake_ingest._select_sql(BSDB, "v1.3.1", "2026-04-24_00:41_UTC", None))
+    con.register("lander", cat.load_table("raw.bugsigdb__full_dump").scan().to_arrow())
+    con.execute(f"CREATE TABLE got AS {bugsigdb.RELEASE['raw.bugsigdb__full_dump']}")
+    assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE lander").fetchall()
+    for a, b in (("got", "lander"), ("lander", "got")):
+        assert con.sql(f"SELECT count(*) FROM (SELECT * FROM {a} EXCEPT ALL "
+                       f"SELECT * FROM {b})").fetchone()[0] == 0, a
+    assert {r[0] for r in con.sql("SELECT curated_date FROM got").fetchall()} == {
+        "10 January 2021", "4 July 2022"}
+
+
 def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):
     """Otherwise a bad URL leaves the previous landing in place and reports success."""
     from bioconice import ncbi

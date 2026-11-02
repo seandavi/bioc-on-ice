@@ -84,6 +84,7 @@ BUNDLE = DatasetContract(
             "study_accession": "clinical.gwas_catalog__study.study_accession"}),
         declared_contract("raw.ncbi__mane_summary", ("refseq_nuc", "ensembl_nuc")),
         declared_contract("annotation.mane__transcript"),
+        declared_contract("raw.bugsigdb__full_dump", ("bsdb_id",)),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -119,7 +120,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.bedbase__bedset",
     "raw.bedbase__bedset_membership",
     "raw.biogrid__interactions",
-    "raw.bugsigdb__full_dump",
     "raw.cellosaurus__release",
     "raw.cellxgene__dataset",
     "raw.encode__experiment",
