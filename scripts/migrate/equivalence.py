@@ -45,9 +45,11 @@ for name in sys.argv[2:]:
         "rows_new": n("SELECT count(*) FROM new"), "rows_iceberg": n("SELECT count(*) FROM old"),
         "rows_manifest": ref[name]["row_count"],
         "columns_eq_iceberg": cols_new == cols_old, "columns_eq_manifest": cols_new == cols_ref,
+        # An empty key (a table that keeps whole-row duplicates) skips the key checks, as the gate does.
         "key_duplicated": n(f"SELECT count(*) FROM (SELECT 1 FROM new GROUP BY {', '.join(key)} "
-                            "HAVING count(*) > 1)"),
-        "key_null": n("SELECT count(*) FROM new WHERE " + " OR ".join(f"{k} IS NULL" for k in key)),
+                            "HAVING count(*) > 1)") if key else 0,
+        "key_null": n("SELECT count(*) FROM new WHERE "
+                      + " OR ".join(f"{k} IS NULL" for k in key)) if key else 0,
         "only_new": n("SELECT count(*) FROM (SELECT * FROM new EXCEPT ALL SELECT * FROM old)"),
         "only_iceberg": n("SELECT count(*) FROM (SELECT * FROM old EXCEPT ALL SELECT * FROM new)"),
     }
@@ -60,7 +62,7 @@ for name in sys.argv[2:]:
         if r[f"only_{side}"]:
             print(f"{name} sample only in {side}:", con.sql(
                 f"SELECT * FROM (SELECT * FROM {a} EXCEPT ALL SELECT * FROM {b}) "
-                f"ORDER BY {', '.join(key)} LIMIT 3").fetchall(), file=sys.stderr)
+                f"ORDER BY {', '.join(key) or 'ALL'} LIMIT 3").fetchall(), file=sys.stderr)
     results.append(r)
 print(json.dumps(results, indent=1))
 sys.exit(0 if all(r["pass"] for r in results) else 1)
