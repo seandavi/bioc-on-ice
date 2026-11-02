@@ -40,14 +40,14 @@ def _arrow(t):
     return f"list<{_arrow(t.element_type)}>" if isinstance(t, ListType) else _ARROW[str(t)]
 
 
-def declared_contract(name, primary_key=None, references=None, license=None):
+def declared_contract(name, primary_key=None, references=None, license=None, grain=None):
     """A TableContract from the table's declaration in schemas.py: its comment, columns,
     docs and licence (`license` where it declares none), keyed by `primary_key` (default:
-    its business key)."""
+    its business key). `grain` is for a table with no key."""
     d = DECLARED[name]
     key = tuple(primary_key or d.business_key)
     return TableContract(
-        name=name, description=d.comment, grain=f"one row per ({', '.join(key)})",
+        name=name, description=d.comment, grain=grain or f"one row per ({', '.join(key)})",
         primary_key=key, temporal_model=TemporalModel.UPSERT_LATEST_SNAPSHOT,
         owner="bioc-on-ice", license=license or d.properties["bioc.license"],
         columns=tuple(ColumnContract(f.name, _arrow(f.field_type), f.doc or "", not f.required)
@@ -73,6 +73,15 @@ BUNDLE = DatasetContract(
         declared_contract("annotation.wikipathways__pathway"),
         declared_contract("annotation.wikipathways__gene_pathway", references={
             "pathway_id": "annotation.wikipathways__pathway.pathway_id"}),
+        # No key: the file's whole-row duplicates are kept, and line_number, the lake's
+        # key, is not published. An empty key skips the key checks.
+        declared_contract("raw.gwas_catalog__associations", (), grain=(
+            "one row per data line of the release file; whole-row duplicates kept "
+            "(132 at 2026-09-15)")),
+        declared_contract("raw.gwas_catalog__studies", ("study_accession",)),
+        declared_contract("clinical.gwas_catalog__study"),
+        declared_contract("clinical.gwas_catalog__association", references={
+            "study_accession": "clinical.gwas_catalog__study.study_accession"}),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -102,8 +111,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
     "annotation.transcript",
-    "clinical.gwas_catalog__association",
-    "clinical.gwas_catalog__study",
     "ontology.relationship",
     "ontology.term",
     "provenance.release",
@@ -119,8 +126,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.ensembl__gtf",
     "raw.eqtlcatalogue__dataset",
     "raw.eqtlcatalogue__tabix_ftp_paths",
-    "raw.gwas_catalog__associations",
-    "raw.gwas_catalog__studies",
     "raw.icite__metadata",
     "raw.intact__mitab",
     "raw.metadata",

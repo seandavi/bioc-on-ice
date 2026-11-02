@@ -232,20 +232,13 @@ def _ids(col):
             f"u -> {_curie('trim(u)')})))")
 
 
-def transform(cat, release, version):
-    """Phase 2: studies keyed by accession, associations keyed by what was curated.
+def _study(src):
+    """clinical.gwas_catalog__study's columns, from a table shaped like raw.gwas_catalog__studies.
 
-    Scoped to `version`'s rows: raw accumulates every landed release, so an
-    unscoped read would derive from all of them at once.
+    submission_date, statistical_model and background_trait are left in raw: the
+    file declares them and fills none (0 of 230,057 rows at 2026-09-15).
     """
-    con = duckdb.connect()
-    for name in ("associations", "studies"):
-        con.register(name, cat.load_table(f"raw.gwas_catalog__{name}").scan(
-            row_filter=EqualTo("gwas_catalog_release", version)).to_arrow())
-
-    # submission_date, statistical_model and background_trait are left in raw:
-    # the file declares them and fills none (0 of 230,057 rows at 2026-09-15).
-    study = con.sql(f"""
+    return f"""
         SELECT study_accession, pubmed_id, first_author, date AS publication_date, journal,
                link, study AS study_title, date_added_to_catalog, disease_trait,
                initial_sample_size, replication_sample_size, platform, genotyping_technology,
@@ -255,20 +248,26 @@ def transform(cat, release, version):
                {_ids('mapped_background_trait_uri')} AS mapped_background_trait_ids,
                full_summary_statistics = 'yes' AS full_summary_statistics,
                summary_stats_location, gxe = 'yes' AS gxe
-        FROM studies
-    """).to_arrow_table()
+        FROM {src}
+    """
 
-    # Every study-level column the associations file repeats per row (publication,
-    # trait as reported, sample sizes, platform) is a function of study_accession
-    # in it — checked at 2026-09-15 — and lives in the study table instead, so a
-    # corrected journal name does not re-version a study's every association.
-    # DISTINCT collapses the file's whole-row duplicates (132 at 2026-09-15).
-    # p_value stays text: 6,275 of them are below the smallest double (1E-396
-    # reads as 0.0); pvalue_mlog is the number.
+
+def _association(src):
+    """clinical.gwas_catalog__association's columns, from a table shaped like
+    raw.gwas_catalog__associations.
+
+    Every study-level column the associations file repeats per row (publication,
+    trait as reported, sample sizes, platform) is a function of study_accession
+    in it — checked at 2026-09-15 — and lives in the study table instead, so a
+    corrected journal name does not re-version a study's every association.
+    DISTINCT collapses the file's whole-row duplicates (132 at 2026-09-15).
+    p_value stays text: 6,275 of them are below the smallest double (1E-396
+    reads as 0.0); pvalue_mlog is the number.
+    """
     # ponytail: if a release ever repeats the nine IDENTITY columns with different
     # mapping columns, merge refuses the duplicate key loudly; widen IDENTITY then.
     key = ", ".join(f"coalesce({c}, '')" for c in IDENTITY)
-    association = con.sql(f"""
+    return f"""
         SELECT DISTINCT md5(concat_ws(chr(31), {key})) AS association_key,
                study_accession, snps,
                list_sort(list_distinct(regexp_split_to_array(snps, '\\s*(;|,| x )\\s*'))) AS snp_ids,
@@ -280,8 +279,42 @@ def transform(cat, release, version):
                downstream_gene_id, downstream_gene_distance::INTEGER AS downstream_gene_distance,
                merged = '1' AS merged, snp_id_current,
                mapped_trait, {_ids('mapped_trait_uri')} AS mapped_trait_ids
-        FROM associations
-    """).to_arrow_table()
+        FROM {src}
+    """
+
+
+# Read from cdsci-lake (#183): lake.gwas_catalog.{association,study} are
+# raw.gwas_catalog__{associations,studies} without landed_in, one Catalog release at a
+# time; association adds line_number, its key, since the file's whole-row duplicates
+# leave no other. landed_in and valid_from are frozen at the last Iceberg load
+# ('2026.09', every current row) and valid_to is NULL, so the released schema is
+# unchanged until the schema-change release drops all three (#222).
+FROZEN_RELEASE = "'2026.09'"
+_CURRENT = f"{FROZEN_RELEASE} AS valid_from, NULL::VARCHAR AS valid_to"
+RELEASE = {
+    "raw.gwas_catalog__associations": f"SELECT * EXCLUDE (line_number), {FROZEN_RELEASE} "
+                                      f"AS landed_in FROM lake.gwas_catalog.association",
+    "raw.gwas_catalog__studies":
+        f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.gwas_catalog.study",
+    "clinical.gwas_catalog__study":
+        f"SELECT *, {_CURRENT} FROM ({_study('lake.gwas_catalog.study')})",
+    "clinical.gwas_catalog__association":
+        f"SELECT *, {_CURRENT} FROM ({_association('lake.gwas_catalog.association')})",
+}
+
+
+def transform(cat, release, version):
+    """Phase 2: studies keyed by accession, associations keyed by what was curated.
+
+    Scoped to `version`'s rows: raw accumulates every landed release, so an
+    unscoped read would derive from all of them at once.
+    """
+    con = duckdb.connect()
+    for name in ("associations", "studies"):
+        con.register(name, cat.load_table(f"raw.gwas_catalog__{name}").scan(
+            row_filter=EqualTo("gwas_catalog_release", version)).to_arrow())
+    study = con.sql(_study("studies")).to_arrow_table()
+    association = con.sql(_association("associations")).to_arrow_table()
 
     # The Catalog is each table's only writer, so the scope is the whole table.
     return {
