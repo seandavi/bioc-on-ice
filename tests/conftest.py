@@ -12,15 +12,17 @@ def release_matches_lander():
     `lake` maps each cdsci-lake table to the raw Iceberg table it replaces: the lake
     table is that raw table without `landed_in`, which is what the cdsci-lake source
     lands. Each SELECT in `release` must give the lander's current rows, with the same
-    columns and types, the frozen columns set to `frozen`, and valid_to NULL.
+    columns and types, the frozen columns set to `frozen`, and valid_to NULL. Lake tables
+    in `line_numbered` are keyed by a leading line_number, as cdsci-lake lands them.
     """
-    def check(cat, lake, release, frozen):
+    def check(cat, lake, release, frozen, line_numbered=()):
         con = duckdb.connect()
         con.execute("ATTACH ':memory:' AS lake")
         for name, raw in lake.items():
             con.register("raw", cat.load_table(raw).scan().to_arrow())
             con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{name.split('.')[1]}")
-            con.execute(f"CREATE TABLE {name} AS SELECT * EXCLUDE (landed_in) FROM raw")
+            number = "row_number() OVER ()::INTEGER AS line_number, " if name in line_numbered else ""
+            con.execute(f"CREATE TABLE {name} AS SELECT {number}* EXCLUDE (landed_in) FROM raw")
         for name, sql in release.items():
             con.register("lander", cat.load_table(name).scan().to_arrow())
             con.execute("CREATE OR REPLACE TABLE want AS SELECT * FROM lander")
