@@ -212,10 +212,30 @@ def _bedset(src):
     """
 
 
+def _relationship(bedfile, membership):
+    """resource.resource_relationship's BEDbase rows, from tables shaped like
+    resource.bedbase__bedfile and raw.bedbase__bedset_membership."""
+    # The joinable form of the accession lists and of bedset membership: one row per
+    # (bed file, relationship, target). An accession target must be 'prefix:accession':
+    # upstream's lists also carry bare tags and blanks that name nothing — 'encode' beside
+    # the real 'encode:ENCSR…' on 15,749 files, 'excluderanges', 'GLOBAL_EXP', and a
+    # trailing '' on 41,969 sample lists (2026-09-01 snapshot, issue #158). They stay in
+    # raw and in the list columns, as published; they are not relationships.
+    return f"""
+        SELECT DISTINCT * FROM (
+            SELECT resource_id, 'derived_from_sample' AS relationship, unnest(sample_id) AS target_id,
+                   'bedbase' AS source FROM {bedfile}
+            UNION ALL
+            SELECT resource_id, 'derived_from_experiment', unnest(experiment_id), 'bedbase' FROM {bedfile})
+        WHERE regexp_matches(target_id, '^[^:]+:.+')
+        UNION ALL
+        SELECT DISTINCT bedfile_id, 'member_of_bedset', bedset_id, 'bedbase' FROM {membership}
+    """
+
+
 # Read from cdsci-lake (#183): lake.bedbase.{bed,bedset,bedset_membership} are the raw
 # tables without landed_in, one snapshot each, plus bedbase_version, the snapshot date
-# stamped at ingest. Releases carry no row-history columns (#222). The
-# resource_relationship slice stays on Iceberg.
+# stamped at ingest. Releases carry no row-history columns (#222).
 RELEASE = {
     "raw.bedbase__bed": "SELECT * EXCLUDE (bedbase_version) FROM lake.bedbase.bed",
     "raw.bedbase__bedset": "SELECT * EXCLUDE (bedbase_version) FROM lake.bedbase.bedset",
@@ -224,6 +244,9 @@ RELEASE = {
     "resource.bedbase__bedfile": _bedfile("lake.bedbase.bed"),
     "resource.bedbase__bedset": _bedset("lake.bedbase.bedset"),
 }
+# This source's branch of the resource.resource_relationship union (publish.py).
+RELATIONSHIP = (f"WITH bedfile AS ({RELEASE['resource.bedbase__bedfile']}) "
+                + _relationship("bedfile", "lake.bedbase.bedset_membership"))
 
 
 def transform(cat, release):
@@ -243,22 +266,7 @@ def transform(cat, release):
     con.register("bedset", bedset)
     _check(con)
 
-    # The joinable form of the accession lists and of bedset membership: one row per
-    # (bed file, relationship, target). An accession target must be 'prefix:accession':
-    # upstream's lists also carry bare tags and blanks that name nothing — 'encode' beside
-    # the real 'encode:ENCSR…' on 15,749 files, 'excluderanges', 'GLOBAL_EXP', and a
-    # trailing '' on 41,969 sample lists (2026-09-01 snapshot, issue #158). They stay in
-    # raw and in the list columns, as published; they are not relationships.
-    rel = con.sql("""
-        SELECT DISTINCT * FROM (
-            SELECT resource_id, 'derived_from_sample' AS relationship, unnest(sample_id) AS target_id,
-                   'bedbase' AS source FROM bedfile
-            UNION ALL
-            SELECT resource_id, 'derived_from_experiment', unnest(experiment_id), 'bedbase' FROM bedfile)
-        WHERE regexp_matches(target_id, '^[^:]+:.+')
-        UNION ALL
-        SELECT DISTINCT bedfile_id, 'member_of_bedset', bedset_id, 'bedbase' FROM raw_bedset_membership
-    """).to_arrow_table()
+    rel = con.sql(_relationship("bedfile", "raw_bedset_membership")).to_arrow_table()
     return {
         "resource.bedbase__bedfile": merge.merge(
             cat, "resource.bedbase__bedfile", bedfile, release, AlwaysTrue()),

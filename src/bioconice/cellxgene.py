@@ -258,6 +258,17 @@ def _dataset(src, census_release):
     """
 
 
+def _relationship(ds):
+    """resource.resource_relationship's CELLxGENE rows, from a table shaped like
+    resource.cellxgene__dataset: one row per (dataset version, relationship, term id)."""
+    # DISTINCT: a listing can name the same term twice in one field (seen live,
+    # 2026-09-18), and the relationship is a set.
+    return "SELECT DISTINCT * FROM (" + " UNION ALL ".join(
+        f"SELECT dataset_version_id AS resource_id, 'has_{f}' AS relationship, "
+        f"unnest({f}_term_ids) AS target_id, 'cellxgene' AS source FROM {ds}"
+        for f in MULTI) + ")"
+
+
 # Read from cdsci-lake (#183): lake.cellxgene.dataset is raw.cellxgene__dataset without
 # landed_in, one crawl, plus census_release, the Census build stamped at ingest.
 # Releases carry no row-history columns (#222).
@@ -265,6 +276,8 @@ RELEASE = {
     "raw.cellxgene__dataset": "SELECT * EXCLUDE (census_release) FROM lake.cellxgene.dataset",
     "resource.cellxgene__dataset": _dataset("lake.cellxgene.dataset", "census_release"),
 }
+# This source's branch of the resource.resource_relationship union (publish.py).
+RELATIONSHIP = f"WITH ds AS ({RELEASE['resource.cellxgene__dataset']}) " + _relationship("ds")
 
 
 def transform(cat, release, retrieval_date, census_release):
@@ -283,13 +296,7 @@ def transform(cat, release, retrieval_date, census_release):
     _check(con)
     ds = con.sql("SELECT * FROM ds").to_arrow_table()
 
-    # The joinable form: one row per (dataset version, relationship, term id).
-    # DISTINCT: a listing can name the same term twice in one field (seen live,
-    # 2026-09-18), and the relationship is a set.
-    rel = con.sql("SELECT DISTINCT * FROM (" + " UNION ALL ".join(
-        f"SELECT dataset_version_id AS resource_id, 'has_{f}' AS relationship, "
-        f"unnest({f}_term_ids) AS target_id, 'cellxgene' AS source FROM ds"
-        for f in MULTI) + ")").to_arrow_table()
+    rel = con.sql(_relationship("ds")).to_arrow_table()
     return {
         "resource.cellxgene__dataset": merge.merge(
             cat, "resource.cellxgene__dataset", ds, release, AlwaysTrue()),

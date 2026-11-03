@@ -144,15 +144,33 @@ def _dataset(dataset, paths):
     """
 
 
+def _relationship(ds):
+    """resource.resource_relationship's eQTL Catalogue rows, from a table shaped like
+    resource.eqtlcatalogue__dataset."""
+    # Upstream's one tissue_id column holds cell types (CL) as well as tissues
+    # (UBERON) and cell lines (EFO, BTO). CL goes under has_cell_type, the
+    # relationship CELLxGENE's cell types use, so one join finds both catalogs.
+    return f"""
+        SELECT dataset_id AS resource_id,
+               CASE WHEN tissue_term_id LIKE 'CL:%' THEN 'has_cell_type' ELSE 'has_tissue' END
+                   AS relationship,
+               tissue_term_id AS target_id, 'eqtlcatalogue' AS source
+        FROM {ds} WHERE tissue_term_id IS NOT NULL
+    """
+
+
 # Read from cdsci-lake (#183): lake.eqtl_catalogue.{dataset,tabix_ftp_path} are the raw
 # tables without landed_in, one release at a time. Releases carry no row-history columns
-# (#222). The resource_relationship slice stays on Iceberg.
+# (#222).
 RELEASE = {
     "raw.eqtlcatalogue__dataset": "SELECT * FROM lake.eqtl_catalogue.dataset",
     "raw.eqtlcatalogue__tabix_ftp_paths": "SELECT * FROM lake.eqtl_catalogue.tabix_ftp_path",
     "resource.eqtlcatalogue__dataset": _dataset("lake.eqtl_catalogue.dataset",
                                                 "lake.eqtl_catalogue.tabix_ftp_path"),
 }
+# This source's branch of the resource.resource_relationship union (publish.py).
+RELATIONSHIP = (f"WITH ds AS ({RELEASE['resource.eqtlcatalogue__dataset']}) "
+                + _relationship("ds"))
 
 
 def transform(cat, release, version):
@@ -168,16 +186,7 @@ def transform(cat, release, version):
     con.execute(f"CREATE TABLE ds AS {_dataset('dataset', 'tabix_ftp_paths')}")
     ds = con.sql("SELECT * FROM ds").to_arrow_table()
 
-    # Upstream's one tissue_id column holds cell types (CL) as well as tissues
-    # (UBERON) and cell lines (EFO, BTO). CL goes under has_cell_type, the
-    # relationship CELLxGENE's cell types use, so one join finds both catalogs.
-    rel = con.sql("""
-        SELECT dataset_id AS resource_id,
-               CASE WHEN tissue_term_id LIKE 'CL:%' THEN 'has_cell_type' ELSE 'has_tissue' END
-                   AS relationship,
-               tissue_term_id AS target_id, 'eqtlcatalogue' AS source
-        FROM ds WHERE tissue_term_id IS NOT NULL
-    """).to_arrow_table()
+    rel = con.sql(_relationship("ds")).to_arrow_table()
 
     return {
         "resource.eqtlcatalogue__dataset": merge.merge(
