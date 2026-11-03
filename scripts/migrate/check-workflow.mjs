@@ -78,4 +78,8 @@ assert.deepEqual([r.stage, r.keys], ["preflight", ["preflight"]], "no tables is 
 r = await run({ "scratch-load": { ...done, version: "1", rows: {}, idempotent: false } });
 assert.equal(r.stage, "scratch-load");
 
-console.log("migrate-source.js: valid; clean, escalated, parity, missing-table, fix-parity, paused, no-tables and idempotence paths ok");
+r = await run({ "scratch-load": { status: "perf", summary: "10%: 20 s, 30%: 190 s", version: "1", rows: {}, idempotent: false } });
+assert.deepEqual([r.stage, r.status, r.reason], ["scratch-load", "perf", "10%: 20 s, 30%: 190 s"]);
+assert.ok(!r.keys.includes("repoint"), "a perf stop runs nothing after it");
+
+console.log("migrate-source.js: valid; clean, escalated, parity, missing-table, fix-parity, paused, no-tables, idempotence and perf paths ok");

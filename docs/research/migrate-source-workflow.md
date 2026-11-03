@@ -23,7 +23,7 @@ source's data-source issue, is optional. Launch it `async: true`, because a
 stage may ask the orchestrator a question through `contact_supervisor`. After
 editing the workflow, run `node scripts/migrate/check-workflow.mjs`. It runs
 pi-subagents' own validator, then the script with every child stubbed, and
-checks the clean, escalated, parity-failure, paused and idempotence paths.
+checks the clean, escalated, parity-failure, paused, idempotence and perf paths.
 
 ## What it does
 
@@ -48,9 +48,20 @@ one branch through seven stages in two repositories. A run that finds either
 path already there stops (`blocked`); the orchestrator removes them or resumes
 the stopped run (`subagent({ action: "resume", id })`).
 
+**Run time.** Every stage's long commands run under `timeout 1200`. Before a full
+load, a stage times the parse/curate on a 10% and a 30% prefix of the input. If
+the 30% run takes more than 4 times the 10% run, the stage stops with status
+`perf` and both timings rather than loading the full file. SQL avoids
+`ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING` with `FILTER`, which is
+quadratic under `lake_connect`'s 4 threads; a running sum minus the current
+row's flag gives the same count. The Cellosaurus run (2026-11-02) died this way.
+One stage's full scratch load took about 28 minutes and hit the 30-minute
+subagent cap.
+
 The return value says `review-clean`, `escalated` (blocking findings remain after
 round 2: the orchestrator decides), or `stopped: true` with the stage and why.
-`check-failed` means a child reported done but failed the script's own check.
+`check-failed` means a child reported done but failed the script's own check;
+`perf` means a stage refused a full load whose prefix timings grew superlinearly.
 
 ## What it does not do
 

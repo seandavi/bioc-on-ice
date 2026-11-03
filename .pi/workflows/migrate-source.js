@@ -62,8 +62,14 @@ Hard rules, no exceptions:
   R2 or Hugging Face. Never merge, never force-push, never "git stash", never touch main or the
   main checkouts (~/Documents/git/bioc-on-ice, ~/Documents/git/cdsci-lake): read origin/main
   with "git show origin/main:<path>".
-- Work in the foreground; leave no background process running. Keep each long command under
-  25 minutes and give shell calls an explicit timeout.
+- Work in the foreground; leave no background process running. Run every long command under
+  "timeout 1200" and give shell calls an explicit timeout.
+- Before any full load, time the parse/curate on a 10% and a 30% prefix of the input. If the
+  30% run takes more than 4 times the 10% run (superlinear), stop with status perf and both
+  timings in the summary instead of running the full file.
+- No "ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING" with FILTER: it is quadratic under
+  lake_connect's threads. Use a running sum minus the current row's flag:
+  sum(flag) OVER (ORDER BY ...) - flag.
 - Commit with: git -c user.name="Sean Davis" -c user.email=seandavi@gmail.com commit, with the
   trailer "Co-Authored-By: Claude <noreply@anthropic.com>".
 - If something needs a decision this brief and the recipe do not settle, ask through
@@ -74,7 +80,7 @@ const status = (extra, required) => ({
   type: "object",
   required: ["status", "summary"].concat(required || []),
   properties: Object.assign({
-    status: { type: "string", enum: ["done", "blocked"] },
+    status: { type: "string", enum: ["done", "blocked", "perf"] },
     summary: { type: "string" },
   }, extra),
 });
