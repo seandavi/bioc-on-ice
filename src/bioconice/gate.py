@@ -125,6 +125,11 @@ BUNDLE = DatasetContract(
         declared_contract("raw.ncbi__gene_orthologs", ("gene_id", "relationship", "other_gene_id")),
         declared_contract("raw.ncbi__gene_group", ("gene_id", "relationship", "other_gene_id")),
         declared_contract("annotation.ortholog"),
+        declared_contract("raw.eqtlcatalogue__dataset", ("dataset_id",)),
+        # cdsci-lake lands the two files only if they name the same datasets.
+        declared_contract("raw.eqtlcatalogue__tabix_ftp_paths", ("dataset_id",), references={
+            "dataset_id": "raw.eqtlcatalogue__dataset.dataset_id"}),
+        declared_contract("resource.eqtlcatalogue__dataset"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -157,8 +162,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.encode__experiment",
     "raw.encode__file",
     "raw.ensembl__gtf",
-    "raw.eqtlcatalogue__dataset",
-    "raw.eqtlcatalogue__tabix_ftp_paths",
     "raw.icite__metadata",
     "raw.intact__mitab",
     "raw.metadata",
@@ -182,7 +185,6 @@ UNCONTRACTED_TABLES = frozenset({
     "resource.cellxgene__dataset",
     "resource.encode__experiment",
     "resource.encode__file",
-    "resource.eqtlcatalogue__dataset",
     "resource.resource_relationship",
 })
 

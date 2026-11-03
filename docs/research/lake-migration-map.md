@@ -122,9 +122,9 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 | C4 | `raw.ncbi__gene_group` | 51,196 | NCBI orthologs | Iceberg `bioc.*` | — (add dump to `ncbi_gene`) | dump not landed | small adapter |
 | C4 | `raw.ncbi__gene_orthologs` | 18,877,923 | NCBI orthologs | Iceberg `bioc.*` | — (add dump to `ncbi_gene`) | dump not landed | small adapter |
 | C5 | `raw.ncbi__gene2accession` | 288,151,046 | NCBI gene2accession | Iceberg `bioc.*` | `ncbi_gene2accession.gene2accession` (src/cdsci/lake/sources/ncbi_gene2accession) | lake renames 8 columns (`rna_accession` vs `rna_nucleotide_accession_version` …) and types gi/positions BIGINT; release is all VARCHAR; 290.5M vs 288.2M | small adapter |
-| D1 | `raw.eqtlcatalogue__dataset` | 758 | eQTL Catalogue | Iceberg `bioc.*` | — | no lake source | new source module |
-| D1 | `raw.eqtlcatalogue__tabix_ftp_paths` | 758 | eQTL Catalogue | Iceberg `bioc.*` | — | no lake source | new source module |
-| D1 | `resource.eqtlcatalogue__dataset` | 758 | eQTL Catalogue | Iceberg `bioc.*` | — | release SELECT; also a `resource_relationship` slice | new source module |
+| D1 | `raw.eqtlcatalogue__dataset` | 758 | eQTL Catalogue | lake (migrate/eqtl_catalogue; was `bioc.*`) | `eqtl_catalogue.dataset` (src/cdsci/lake/sources/eqtl_catalogue, cdsci-lake PR) | no `landed_in` (#222); one release, not accumulated | new source module |
+| D1 | `raw.eqtlcatalogue__tabix_ftp_paths` | 758 | eQTL Catalogue | lake (migrate/eqtl_catalogue; was `bioc.*`) | `eqtl_catalogue.tabix_ftp_path` (src/cdsci/lake/sources/eqtl_catalogue, cdsci-lake PR) | no `landed_in` (#222); one release, not accumulated | new source module |
+| D1 | `resource.eqtlcatalogue__dataset` | 758 | eQTL Catalogue | lake (migrate/eqtl_catalogue; was `bioc.*`) | `eqtl_catalogue.dataset` + `eqtl_catalogue.tabix_ftp_path` (src/cdsci/lake/sources/eqtl_catalogue, cdsci-lake PR) | release SELECT over the new lake tables (`eqtlcatalogue.RELEASE`); no row-history columns (#222); the `resource_relationship` slice stays on Iceberg | new source module |
 | D2 | `raw.cellxgene__dataset` | 2,228 | CELLxGENE | Iceberg `bioc.*` | — | no lake source | new source module |
 | D2 | `resource.cellxgene__dataset` | 2,228 | CELLxGENE | Iceberg `bioc.*` | — | release SELECT; `resource_relationship` slice | new source module |
 | D3 | `raw.encode__experiment` | 28,642 | ENCODE | Iceberg `bioc.*` | — | no lake source | new source module |

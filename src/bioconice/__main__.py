@@ -125,7 +125,7 @@ def main():
     eq.add_argument("--url", help="root of a copy of eQTL-Catalogue-resources — another git ref on "
                     "raw.githubusercontent.com, or a local checkout; default is tag v26.09.2")
     eq.add_argument("--eqtl-release", help="eQTL Catalogue release to land, the N of "
-                    f"dataset_metadata_rN.tsv (default: {eqtlcatalogue.RELEASE})")
+                    f"dataset_metadata_rN.tsv (default: {eqtlcatalogue.DEFAULT_VERSION})")
 
     gw = sub.add_parser("ingest-gwas-catalog",
                         help="land the GWAS Catalog associations and studies whole, then derive")

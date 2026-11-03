@@ -211,3 +211,11 @@ def test_every_column_is_documented(cat, r7):
         assert "CC BY 4.0; Kerimov et al. Nat Genet 2021" in table.properties["comment"]
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+def test_release_selects_over_the_lake_reproduce_the_lander(cat, r7, release_matches_lander):
+    """#183: the release reads lake.eqtl_catalogue.{dataset,tabix_ftp_path}, not these Iceberg tables."""
+    eqtlcatalogue.ingest(cat, REL, url=r7)
+    release_matches_lander(cat, {"lake.eqtl_catalogue.dataset": "raw.eqtlcatalogue__dataset",
+                                 "lake.eqtl_catalogue.tabix_ftp_path": "raw.eqtlcatalogue__tabix_ftp_paths"},
+                           eqtlcatalogue.RELEASE)

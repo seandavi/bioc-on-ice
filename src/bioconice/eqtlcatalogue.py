@@ -59,7 +59,7 @@ from .hgnc import _header
 # in the three table comments' attribution. No "latest" discovery: nothing
 # upstream names the current release in a machine-readable place.
 URL = "https://raw.githubusercontent.com/eQTL-Catalogue/eQTL-Catalogue-resources/v26.09.2"
-RELEASE = "7"
+DEFAULT_VERSION = "7"
 TAXON = 9606
 LICENSE = "CC BY 4.0"
 
@@ -95,7 +95,7 @@ def land_raw(cat, release, url=None, version=None):
     `url` is the root of a copy of the resources repo: another ref, or a local
     checkout. Returns (version, {table: rows}).
     """
-    url, version = (url or URL).rstrip("/"), version or RELEASE
+    url, version = (url or URL).rstrip("/"), version or DEFAULT_VERSION
     files = {
         "raw.eqtlcatalogue__dataset": (
             f"{url}/data_tables/dataset_metadata_r{version}.tsv", DATASET_COLUMNS),
@@ -125,6 +125,36 @@ def land_raw(cat, release, url=None, version=None):
     return version, counts
 
 
+def _dataset(dataset, paths):
+    """resource.eqtlcatalogue__dataset's columns, from tables shaped like
+    raw.eqtlcatalogue__dataset and raw.eqtlcatalogue__tabix_ftp_paths, one release each."""
+    # tissue_id is an OBO id spelled PREFIX_NUMBER; ontology.term spells it as
+    # a CURIE. Anything else fails here rather than landing as a dead join key.
+    return f"""
+        SELECT d.dataset_id, d.study_id, d.study_label, d.sample_group, {TAXON} AS taxon_id,
+               CASE WHEN d.tissue_id IS NULL OR regexp_full_match(d.tissue_id, '[A-Za-z]+_[0-9]+')
+                    THEN replace(d.tissue_id, '_', ':')
+                    ELSE error('eqtlcatalogue: ' || d.dataset_id || ' has a tissue_id that is '
+                               || 'not PREFIX_NUMBER: ' || d.tissue_id) END AS tissue_term_id,
+               d.tissue_label, d.condition_label, d.sample_size::INTEGER AS sample_size,
+               d.quant_method, d.study_type, d.pmid, '{LICENSE}' AS license,
+               p.ftp_path AS sumstats_uri, p.ftp_cs_path AS credible_sets_uri,
+               p.ftp_lbf_path AS lbf_uri
+        FROM {dataset} d JOIN {paths} p USING (dataset_id)
+    """
+
+
+# Read from cdsci-lake (#183): lake.eqtl_catalogue.{dataset,tabix_ftp_path} are the raw
+# tables without landed_in, one release at a time. Releases carry no row-history columns
+# (#222). The resource_relationship slice stays on Iceberg.
+RELEASE = {
+    "raw.eqtlcatalogue__dataset": "SELECT * FROM lake.eqtl_catalogue.dataset",
+    "raw.eqtlcatalogue__tabix_ftp_paths": "SELECT * FROM lake.eqtl_catalogue.tabix_ftp_path",
+    "resource.eqtlcatalogue__dataset": _dataset("lake.eqtl_catalogue.dataset",
+                                                "lake.eqtl_catalogue.tabix_ftp_path"),
+}
+
+
 def transform(cat, release, version):
     """Phase 2: one resource row per dataset, and its tissue / cell type as a relationship.
 
@@ -135,21 +165,7 @@ def transform(cat, release, version):
         con.register(name, cat.load_table(f"raw.eqtlcatalogue__{name}").scan(
             row_filter=EqualTo("eqtlcatalogue_release", version)).to_arrow())
 
-    # tissue_id is an OBO id spelled PREFIX_NUMBER; ontology.term spells it as
-    # a CURIE. Anything else fails here rather than landing as a dead join key.
-    con.execute(f"""
-        CREATE TABLE ds AS
-        SELECT d.dataset_id, d.study_id, d.study_label, d.sample_group, {TAXON} AS taxon_id,
-               CASE WHEN d.tissue_id IS NULL OR regexp_full_match(d.tissue_id, '[A-Za-z]+_[0-9]+')
-                    THEN replace(d.tissue_id, '_', ':')
-                    ELSE error('eqtlcatalogue: ' || d.dataset_id || ' has a tissue_id that is '
-                               || 'not PREFIX_NUMBER: ' || d.tissue_id) END AS tissue_term_id,
-               d.tissue_label, d.condition_label, d.sample_size::INTEGER AS sample_size,
-               d.quant_method, d.study_type, d.pmid, '{LICENSE}' AS license,
-               p.ftp_path AS sumstats_uri, p.ftp_cs_path AS credible_sets_uri,
-               p.ftp_lbf_path AS lbf_uri
-        FROM dataset d JOIN tabix_ftp_paths p USING (dataset_id)
-    """)
+    con.execute(f"CREATE TABLE ds AS {_dataset('dataset', 'tabix_ftp_paths')}")
     ds = con.sql("SELECT * FROM ds").to_arrow_table()
 
     # Upstream's one tissue_id column holds cell types (CL) as well as tissues
