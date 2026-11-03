@@ -58,6 +58,10 @@ def declared_contract(name, primary_key=None, references=None, license=None, gra
 
 
 ENCODE_LICENSE = "LicenseRef-ENCODE-Data-Use-Policy"
+# BEDbase states no site-wide data licence; each record carries a DUO code, and every
+# record of the 2026-09-01 snapshot is DUO:0000042, general research use (cdsci-lake
+# docs/data-licenses.md). schemas.py declares no bioc.license for it.
+BEDBASE_LICENSE = "LicenseRef-DUO-0000042"
 
 
 # The bundle's own tables that have a contract outside a dataset release of their own.
@@ -141,6 +145,15 @@ BUNDLE = DatasetContract(
         declared_contract("raw.encode__file", ("title",), license=ENCODE_LICENSE),
         declared_contract("resource.encode__experiment", license=ENCODE_LICENSE),
         declared_contract("resource.encode__file", license=ENCODE_LICENSE),
+        declared_contract("raw.bedbase__bed", ("id",), license=BEDBASE_LICENSE),
+        declared_contract("raw.bedbase__bedset", ("id",), license=BEDBASE_LICENSE),
+        # No orphan on either side in the 2026-09-01 snapshot (578,552 rows).
+        declared_contract("raw.bedbase__bedset_membership", ("bedset_id", "bedfile_id"),
+                          license=BEDBASE_LICENSE, references={
+                              "bedset_id": "raw.bedbase__bedset.id",
+                              "bedfile_id": "raw.bedbase__bed.id"}),
+        declared_contract("resource.bedbase__bedfile", license=BEDBASE_LICENSE),
+        declared_contract("resource.bedbase__bedset", license=BEDBASE_LICENSE),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -165,9 +178,6 @@ UNCONTRACTED_TABLES = frozenset({
     "ontology.relationship",
     "ontology.term",
     "provenance.release",
-    "raw.bedbase__bed",
-    "raw.bedbase__bedset",
-    "raw.bedbase__bedset_membership",
     "raw.biogrid__interactions",
     "raw.ensembl__gtf",
     "raw.icite__metadata",
@@ -188,8 +198,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.pubtator3__species",
     "raw.rnacentral__id_mapping",
     "reference.genome",
-    "resource.bedbase__bedfile",
-    "resource.bedbase__bedset",
     "resource.resource_relationship",
 })
 

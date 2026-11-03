@@ -179,17 +179,9 @@ def _check(con):
                           + "; ".join(f"{k} ({v:,} rows)" for k, v in failed.items()))
 
 
-def transform(cat, release):
-    """Phase 2: the bedfile and bedset resource entries and their relationships, from raw.
-
-    A snapshot is the whole catalog, so every merge scope is everything BEDbase
-    asserts: a record absent from the snapshot is retired.
-    """
-    con = duckdb.connect()
-    for name in ("bed", "bedset", "bedset_membership"):
-        con.register(f"raw_{name}", cat.load_table(f"raw.bedbase__{name}").scan().to_arrow())
-
-    bedfile = con.sql("""
+def _bedfile(src):
+    """resource.bedbase__bedfile's columns, from a table shaped like raw.bedbase__bed."""
+    return f"""
         SELECT id AS resource_id, name AS title, description,
                genome_digest, genome_alias,
                TRY_CAST(NULLIF(annotation_species_id, '') AS INTEGER) AS taxon_id,
@@ -206,15 +198,46 @@ def transform(cat, release):
                bed_compliance AS compliance, data_format AS format,
                license_id, 'BEDbase' AS provider,
                submission_date AS submitted, last_update_date AS updated
-        FROM raw_bed
-    """).to_arrow_table()
+        FROM {src}
+    """
 
-    bedset = con.sql("""
+
+def _bedset(src):
+    """resource.bedbase__bedset's columns, from a table shaped like raw.bedbase__bedset."""
+    return f"""
         SELECT id AS resource_id, name AS title, description,
                bedfile_count, author, bedset_source, 'BEDbase' AS provider,
                submission_date AS submitted, last_update_date AS updated
-        FROM raw_bedset
-    """).to_arrow_table()
+        FROM {src}
+    """
+
+
+# Read from cdsci-lake (#183): lake.bedbase.{bed,bedset,bedset_membership} are the raw
+# tables without landed_in, one snapshot each, plus bedbase_version, the snapshot date
+# stamped at ingest. Releases carry no row-history columns (#222). The
+# resource_relationship slice stays on Iceberg.
+RELEASE = {
+    "raw.bedbase__bed": "SELECT * EXCLUDE (bedbase_version) FROM lake.bedbase.bed",
+    "raw.bedbase__bedset": "SELECT * EXCLUDE (bedbase_version) FROM lake.bedbase.bedset",
+    "raw.bedbase__bedset_membership":
+        "SELECT * EXCLUDE (bedbase_version) FROM lake.bedbase.bedset_membership",
+    "resource.bedbase__bedfile": _bedfile("lake.bedbase.bed"),
+    "resource.bedbase__bedset": _bedset("lake.bedbase.bedset"),
+}
+
+
+def transform(cat, release):
+    """Phase 2: the bedfile and bedset resource entries and their relationships, from raw.
+
+    A snapshot is the whole catalog, so every merge scope is everything BEDbase
+    asserts: a record absent from the snapshot is retired.
+    """
+    con = duckdb.connect()
+    for name in ("bed", "bedset", "bedset_membership"):
+        con.register(f"raw_{name}", cat.load_table(f"raw.bedbase__{name}").scan().to_arrow())
+
+    bedfile = con.sql(_bedfile("raw_bed")).to_arrow_table()
+    bedset = con.sql(_bedset("raw_bedset")).to_arrow_table()
 
     con.register("bedfile", bedfile)
     con.register("bedset", bedset)
