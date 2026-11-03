@@ -133,4 +133,4 @@ exit                                                 # releases the lock
 ```
 
 If any step fails, `set -e` ends the shell there: the lock is released and the timer
-stays stopped. Fix the cause, then run the block again from the top (a complete
+stays stopped. Fix the cause, then run the block again from the top.
