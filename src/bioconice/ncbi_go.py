@@ -35,6 +35,20 @@ COLUMNS = (
 )
 
 
+# Read from cdsci-lake (#183 wave C1): lake.ncbi_gene2go.gene2go and its transform model
+# gene_go. The lake types gene_id BIGINT and adds snapshot_version, go_label and
+# go_obsolete; cast back and drop them. It does not COALESCE NCBI's '-' in the key
+# columns (none in the real dump), so the release does, as transform() always has.
+RELEASE = {
+    "raw.ncbi__gene2go": "SELECT * EXCLUDE (snapshot_version) REPLACE (gene_id::VARCHAR AS "
+                         "gene_id) FROM lake.ncbi_gene2go.gene2go",
+    "annotation.ncbi__gene_go": """SELECT * EXCLUDE (go_label, go_obsolete) REPLACE (
+        gene_id::VARCHAR AS gene_id, COALESCE(evidence, '') AS evidence,
+        COALESCE(qualifier, '') AS qualifier)
+    FROM lake.ncbi_gene2go.gene_go""",
+}
+
+
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2go verbatim and whole into raw.ncbi__gene2go."""
     facts = merge.reading(release, "ncbi_gene", "gene2go", url or URL)
