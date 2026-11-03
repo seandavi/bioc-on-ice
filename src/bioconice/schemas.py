@@ -533,7 +533,8 @@ TABLES = {
                 "here so that question can be settled against real data rather than guessed at.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
-                    "bioc.column.discontinued_gene_id.prefix": "ncbigene"},
+                    "bioc.column.discontinued_gene_id.prefix": "ncbigene",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     ),
     "raw.bugsigdb__full_dump": TableDef(
         schema=Schema(

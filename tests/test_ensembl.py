@@ -494,9 +494,10 @@ def test_ncbi_release_reads_the_lake_tables_back_as_published(cat):
     load_ncbi(cat, "2026.09", taxa=(None,))
     con = duckdb.connect()
     con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.ncbi_gene")
-    for name in ("gene_info", "gene2ensembl"):
+    for name in ("gene_info", "gene2ensembl", "gene_history"):
         con.execute(f"CREATE TABLE lake.ncbi_gene.{name} AS " + lake_ingest._select_sql(
-            Path(NCBI_URLS[name]), "2026-09-12", lake_ingest.DUMP_COLUMNS[name], None, None))
+            Path(NCBI_URLS[name]), "2026-09-12", lake_ingest.DUMP_COLUMNS[name], None, None,
+            lake_ingest.DUMP_SHARD_COLUMNS.get(name, "gene_id")))
     con.execute("""CREATE TABLE lake.ncbi_gene.gene AS SELECT gene_id, taxon_id, symbol,
         description, type_of_gene AS gene_type, chromosome, map_location
         FROM lake.ncbi_gene.gene_info WHERE symbol IS DISTINCT FROM 'NEWENTRY'""")

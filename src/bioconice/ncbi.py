@@ -69,7 +69,7 @@ COLUMNS = {
 
 # Read from cdsci-lake (#183 wave C3a): lake.ncbi_gene.gene_info, .gene2ensembl and the
 # model gene, which drops NEWENTRY as transform() does. The lake types gene_id BIGINT and
-# adds snapshot_version to the dumps; cast back and drop it. gene_history is not landed yet.
+# adds snapshot_version to the dumps; cast back and drop it. gene_history: wave C3c.
 RELEASE = {
     "raw.ncbi__gene_info": "SELECT * EXCLUDE (snapshot_version) REPLACE (gene_id::VARCHAR AS "
                            "gene_id) FROM lake.ncbi_gene.gene_info",
@@ -77,6 +77,9 @@ RELEASE = {
                               "AS gene_id) FROM lake.ncbi_gene.gene2ensembl",
     "annotation.ncbi__gene": "SELECT * REPLACE (gene_id::VARCHAR AS gene_id) "
                              "FROM lake.ncbi_gene.gene",
+    "raw.ncbi__gene_history": "SELECT * EXCLUDE (snapshot_version) REPLACE ("
+                              "gene_id::VARCHAR AS gene_id, discontinued_gene_id::VARCHAR AS "
+                              "discontinued_gene_id) FROM lake.ncbi_gene.gene_history",
 }
 
 BATCH = 1_000_000
