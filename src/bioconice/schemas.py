@@ -449,7 +449,8 @@ TABLES = {
                 "version, per NLM's own citation form.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
-                    "bioc.column.ensembl_gene_id.prefix": "ensembl"},
+                    "bioc.column.ensembl_gene_id.prefix": "ensembl",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     ),
     "raw.ncbi__gene_info": TableDef(
         schema=Schema(
@@ -505,7 +506,8 @@ TABLES = {
                 "unsplit: splitting is interpretation and belongs in transform. Regenerated "
                 "nightly upstream, so the retrieval date is the version.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
-                    "bioc.column.gene_id.prefix": "ncbigene"},
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     ),
     "raw.ncbi__gene_history": TableDef(
         schema=Schema(
@@ -797,7 +799,8 @@ TABLES = {
                 "gene_type distinguishes them and OrgDb's ENTREZID key space includes them; "
                 "filter on gene_type if you want genes in the narrower sense.",
         properties={"bioc.column.gene_id.prefix": "ncbigene",
-                    "bioc.column.taxon_id.prefix": "ncbitaxon"},
+                    "bioc.column.taxon_id.prefix": "ncbitaxon",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     ),
     "annotation.transcript": TableDef(
         schema=Schema(

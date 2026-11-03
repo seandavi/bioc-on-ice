@@ -67,6 +67,18 @@ COLUMNS = {
     ),
 }
 
+# Read from cdsci-lake (#183 wave C3a): lake.ncbi_gene.gene_info, .gene2ensembl and the
+# model gene, which drops NEWENTRY as transform() does. The lake types gene_id BIGINT and
+# adds snapshot_version to the dumps; cast back and drop it. gene_history is not landed yet.
+RELEASE = {
+    "raw.ncbi__gene_info": "SELECT * EXCLUDE (snapshot_version) REPLACE (gene_id::VARCHAR AS "
+                           "gene_id) FROM lake.ncbi_gene.gene_info",
+    "raw.ncbi__gene2ensembl": "SELECT * EXCLUDE (snapshot_version) REPLACE (gene_id::VARCHAR "
+                              "AS gene_id) FROM lake.ncbi_gene.gene2ensembl",
+    "annotation.ncbi__gene": "SELECT * REPLACE (gene_id::VARCHAR AS gene_id) "
+                             "FROM lake.ncbi_gene.gene",
+}
+
 BATCH = 1_000_000
 # Rows accumulated per Iceberg commit. R2 Data Catalog rate-limits commits
 # per table ("429: too many commits to this table or view"), so committing

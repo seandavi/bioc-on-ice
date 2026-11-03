@@ -479,6 +479,40 @@ def test_bugsigdb_release_reads_the_typed_lake_table_back_as_published(cat):
         "10 January 2021", "4 July 2022"}
 
 
+def test_ncbi_release_reads_the_lake_tables_back_as_published(cat):
+    """The lake-backed RELEASE SELECTs give the lander's current rows and types (#183 C3a).
+
+    The dumps are landed with cdsci-lake's own landing SELECT (gene_id BIGINT, a
+    snapshot_version); gene is its model transform/models/ncbi_gene/gene.sql, restated.
+    """
+    import importlib
+
+    import duckdb
+
+    from bioconice import ncbi
+    lake_ingest = importlib.import_module("cdsci.lake.sources.ncbi_gene.ingest")
+    load_ncbi(cat, "2026.09", taxa=(None,))
+    con = duckdb.connect()
+    con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.ncbi_gene")
+    for name in ("gene_info", "gene2ensembl"):
+        con.execute(f"CREATE TABLE lake.ncbi_gene.{name} AS " + lake_ingest._select_sql(
+            Path(NCBI_URLS[name]), "2026-09-12", lake_ingest.DUMP_COLUMNS[name], None, None))
+    con.execute("""CREATE TABLE lake.ncbi_gene.gene AS SELECT gene_id, taxon_id, symbol,
+        description, type_of_gene AS gene_type, chromosome, map_location
+        FROM lake.ncbi_gene.gene_info WHERE symbol IS DISTINCT FROM 'NEWENTRY'""")
+    for name, sql in ncbi.RELEASE.items():
+        derived = name.startswith("annotation")
+        con.register("lander", cat.load_table(name).scan(
+            row_filter="valid_to IS NULL" if derived else "True").to_arrow())
+        con.execute("CREATE OR REPLACE TABLE want AS SELECT * EXCLUDE "
+                    f"({'valid_from, valid_to' if derived else 'landed_in'}) FROM lander")
+        con.execute(f"CREATE OR REPLACE TABLE got AS {sql}")
+        assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE want").fetchall(), name
+        for a, b in (("got", "want"), ("want", "got")):
+            assert con.sql(f"SELECT count(*) FROM (SELECT * FROM {a} EXCEPT ALL "
+                           f"SELECT * FROM {b})").fetchone()[0] == 0, (name, a)
+
+
 def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):
     """Otherwise a bad URL leaves the previous landing in place and reports success."""
     from bioconice import ncbi

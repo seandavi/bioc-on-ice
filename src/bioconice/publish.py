@@ -19,8 +19,8 @@ from cdsci.lake.contracts import ColumnContract, TableContract, TemporalModel
 from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.local import LocalFileSystem
 
-from . import (bugsigdb, cellosaurus, complexportal, gwas_catalog, hgnc, mane, ncbi_go,
-               ncbi_pubmed, wikipathways)
+from . import (bugsigdb, cellosaurus, complexportal, gwas_catalog, hgnc, mane, ncbi,
+               ncbi_go, ncbi_pubmed, wikipathways)
 from .release import SIGNATURE_TAXON, SIGNATURE_TAXON_SELECT
 from .schemas import TABLES as DECLARED
 
@@ -51,7 +51,8 @@ def _current(name, d):
 # Declared tables already read from cdsci-lake (#183): each source module's RELEASE.
 FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE, **wikipathways.RELEASE,
              **gwas_catalog.RELEASE, **mane.RELEASE, **bugsigdb.RELEASE,
-             **cellosaurus.RELEASE, **ncbi_go.RELEASE, **ncbi_pubmed.RELEASE}
+             **cellosaurus.RELEASE, **ncbi_go.RELEASE, **ncbi_pubmed.RELEASE,
+             **ncbi.RELEASE}
 
 # Every table of the live catalog except annotation.identifier_mapping__pre_repair.
 TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))
