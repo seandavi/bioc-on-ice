@@ -918,7 +918,8 @@ TABLES = {
                 "date is the version.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
-                    "bioc.column.pubmed_id.prefix": "pubmed"},
+                    "bioc.column.pubmed_id.prefix": "pubmed",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     ),
     "annotation.ncbi__gene_pubmed": TableDef(
         schema=Schema(
@@ -939,7 +940,8 @@ TABLES = {
                 "never updated.",
         properties={"bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.taxon_id.prefix": "ncbitaxon",
-                    "bioc.column.pubmed_id.prefix": "pubmed"},
+                    "bioc.column.pubmed_id.prefix": "pubmed",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     ),
     "raw.ncbi__gene2accession": TableDef(
         schema=Schema(

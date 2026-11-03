@@ -23,6 +23,17 @@ URL = f"{DATA}gene2pubmed.gz"
 # off, names from the spec rather than the header.
 COLUMNS = "{'taxon_id':'INTEGER','gene_id':'VARCHAR','pubmed_id':'VARCHAR'}"
 
+# Read from cdsci-lake (#183 wave C2): lake.ncbi_gene2pubmed.gene2pubmed and its model
+# gene_publication. The lake names pubmed_id pmid, types it and gene_id BIGINT, adds
+# snapshot_version, and orders gene_publication (gene_id, pmid, taxon_id); undo all four.
+RELEASE = {
+    "raw.ncbi__gene2pubmed": "SELECT taxon_id, gene_id::VARCHAR AS gene_id, pmid::VARCHAR "
+                             "AS pubmed_id FROM lake.ncbi_gene2pubmed.gene2pubmed",
+    "annotation.ncbi__gene_pubmed": "SELECT gene_id::VARCHAR AS gene_id, taxon_id, "
+                                    "pmid::VARCHAR AS pubmed_id "
+                                    "FROM lake.ncbi_gene2pubmed.gene_publication",
+}
+
 
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2pubmed verbatim and whole into raw.ncbi__gene2pubmed."""
