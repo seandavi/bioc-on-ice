@@ -220,3 +220,10 @@ def test_every_column_is_documented(cat, txt):
         assert "CC BY 4.0" in table.properties.get("comment", ""), identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+def test_release_selects_over_the_lake_reproduce_the_lander(cat, txt, release_matches_lander):
+    """#183: the release reads lake.cellosaurus.line, not these Iceberg tables."""
+    cellosaurus.ingest(cat, REL, url=txt)
+    release_matches_lander(cat, {"lake.cellosaurus.line": "raw.cellosaurus__release"},
+                           cellosaurus.RELEASE)

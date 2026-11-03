@@ -87,6 +87,12 @@ BUNDLE = DatasetContract(
         declared_contract("raw.ncbi__mane_summary", ("refseq_nuc", "ensembl_nuc")),
         declared_contract("annotation.mane__transcript"),
         declared_contract("raw.bugsigdb__full_dump", ("bsdb_id",)),
+        declared_contract("raw.cellosaurus__release", ("line_number",)),
+        declared_contract("annotation.cellosaurus__cell_line"),
+        declared_contract("annotation.cellosaurus__xref", references={
+            "accession": "annotation.cellosaurus__cell_line.accession"}),
+        declared_contract("annotation.cellosaurus__disease", references={
+            "accession": "annotation.cellosaurus__cell_line.accession"}),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -98,9 +104,6 @@ GATE_FILE = "gate.json"
 # Tables with no TableContract yet (#208). They get only the column and row-count checks:
 # no key or join checks. Writing a contract for one means deleting its line here.
 UNCONTRACTED_TABLES = frozenset({
-    "annotation.cellosaurus__cell_line",
-    "annotation.cellosaurus__disease",
-    "annotation.cellosaurus__xref",
     "annotation.exon",
     "annotation.gene",
     "annotation.icite__citation",
@@ -122,7 +125,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.bedbase__bedset",
     "raw.bedbase__bedset_membership",
     "raw.biogrid__interactions",
-    "raw.cellosaurus__release",
     "raw.cellxgene__dataset",
     "raw.encode__experiment",
     "raw.encode__file",
