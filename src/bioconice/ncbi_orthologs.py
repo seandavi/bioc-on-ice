@@ -50,6 +50,36 @@ COLUMNS = ("{'taxon_id':'INTEGER','gene_id':'VARCHAR','relationship':'VARCHAR',"
 FILES = ("gene_orthologs", "gene_group")
 
 
+def _pairs(raw):
+    """Ortholog pairs in both directions over `raw`, a gene_orthologs table expression.
+
+    The relationship filter is belt and braces: the README promises the column is
+    always 'Ortholog' in this file. DISTINCT because a pair given in both directions
+    upstream would otherwise mirror into a duplicate key.
+    """
+    return f"""
+        SELECT DISTINCT gene_id, taxon_id, ortholog_gene_id, ortholog_taxon_id, 'NCBI' AS source
+        FROM (
+            SELECT gene_id, taxon_id, other_gene_id AS ortholog_gene_id,
+                   other_taxon_id AS ortholog_taxon_id
+            FROM {raw} WHERE relationship = 'Ortholog'
+          UNION ALL
+            SELECT other_gene_id, other_taxon_id, gene_id, taxon_id
+            FROM {raw} WHERE relationship = 'Ortholog'
+        )"""
+
+
+# Read from cdsci-lake (#183 wave C4): lake.ncbi_gene.gene_orthologs and .gene_group. The
+# lake types both gene ids BIGINT and adds snapshot_version; cast back and drop it.
+# annotation.ortholog is transform()'s own pair SQL over the released gene_orthologs.
+RELEASE = {
+    f"raw.ncbi__{name}": "SELECT * EXCLUDE (snapshot_version) REPLACE (gene_id::VARCHAR AS "
+                         "gene_id, other_gene_id::VARCHAR AS other_gene_id) "
+                         f"FROM lake.ncbi_gene.{name}"
+    for name in FILES}
+RELEASE["annotation.ortholog"] = _pairs(f"({RELEASE['raw.ncbi__gene_orthologs']})")
+
+
 def land_raw(cat, release, urls=None):
     """Phase 1: both files verbatim and whole, each under its own manifest row."""
     urls = urls or {}
@@ -77,21 +107,8 @@ def transform(cat, release, taxon=None):
     con.register("raw", cat.load_table("raw.ncbi__gene_orthologs").scan(
         row_filter=raw_scope).to_arrow())
 
-    # The relationship filter is belt and braces: the README promises the
-    # column is always 'Ortholog' in this file. DISTINCT because a pair given
-    # in both directions upstream would otherwise mirror into a duplicate key.
-    pairs = con.sql(f"""
-        SELECT DISTINCT gene_id, taxon_id, ortholog_gene_id, ortholog_taxon_id, 'NCBI' AS source
-        FROM (
-            SELECT gene_id, taxon_id, other_gene_id AS ortholog_gene_id,
-                   other_taxon_id AS ortholog_taxon_id
-            FROM raw WHERE relationship = 'Ortholog'
-          UNION ALL
-            SELECT other_gene_id, other_taxon_id, gene_id, taxon_id
-            FROM raw WHERE relationship = 'Ortholog'
-        )
-        {f"WHERE taxon_id = {int(taxon)}" if taxon else ""}
-    """).to_arrow_table()
+    where = f"WHERE taxon_id = {int(taxon)}" if taxon else ""
+    pairs = con.sql(f"SELECT * FROM ({_pairs('raw')}) {where}").to_arrow_table()
 
     # The scope names this writer, so a second one (Ensembl Compara) can stack
     # into the same table under its own source.

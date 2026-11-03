@@ -126,3 +126,35 @@ def test_every_column_is_documented(cat, tmp_path):
         assert table.properties.get("comment"), identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+def test_release_reads_the_lake_tables_back_as_published(cat, tmp_path):
+    """The lake-backed RELEASE SELECTs give the lander's current rows and types (#183 C4).
+
+    Both dumps are landed with cdsci-lake's own landing SELECT (ids BIGINT, a
+    snapshot_version); annotation.ortholog is derived from them by the release.
+    """
+    import importlib
+
+    import duckdb
+    lake_ingest = importlib.import_module("cdsci.lake.sources.ncbi_gene.ingest")
+    load(cat, tmp_path)
+    con = duckdb.connect()
+    con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.ncbi_gene")
+    for name in ncbi_orthologs.FILES:
+        con.execute(f"CREATE TABLE lake.ncbi_gene.{name} AS " + lake_ingest._select_sql(
+            tmp_path / f"{name}.tsv", "2026-11-03", lake_ingest.DUMP_COLUMNS[name], None,
+            None, lake_ingest.DUMP_SHARD_COLUMNS.get(name, "gene_id")))
+    for name, sql in ncbi_orthologs.RELEASE.items():
+        derived = name.startswith("annotation")
+        con.register("lander", cat.load_table(name).scan(
+            row_filter="valid_to IS NULL" if derived else "True").to_arrow())
+        con.execute("CREATE OR REPLACE TABLE want AS SELECT * EXCLUDE "
+                    f"({'valid_from, valid_to' if derived else 'landed_in'}) FROM lander")
+        con.execute(f"CREATE OR REPLACE TABLE got AS {sql}")
+        assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE want").fetchall(), name
+        for a, b in (("got", "want"), ("want", "got")):
+            assert con.sql(f"SELECT count(*) FROM (SELECT * FROM {a} EXCEPT ALL "
+                           f"SELECT * FROM {b})").fetchone()[0] == 0, (name, a)
+    assert con.sql(f"SELECT count(*) FROM ({ncbi_orthologs.RELEASE['annotation.ortholog']})"
+                   ).fetchone()[0] == 10
