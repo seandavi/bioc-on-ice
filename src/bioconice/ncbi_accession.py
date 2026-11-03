@@ -46,6 +46,25 @@ COLUMNS = (
     "'mature_peptide_gi':'VARCHAR','symbol':'VARCHAR'}"
 )
 
+# Read from cdsci-lake (#183 wave C5): lake.ncbi_gene2accession.gene2accession. The lake
+# shortens eight names, types gene_id, the gi columns and the positions BIGINT, adds
+# snapshot_version, and leaves the minus strand NULL; rename and cast back, and restore
+# the '-' as land_raw does.
+RELEASE = {
+    "raw.ncbi__gene2accession": """SELECT taxon_id, gene_id::VARCHAR AS gene_id, status,
+        rna_accession AS rna_nucleotide_accession_version, rna_gi::VARCHAR AS rna_nucleotide_gi,
+        protein_accession AS protein_accession_version, protein_gi::VARCHAR AS protein_gi,
+        genomic_accession AS genomic_nucleotide_accession_version,
+        genomic_gi::VARCHAR AS genomic_nucleotide_gi,
+        start_position::VARCHAR AS start_position_on_the_genomic_accession,
+        end_position::VARCHAR AS end_position_on_the_genomic_accession,
+        CASE WHEN start_position IS NOT NULL THEN coalesce(orientation, '-')
+             ELSE orientation END AS orientation,
+        assembly, mature_peptide_accession AS mature_peptide_accession_version,
+        mature_peptide_gi::VARCHAR AS mature_peptide_gi, symbol
+    FROM lake.ncbi_gene2accession.gene2accession""",
+}
+
 
 def land_raw(cat, release, url=None):
     """Phase 1: stream gene2accession verbatim and whole into raw.ncbi__gene2accession."""
