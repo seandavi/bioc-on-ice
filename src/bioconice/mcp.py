@@ -32,6 +32,9 @@ from .schemas import TABLES as DECLARED
 
 # A release folder: `latest/` by default, or a dated `v{YYYY-MM-DD}/` pin.
 RELEASE_URL = os.environ.get("BIOCONICE_RELEASE_URL", "https://data.bioconice.cancerdatasci.org/latest").rstrip("/")
+# Where the dated `v{release}/` folders sit, next to `latest/`.
+SITE_URL = RELEASE_URL.rsplit("/", 1)[0]
+HF_ARCHIVE = "hf download seandavis/bioconice --repo-type dataset --revision YYYY-MM"
 ATTACH_SQL = f"ATTACH '{RELEASE_URL}/bioconice.duckdb' AS b (READ_ONLY)"
 MAX_LIMIT = 10_000
 DEFAULT_LIMIT = 1000
@@ -44,9 +47,8 @@ mcp = FastMCP(
         "the public biocOnIce release. Call list_tables() first to see what exists, then describe_table() on "
         "the ones you plan to join before writing SQL — the column docs say what a null "
         "means and which convention a coordinate uses, which you cannot guess correctly. "
-        "The release holds current rows only (`valid_to` is always NULL), so it cannot "
-        "answer 'as of an earlier release' questions; that history lives in the frozen "
-        "Iceberg archive, not here."
+        "A release is one dated dataset of current rows, with no row-history columns; "
+        "for reproducible work, cite the pinned release URL resolve_release() returns."
     ),
 )
 
@@ -56,8 +58,8 @@ mcp = FastMCP(
 # moves with every publish, and the file is a few hundred KB.
 # --------------------------------------------------------------------------
 
-def _manifest():
-    url = f"{RELEASE_URL}/manifest.json"
+def _manifest(base=RELEASE_URL):
+    url = f"{base}/manifest.json"
     # Cloudflare's WAF (error 1010) blocks urllib's default "Python-urllib/x.y"
     # User-Agent outright; any ordinary one satisfies it.
     req = urllib.request.Request(url, headers={"User-Agent": "bioconice-mcp"})
@@ -164,107 +166,44 @@ def guard_sql(sql):
 
 
 # --------------------------------------------------------------------------
-# resolve_release()'s core: provenance.release is small, so read it fresh
-# each call rather than caching a release manifest that could go stale.
+# resolve_release()'s core: a release's own manifest.json, read fresh each call.
 # --------------------------------------------------------------------------
 
-_SHORTCUT_SOURCE = {"ensembl": "ensembl", "icite": "icite", "ncbi_date": "ncbi_gene"}
-
-
-def _point_in_time_predicate(release):
-    return f"valid_from <= '{release}' AND (valid_to IS NULL OR valid_to > '{release}')"
-
-
-def _provenance_rows():
-    con = _duck()
-    # ponytail: the first release predates provenance.release.artifact (#176); NULL until it lands.
-    cols = {r[0] for r in con.execute("DESCRIBE b.provenance.release").fetchall()}
-    artifact = "artifact" if "artifact" in cols else "NULL AS artifact"
-    return con.execute(
-        f"SELECT release, source, source_version, version_method, {artifact} "
-        "FROM b.provenance.release ORDER BY ALL"
-    ).fetchall()
-
-
-def resolve_release_impl(release=None, ensembl=None, icite=None, ncbi_date=None,
-                          source=None, source_version=None, rows=None):
-    """`rows` is injectable for offline tests; live callers leave it None."""
-    shortcuts = [(k, v) for k, v in (("ensembl", ensembl), ("icite", icite), ("ncbi_date", ncbi_date))
-                 if v is not None]
-    if source is None and shortcuts:
-        if len(shortcuts) > 1:
-            raise ValueError("pass only one of ensembl=/icite=/ncbi_date=/source=")
-        name, value = shortcuts[0]
-        source = _SHORTCUT_SOURCE[name]
-        source_version = str(value)
-
-    rows = _provenance_rows() if rows is None else rows
-
-    if release is not None:
-        known_releases = sorted({r[0] for r in rows})
-        if release not in known_releases:
-            raise ValueError(f"unknown release {release!r}; known releases: {known_releases}")
-        matches = [r for r in rows if r[0] == release]
-        return {
-            "release": release,
-            "predicate": _point_in_time_predicate(release),
-            # One row per (source, artifact): a source read file by file, or
-            # species by species (ensembl), has several at one release.
-            "provenance": [
-                {"source": r[1], "artifact": r[4], "source_version": r[2], "version_method": r[3]}
-                for r in matches
-            ],
-        }
-
-    if source is None:
-        raise ValueError(
-            "pass release=<biocOnIce release>, one of ensembl=/icite=/ncbi_date=, "
-            "or source=+source_version="
-        )
-
-    matches = [r for r in rows if r[1] == source and (source_version is None or r[2] == str(source_version))]
-    if not matches:
-        known_versions = sorted({r[2] for r in rows if r[1] == source})
-        if not known_versions:
-            known_sources = sorted({r[1] for r in rows})
-            raise ValueError(f"unknown source {source!r}; known sources: {known_sources}")
-        raise ValueError(f"no release has {source}={source_version!r}; known {source} versions: {known_versions}")
-
-    best = max(matches, key=lambda r: r[0])
+def resolve_release_impl(release=None, manifest=None):
+    """`manifest` is injectable for offline tests; live callers leave it None."""
+    if release and not re.fullmatch(r"\d{4}-\d{2}-\d{2}(\.\d+)?", release):
+        raise ValueError(f"a release id is YYYY-MM-DD[.N], e.g. '2026-11-01', got {release!r}")
+    if manifest is None:
+        try:
+            manifest = _manifest(f"{SITE_URL}/v{release}" if release else RELEASE_URL)
+        except ValueError as e:
+            if not release:
+                raise
+            raise ValueError(f"no release {release} at {SITE_URL}/v{release}/ ({e}); older "
+                             f"releases are pruned there but archived monthly: {HF_ARCHIVE}") from e
     return {
-        "release": best[0],
-        "predicate": _point_in_time_predicate(best[0]),
-        "provenance": {"source": best[1], "source_version": best[2], "version_method": best[3]},
+        "release": manifest["release"],
+        "url": f"{SITE_URL}/v{manifest['release']}",
+        # Every provenance.release row at build time: which source versions it holds.
+        "provenance": manifest.get("provenance", []),
     }
 
 
 # --------------------------------------------------------------------------
 # query()'s execution: wrap the caller's query once. This is what gives a
-# universal row cap and truncated flag to ANY query, and it is deliberately
-# the whole of what current=true does — it filters the result on
-# `valid_to IS NULL`, it does not rewrite the inner query table-by-table
-# (that needs a real SQL parser, which is more machinery than a read-only
-# demo tool earns; see the tool description below for the one mistake this
-# causes).
+# universal row cap and truncated flag to ANY query.
 # --------------------------------------------------------------------------
 
-def query_impl(sql, limit=DEFAULT_LIMIT, current=False):
+def query_impl(sql, limit=DEFAULT_LIMIT):
     inner = guard_sql(sql)
     if not isinstance(limit, int) or not (0 < limit <= MAX_LIMIT):
         raise ValueError(f"limit must be an integer between 1 and {MAX_LIMIT}")
     con = _duck()
-    where = " WHERE valid_to IS NULL" if current else ""
-    wrapped = f"SELECT * FROM ({inner}) AS _bioconice_q{where} LIMIT {limit + 1}"
+    wrapped = f"SELECT * FROM ({inner}) AS _bioconice_q LIMIT {limit + 1}"
     try:
         cur = con.execute(wrapped)
     except duckdb.Error as e:
-        msg = str(e)
-        if current and "valid_to" in msg.lower():
-            raise ValueError(
-                "current=true filters the result on `valid_to IS NULL` — it does not rewrite "
-                "your query, so `valid_to` must be one of the columns your SELECT list returns."
-            ) from e
-        raise ValueError(msg) from e
+        raise ValueError(str(e)) from e
     columns = [d[0] for d in cur.description]
     rows = cur.fetchall()
     truncated = len(rows) > limit
@@ -293,12 +232,11 @@ RECIPES = [
         "sql": (
             "WITH gene_papers AS (\n"
             "  SELECT pubmed_id FROM b.annotation.ncbi__gene_pubmed\n"
-            "  WHERE gene_id = '7157' AND taxon_id = 9606 AND valid_to IS NULL  -- TP53, human\n"
+            "  WHERE gene_id = '7157' AND taxon_id = 9606  -- TP53, human\n"
             ")\n"
             "SELECT COUNT(*) AS citing_edges\n"
             "FROM b.annotation.icite__citation c\n"
-            "JOIN gene_papers g ON c.cited_pmid = g.pubmed_id\n"
-            "WHERE c.valid_to IS NULL;"
+            "JOIN gene_papers g ON c.cited_pmid = g.pubmed_id;"
         ),
     },
     {
@@ -315,29 +253,27 @@ RECIPES = [
             "  SELECT r.subject_id\n"
             "  FROM b.ontology.relationship r\n"
             "  JOIN descendants d ON r.object_id = d.term_id\n"
-            "  WHERE r.predicate = 'is_a' AND r.ontology = 'cl' AND r.valid_to IS NULL\n"
+            "  WHERE r.predicate = 'is_a' AND r.ontology = 'cl'\n"
             ")\n"
             "SELECT DISTINCT rr.resource_id\n"
             "FROM b.resource.resource_relationship rr\n"
             "JOIN descendants d ON rr.target_id = d.term_id\n"
             "-- resource_relationship.resource_id is the dataset VERSION id, not dataset_id\n"
-            "JOIN b.resource.cellxgene__dataset ds ON ds.dataset_version_id = rr.resource_id AND ds.valid_to IS NULL\n"
-            "WHERE rr.relationship = 'has_cell_type' AND rr.valid_to IS NULL\n"
+            "JOIN b.resource.cellxgene__dataset ds ON ds.dataset_version_id = rr.resource_id\n"
+            "WHERE rr.relationship = 'has_cell_type'\n"
             "  AND ds.taxon_id = 9606\n"
             "  AND EXISTS (\n"
             "    SELECT 1 FROM b.resource.resource_relationship t\n"
             "    WHERE t.resource_id = rr.resource_id AND t.relationship = 'has_tissue'\n"
-            "      AND t.target_id = 'UBERON:0000178' AND t.valid_to IS NULL  -- blood\n"
+            "      AND t.target_id = 'UBERON:0000178'  -- blood\n"
             "  );"
         ),
     },
     {
-        "name": "gene_models_at_release",
+        "name": "gene_models",
         "description": (
-            "A species' gene/transcript/exon models as of a specific biocOnIce release — resolve "
-            "the release with resolve_release() first, then splice its predicate in for each table. "
-            "The public release holds current rows only, so this returns the models still "
-            "current that already existed then, not ones retired since."
+            "A species' gene/transcript/exon models, TxDb-style. For an earlier release, "
+            "point the server at its pinned URL (resolve_release(release=...))."
         ),
         "sql": (
             "SELECT g.gene_id, g.symbol, t.transcript_id, e.rank, e.start, e.end\n"
@@ -345,27 +281,24 @@ RECIPES = [
             "JOIN b.annotation.transcript t USING (gene_id, taxon_id, source)\n"
             "JOIN b.annotation.exon e USING (transcript_id, taxon_id, source)\n"
             "WHERE g.taxon_id = 9606 AND g.source = 'ENSEMBL'\n"
-            "  AND g.valid_from <= '2026.09' AND (g.valid_to IS NULL OR g.valid_to > '2026.09')\n"
-            "  AND t.valid_from <= '2026.09' AND (t.valid_to IS NULL OR t.valid_to > '2026.09')\n"
-            "  AND e.valid_from <= '2026.09' AND (e.valid_to IS NULL OR e.valid_to > '2026.09')\n"
             "ORDER BY g.gene_id, t.transcript_id, e.rank;"
         ),
     },
     {
         "name": "taxon_coverage",
         "description": (
-            "How much of the catalog exists for one taxon, current rows only — a quick sanity "
+            "How much of the catalog exists for one taxon — a quick sanity "
             "check before building a bigger query for a species you have not used here yet."
         ),
         "sql": (
             "SELECT 'annotation.ncbi__gene' AS table_name, COUNT(*) AS rows\n"
-            "FROM b.annotation.ncbi__gene WHERE taxon_id = 9606 AND valid_to IS NULL\n"
+            "FROM b.annotation.ncbi__gene WHERE taxon_id = 9606\n"
             "UNION ALL\n"
             "SELECT 'annotation.gene', COUNT(*) FROM b.annotation.gene\n"
-            "WHERE taxon_id = 9606 AND valid_to IS NULL\n"
+            "WHERE taxon_id = 9606\n"
             "UNION ALL\n"
             "SELECT 'annotation.ncbi__gene_pubmed', COUNT(*) FROM b.annotation.ncbi__gene_pubmed\n"
-            "WHERE taxon_id = 9606 AND valid_to IS NULL;"
+            "WHERE taxon_id = 9606;"
         ),
     },
 ]
@@ -448,46 +381,27 @@ def describe_table(table: str) -> dict:
 
 @mcp.tool()
 @_logged
-def resolve_release(
-    release: str = "",
-    ensembl: str = "",
-    icite: str = "",
-    ncbi_date: str = "",
-    source: str = "",
-    source_version: str = "",
-) -> dict:
-    """Resolve a biocOnIce release id and its point-in-time SQL predicate.
+def resolve_release(release: str = "") -> dict:
+    """The release id and pinned URL to cite, with the source versions it holds.
 
-    Every versioned table's rows carry `valid_from`/`valid_to` in release
-    coordinates (e.g. '2026.09'), never in wall-clock time; this tool is how
-    you turn "Ensembl 116" or "the icite 2026-08 snapshot" into both the
-    release id AND the exact `valid_from <= R AND (valid_to IS NULL OR
-    valid_to > R)` predicate to paste into a `query()` WHERE clause. Pass
-    exactly one of: `release` (a biocOnIce id to validate and get the
-    predicate for), one of `ensembl=`/`icite=`/`ncbi_date=` (shortcuts for the
-    common sources), or `source=`+`source_version=` for any other row of
-    `provenance.release` (obo, cellxgene, bugsigdb, ...). `source` is the
-    provider; which ontology, species or file a row is about is that table's
-    `artifact` column, which resolving by `release` lists. An unknown
-    version errors back with the list of ones that exist.
-    The one mistake to avoid: the public release holds current rows only
-    (`valid_to` is always NULL), so the predicate for a PAST release returns
-    only the rows still current today, not the rows as they stood then; true
-    point-in-time history lives in the frozen Iceberg archive (ADR-0013/0014).
+    A biocOnIce release is one dated dataset of current rows, `YYYY-MM-DD`;
+    tables carry no row history. Leave `release` empty for the release this
+    server reads (`latest/` unless BIOCONICE_RELEASE_URL pins one), or pass a
+    release id to check it is still online. Returns `release`, `url` (the
+    pinned `v<release>/` folder: point BIOCONICE_RELEASE_URL, or a DuckDB
+    ATTACH of `<url>/bioconice.duckdb`, at it to reproduce a result) and
+    `provenance` (every source, artifact and source_version the release was
+    built from).
+    The one mistake to avoid: `latest/` moves with every publish; cite the
+    pinned `url`, not `latest/`. Old dated folders are pruned; the error then
+    names the monthly Hugging Face archive.
     """
-    return resolve_release_impl(
-        release=release or None,
-        ensembl=ensembl or None,
-        icite=icite or None,
-        ncbi_date=ncbi_date or None,
-        source=source or None,
-        source_version=source_version or None,
-    )
+    return resolve_release_impl(release=release or None)
 
 
 @mcp.tool()
 @_logged
-def query(sql: str, limit: int = DEFAULT_LIMIT, current: bool = False) -> dict:
+def query(sql: str, limit: int = DEFAULT_LIMIT) -> dict:
     """Run one read-only SQL query against the public biocOnIce release.
 
     Only a single `SELECT` or `WITH ... SELECT` is accepted — no
@@ -495,17 +409,12 @@ def query(sql: str, limit: int = DEFAULT_LIMIT, current: bool = False) -> dict:
     after a `;`; anything else is rejected with a plain-English reason before
     it reaches DuckDB. Results are capped at `limit` rows (default 1000, max
     10000), and going over sets `truncated: true` in the response rather than
-    silently dropping rows. Tables carry `valid_from`/`valid_to`
-    (see resolve_release); pass `current=true` to have this tool filter the
-    result on `valid_to IS NULL` for you, but only when your SELECT list
-    already includes `valid_to` — this does not parse or rewrite your query,
-    it filters the OUTPUT, so `valid_to` has to be one of the columns you
-    asked for.
+    silently dropping rows. Every row is current in this release; there are
+    no `valid_from`/`valid_to` columns to filter on.
     The one mistake to avoid: tables are named `b.<namespace>.<table>`
-    (e.g. `b.annotation.gene`); the release holds current rows only, so a
-    `valid_to IS NULL` filter is harmless but changes nothing.
+    (e.g. `b.annotation.gene`), not bare `<namespace>.<table>`.
     """
-    return query_impl(sql, limit=limit, current=current)
+    return query_impl(sql, limit=limit)
 
 
 @mcp.tool()
@@ -514,7 +423,7 @@ def recipes() -> list[dict]:
     """A fixed list of worked, runnable SQL for the catalog's common joins.
 
     Call this when you know roughly what question you want to ask (gene to
-    citing literature, dataset by cell type, gene models at a release, one
+    citing literature, dataset by cell type, a species' gene models, one
     taxon's coverage) but not the exact join path — each entry is real SQL
     that has been run against the live data, with the literal ids from a
     verified example (TP53, CL:0000084, UBERON:0000178, taxon 9606) that you
@@ -536,7 +445,7 @@ def docs_resource(table: str) -> str:
         "",
         d["comment"],
         "",
-        f"Business key: {', '.join(d['business_key']) or '(none — this table has no versioned rows)'}",
+        f"Business key: {', '.join(d['business_key']) or '(none)'}",
         f"Row count: {d['row_count']}",
         "",
         "## Columns",

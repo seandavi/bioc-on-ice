@@ -72,7 +72,7 @@ ORDER BY 1, 2;
 -- Mouse genes by source
 SELECT source, count(*) AS genes
 FROM annotation.gene
-WHERE taxon_id = 10090 AND valid_to IS NULL
+WHERE taxon_id = 10090
 GROUP BY source;
 ```
 

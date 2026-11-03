@@ -163,18 +163,11 @@ def _gene_pathway(src):
 
 
 # Read from cdsci-lake (#183): lake.wikipathways.gene_set is raw.wikipathways__gmt without
-# landed_in, one release at a time. landed_in and valid_from are frozen at the last Iceberg
-# load ('2026.09', every current row) and valid_to is NULL, so the released schema is
-# unchanged until the schema-change release drops all three (#222).
-FROZEN_RELEASE = "'2026.09'"
-_CURRENT = f"{FROZEN_RELEASE} AS valid_from, NULL::VARCHAR AS valid_to"
+# landed_in, one release at a time. Releases carry no row-history columns (#222).
 RELEASE = {
-    "raw.wikipathways__gmt":
-        f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.wikipathways.gene_set",
-    "annotation.wikipathways__pathway":
-        f"SELECT *, {_CURRENT} FROM ({_pathway('lake.wikipathways.gene_set')})",
-    "annotation.wikipathways__gene_pathway":
-        f"SELECT *, {_CURRENT} FROM ({_gene_pathway('lake.wikipathways.gene_set')})",
+    "raw.wikipathways__gmt": "SELECT * FROM lake.wikipathways.gene_set",
+    "annotation.wikipathways__pathway": _pathway("lake.wikipathways.gene_set"),
+    "annotation.wikipathways__gene_pathway": _gene_pathway("lake.wikipathways.gene_set"),
 }
 
 

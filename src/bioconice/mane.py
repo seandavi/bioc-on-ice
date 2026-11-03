@@ -131,16 +131,11 @@ def _transcript(src):
 
 
 # Read from cdsci-lake (#183): lake.mane.transcript is raw.ncbi__mane_summary without
-# landed_in, one MANE release at a time. landed_in and valid_from are frozen at the last
-# Iceberg load ('2026.09', every current row) and valid_to is NULL, so the released schema
-# is unchanged until the schema-change release drops all three (#222). The identifier_mapping
-# slice stays on Iceberg, written by transform().
-FROZEN_RELEASE = "'2026.09'"
+# landed_in, one MANE release at a time. Releases carry no row-history columns (#222). The
+# identifier_mapping slice stays on Iceberg, written by transform().
 RELEASE = {
-    "raw.ncbi__mane_summary": f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.mane.transcript",
-    "annotation.mane__transcript": f"SELECT *, {FROZEN_RELEASE} AS valid_from, "
-                                   f"NULL::VARCHAR AS valid_to "
-                                   f"FROM ({_transcript('lake.mane.transcript')})",
+    "raw.ncbi__mane_summary": "SELECT * FROM lake.mane.transcript",
+    "annotation.mane__transcript": _transcript("lake.mane.transcript"),
 }
 
 

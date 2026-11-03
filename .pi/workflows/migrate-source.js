@@ -62,8 +62,14 @@ Hard rules, no exceptions:
   R2 or Hugging Face. Never merge, never force-push, never "git stash", never touch main or the
   main checkouts (~/Documents/git/bioc-on-ice, ~/Documents/git/cdsci-lake): read origin/main
   with "git show origin/main:<path>".
-- Work in the foreground; leave no background process running. Keep each long command under
-  25 minutes and give shell calls an explicit timeout.
+- Work in the foreground; leave no background process running. Run every long command under
+  "timeout 1200" and give shell calls an explicit timeout.
+- Before any full load, time the parse/curate on a 10% and a 30% prefix of the input. If the
+  30% run takes more than 4 times the 10% run (superlinear), stop with status perf and both
+  timings in the summary instead of running the full file.
+- No "ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING" with FILTER: it is quadratic under
+  lake_connect's threads. Use a running sum minus the current row's flag:
+  sum(flag) OVER (ORDER BY ...) - flag.
 - Commit with: git -c user.name="Sean Davis" -c user.email=seandavi@gmail.com commit, with the
   trailer "Co-Authored-By: Claude <noreply@anthropic.com>".
 - If something needs a decision this brief and the recipe do not settle, ask through
@@ -74,7 +80,7 @@ const status = (extra, required) => ({
   type: "object",
   required: ["status", "summary"].concat(required || []),
   properties: Object.assign({
-    status: { type: "string", enum: ["done", "blocked"] },
+    status: { type: "string", enum: ["done", "blocked", "perf"] },
     summary: { type: "string" },
   }, extra),
 });
@@ -122,7 +128,7 @@ failure with that status:
    "Migrate <source> to cdsci-lake" exists in ${REPO}. "${source}" must be the first source
    in that order that is neither: otherwise status not-next, naming the source that is next.
    Then status blocked if any of the source's rows has an effort other than "new source
-   module", is marked mixed valid_from, or the map says it needs an owner decision: those
+   module", or the map says it needs an owner decision: those
    need a human (recipe, "Needs a human or the owner").
    Tables: every published table of the source (its rows in "Per table"; check them against
    the "${source}" entries in src/bioconice/schemas.py and publish.TABLES). Do not count a
@@ -237,11 +243,10 @@ const repoint = await runs.run("repoint", {
   model: OPUS,
   cwd: W,
   outputSchema: status({
-    frozen_release: { type: "string" },
     contracts: strings,
     changed_files: strings,
     checks: { type: "string", enum: ["pass", "fail"] },
-  }, ["frozen_release", "checks"]),
+  }, ["checks"]),
   task: `${COMMON}
 ${facts}
 Lake tables (key ${(modOut.key || []).join(", ")}, version column ${modOut.version_column}): ${(modOut.lake_tables || []).join(", ")}.
@@ -250,23 +255,19 @@ You are the REPOINT stage, in ${W}. Recipe step 3; src/bioconice/hgnc.py and com
 (and their tests) are the templates.
 - In src/bioconice/${source}.py, move each transform SELECT into a _<table>(src) function that
   both transform() and RELEASE call (one SQL text). RELEASE = {published table: SELECT over
-  lake.${SCHEMA}.<table>}. Raw tables: SELECT *, <frozen> AS landed_in FROM lake.<schema>.<table>.
-  Derived (valid_from/valid_to) tables: SELECT *, <frozen> AS valid_from, NULL::VARCHAR AS valid_to.
-- The frozen value (#222) is FROZEN_RELEASE, the single landed_in / valid_from value of the
-  source's current rows. Read it from Iceberg (SELECT DISTINCT over the current rows of each
-  table through publish.ATTACH_LIVE): if any table has more than one value, stop with status
-  blocked (mixed valid_from needs the owner, recipe decision 2). Comment it as hgnc.py does.
+  lake.${SCHEMA}.<table>}. Raw tables: SELECT * FROM lake.<schema>.<table>. Derived tables: the
+  _<table>(lake.<schema>.<table>) SELECT itself. Releases carry no landed_in, valid_from or
+  valid_to (#222).
 - src/bioconice/publish.py: FROM_LAKE gains **${source}.RELEASE.
 - src/bioconice/gate.py: BUNDLE gains declared_contract(...) for every table (raw tables keyed
   without their version column; license= where schemas.py declares none; references= only where
   a join is cheap and real), and each table's line leaves UNCONTRACTED_TABLES (the #208 list).
 - tests/test_${source}.py: a test that calls the release_matches_lander fixture
-  (tests/conftest.py) with the lake table -> raw table map, RELEASE and the frozen value as a
-  plain string (FROZEN_RELEASE without its SQL quotes, e.g. "2026.09"; not the test's REL).
+  (tests/conftest.py) with the lake table -> raw table map and RELEASE.
 - docs/research/lake-migration-map.md: the source's rows read "lake (migrate/${source})" in
   "reads now", with the lake table in the cdsci-lake column.
 - uv run pytest -q. Commit.
-Report FROZEN_RELEASE (as the SQL literal), the contract keys ("table: key"), changed files and checks.`,
+Report the contract keys ("table: key"), changed files and checks.`,
 });
 const repOut = repoint.structuredOutput || {};
 if (!repoint.ok || repOut.status !== "done" || repOut.checks !== "pass") return stop("repoint", repoint);
@@ -388,7 +389,7 @@ body to a file under ${T} and passing --body-file:
 2. gh pr create -R ${REPO} --draft --base main --head ${BRANCH} --title "${TITLE}"
    Body: first line "Part of #183${issue ? `, #${issue}` : ""}, opened by .pi/workflows/migrate-source.js. Companion: <the cdsci-lake PR URL>."
    Then edit the cdsci-lake PR body (gh pr edit --body-file) so it links this PR as its companion.
-   bioc-on-ice body, continued (repoint stage summary: ${repOut.summary}): the repoints (${TABLES.join(", ")}) and FROZEN_RELEASE ${repOut.frozen_release} (#222);
+   bioc-on-ice body, continued (repoint stage summary: ${repOut.summary}): the repoints (${TABLES.join(", ")});
    the gate change (contracts ${(repOut.contracts || []).join("; ")}, removed from UNCONTRACTED_TABLES;
    tick these in #208 on merge: ${TABLES.join(", ")}) needs owner approval; the evidence table;
    "Partial-bundle gate: PASS" with the bundle tables; the current-upstream section copied from ${T}/upstream.md;
@@ -411,8 +412,8 @@ const CHECKLIST = `Review checklist (answer every item; a "no" is a finding):
    bypassed; registered in ops.SOURCES, URL in Settings, licence row with a dated quote.
 3. cdsci-lake tests cover: lands whole, dialect edge cases, idempotent re-run, limited load,
    new version prunes and restamps, malformed input raises, empty input refused, table kept.
-4. bioc-on-ice: one SQL text (transform() and RELEASE call the same _<table>(src)); FROZEN_RELEASE
-   is the Iceberg value and valid_to is NULL (#222); FROM_LAKE gains the source; contract keys are
+4. bioc-on-ice: one SQL text (transform() and RELEASE call the same _<table>(src)); RELEASE
+   publishes no landed_in, valid_from or valid_to (#222); FROM_LAKE gains the source; contract keys are
    the real row keys (raw tables without the version column); the tables left UNCONTRACTED_TABLES;
    the release_matches_lander test exercises every RELEASE entry.
 5. Evidence: every table 0 / 0 EXCEPT ALL on the same version, columns equal Iceberg and the
@@ -576,7 +577,6 @@ return {
   status: escalate ? "escalated" : "review-clean",
   prs: { lake: prOut.lake_pr, bioc: prOut.bioc_pr },
   tables: TABLES,
-  frozen_release: repOut.frozen_release,
   equivalence: eqTables,
   gate: eqOut.gate,
   upstream: { version: upOut.version, report: upOut.report },

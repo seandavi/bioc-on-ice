@@ -89,14 +89,14 @@ WITH RECURSIVE descendants(term_id) AS (
   SELECT r.subject_id
   FROM bioc.ontology.relationship r
   JOIN descendants d ON r.object_id = d.term_id
-  WHERE r.predicate = 'is_a' AND r.ontology = 'cl' AND r.valid_to IS NULL
+  WHERE r.predicate = 'is_a' AND r.ontology = 'cl'
 )
 SELECT DISTINCT ds.title, ds.cell_count, ds.h5ad_uri
 FROM bioc.resource.resource_relationship rr
 JOIN descendants d ON rr.target_id = d.term_id
 JOIN bioc.resource.cellxgene__dataset ds   -- resource_id is the dataset VERSION id
-  ON ds.dataset_version_id = rr.resource_id AND ds.valid_to IS NULL
-WHERE rr.relationship = 'has_cell_type' AND rr.valid_to IS NULL
+  ON ds.dataset_version_id = rr.resource_id
+WHERE rr.relationship = 'has_cell_type'
   AND ds.taxon_id = 9606
 ORDER BY ds.cell_count DESC;
 ```
@@ -129,7 +129,7 @@ today; with one assembly loaded per taxon, `taxon_id` alone selects it.
 ```sql
 SELECT count(*) FROM bioc.annotation.gene g
 JOIN bioc.reference.genome r USING (genome_id, taxon_id, source)
-WHERE g.taxon_id = 10090 AND r.is_canonical AND g.valid_to IS NULL AND r.valid_to IS NULL;
+WHERE g.taxon_id = 10090 AND r.is_canonical;
 ```
 
 NCBI Gene adds the attributes a GTF cannot carry — descriptions, aliases,
@@ -233,10 +233,10 @@ DBI::dbExecute(con, "ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bio
 DBI::dbGetQuery(con, "SELECT count(*) FROM bioc.annotation.gene WHERE taxon_id = 9606")
 ```
 
-A release holds current rows only: `valid_to` is always NULL, so the
-`valid_from`/`valid_to` point-in-time queries run but cannot reach a row
-retired since. Those need the Type-2 Iceberg tables, which become a frozen
-archive (ADR-[0013](docs/adr/0013-versioned-datasets-not-versioned-rows.md),
+A release holds current rows only, with no row-history columns
+(`valid_from`, `valid_to`, `landed_in`; dropped by #222). To reproduce a
+result, pin the dated release (`/v<date>/` instead of `/latest/`); row history
+before that lives in the Type-2 Iceberg tables, which become a frozen archive (ADR-[0013](docs/adr/0013-versioned-datasets-not-versioned-rows.md),
 [0014](docs/adr/0014-public-releases-are-parquet-plus-duckdb-views.md)).
 
 The TxDb query — a canonical transcript's exons in biological order, with
@@ -268,7 +268,7 @@ and citation counts are kept without opening 40M version rows. Both join to
 `annotation.ncbi__gene_pubmed` on `pmid`. `annotation.icite__citation` is the
 graph itself, ~930M `(citing_pmid, cited_pmid)` edges exploded from the
 `references` lists (exactly the Open Citation Collection) and merged in 16 shards of `cited_pmid`; "who cites X" is
-`WHERE cited_pmid = X AND valid_to IS NULL`.
+`WHERE cited_pmid = X`.
 
 ```sh
 BIOCONICE_SCRATCH=/data/tmp uv run bioconice ingest-icite --release 2026.09             # latest snapshot
@@ -400,6 +400,10 @@ Monday after each month's first Sunday; the units are not installed yet.
 The weekly release (Sundays 00:00 UTC, ADR-0016) runs the four commands above as
 `scripts/release.sh` from a systemd `--user` timer on onclappc02; see
 [`systemd/README.md`](systemd/README.md) for the units, install and recovery.
+
+A release that drops columns cannot pass that script's gate. It is run once by hand
+with `gate --allow-schema-change`, with the timer stopped and under the script's lock
+([one-off procedure](systemd/README.md#one-off-a-release-that-drops-columns-222)).
 
 ## Acceptance
 

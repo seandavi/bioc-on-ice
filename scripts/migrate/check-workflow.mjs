@@ -24,7 +24,7 @@ function run(overrides) {
     preflight: { status: "ready", reason: "r", tables, lake_schema: "x", reference_release: "2026-11-01", iceberg_version: "1", version_method: "m" },
     module: { ...done, lake_tables: ["lake.x.y"], key: ["k"], version_column: "x_version", checks: "pass" },
     "scratch-load": { ...done, version: "1", rows: { "lake.x.y": 5 }, idempotent: true },
-    repoint: { ...done, frozen_release: "'2026.09'", contracts: [], checks: "pass" },
+    repoint: { ...done, contracts: [], checks: "pass" },
     equivalence: { ...done, tables: same, gate: "PASS" },
     upstream: { ...done, version: "2", tables: same, within_bounds: true, report: "r" },
     prs: { status: "done", lake_pr: "L", bioc_pr: "B" },
@@ -78,4 +78,8 @@ assert.deepEqual([r.stage, r.keys], ["preflight", ["preflight"]], "no tables is 
 r = await run({ "scratch-load": { ...done, version: "1", rows: {}, idempotent: false } });
 assert.equal(r.stage, "scratch-load");
 
-console.log("migrate-source.js: valid; clean, escalated, parity, missing-table, fix-parity, paused, no-tables and idempotence paths ok");
+r = await run({ "scratch-load": { status: "perf", summary: "10%: 20 s, 30%: 190 s", version: "1", rows: {}, idempotent: false } });
+assert.deepEqual([r.stage, r.status, r.reason], ["scratch-load", "perf", "10%: 20 s, 30%: 190 s"]);
+assert.ok(!r.keys.includes("repoint"), "a perf stop runs nothing after it");
+
+console.log("migrate-source.js: valid; clean, escalated, parity, missing-table, fix-parity, paused, no-tables, idempotence and perf paths ok");

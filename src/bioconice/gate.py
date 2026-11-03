@@ -5,6 +5,7 @@ columns and types unchanged, row count within bounds, key not null and unique, j
 coverage. This module supplies bioc-on-ice's contracts and its exemption list, refuses a
 reference that is not older than the bundle, checks the bundle's manifest.json against its
 own Parquet, runs the README queries on the bundle (optional), and prints the report.
+`--allow-schema-change` lets named tables drop the row-history columns (#222), owner-approved.
 Reads the bundle and the reference's manifest.json only. A pass leaves gate.json in the
 bundle, bound to its manifest.json by sha256: `bioconice hf-push` pushes only such a bundle.
 """
@@ -26,7 +27,7 @@ from cdsci.lake.publish.release import AcceptanceCheck
 from cdsci.lake.publish.verify import verify_release_over_release
 from pyiceberg.types import ListType
 
-from .publish import PUBMED_ARTICLE, _lit
+from .publish import PUBMED_ARTICLE, ROW_HISTORY, _lit
 from .release import BUGSIGDB
 from .schemas import TABLES as DECLARED
 from .upload import PUBLIC_URL
@@ -43,7 +44,8 @@ def _arrow(t):
 def declared_contract(name, primary_key=None, references=None, license=None, grain=None):
     """A TableContract from the table's declaration in schemas.py: its comment, columns,
     docs and licence (`license` where it declares none), keyed by `primary_key` (default:
-    its business key). `grain` is for a table with no key."""
+    its business key). `grain` is for a table with no key. Row-history columns are not
+    published (#222), so not in the contract."""
     d = DECLARED[name]
     key = tuple(primary_key or d.business_key)
     return TableContract(
@@ -51,7 +53,7 @@ def declared_contract(name, primary_key=None, references=None, license=None, gra
         primary_key=key, temporal_model=TemporalModel.UPSERT_LATEST_SNAPSHOT,
         owner="bioc-on-ice", license=license or d.properties["bioc.license"],
         columns=tuple(ColumnContract(f.name, _arrow(f.field_type), f.doc or "", not f.required)
-                      for f in d.schema.fields),
+                      for f in d.schema.fields if f.name not in ROW_HISTORY),
         references=references or {})
 
 
@@ -212,18 +214,44 @@ def manifest_sha256(release: Path) -> str:
     return hashlib.sha256((release / "manifest.json").read_bytes()).hexdigest()
 
 
-def gate(release: Path, reference: str | None = DEFAULT_REFERENCE) -> bool:
+def _columns(manifest):
+    return {f"{t['schema']}.{t['table']}": [(c["name"], c["type"]) for c in t["columns"]]
+            for t in manifest["tables"]}
+
+
+def allow_dropped_history(checks, allowed, ref_manifest, manifest):
+    """(checks, {table: dropped columns}): a failed columns_unchanged of a table in `allowed`
+    passes when its only change from the reference is dropped ROW_HISTORY columns (#222)."""
+    before, after = _columns(ref_manifest), _columns(manifest)
+    changes = {t: [] for t in sorted(allowed)}
+    out = []
+    for c in checks:
+        table = c.name.removesuffix(".columns_unchanged")
+        kept = [col for col in before.get(table, []) if col[0] not in ROW_HISTORY]
+        if not c.passed and table in changes and kept == after.get(table):
+            changes[table] = [n for n, _ in before[table] if n in ROW_HISTORY]
+            c = AcceptanceCheck(c.name, True, c.required,
+                                f"schema change allowed: dropped {', '.join(changes[table])}")
+        out.append(c)
+    return out, changes
+
+
+def gate(release: Path, reference: str | None = DEFAULT_REFERENCE,
+         allow_schema_change=()) -> bool:
     """Print the gate report for the bundle `release` against `reference` (a release base
-    URL or directory); True when every required check passes, and then write gate.json."""
+    URL or directory); True when every required check passes, and then write gate.json.
+    Tables in `allow_schema_change` may drop row-history columns (owner approval, #222)."""
     (release / GATE_FILE).unlink(missing_ok=True)
     manifest = json.loads((release / "manifest.json").read_text())
     ref_release = None
+    ref_manifest = {"tables": []}
     con = release_con(release, manifest["tables"])
     if reference is not None:
         try:
-            ref_release = json.loads(con.execute(
+            ref_manifest = json.loads(con.execute(
                 "SELECT content FROM read_text(?)",
-                [f"{reference.rstrip('/')}/manifest.json"]).fetchone()[0])["release"]
+                [f"{reference.rstrip('/')}/manifest.json"]).fetchone()[0])
+            ref_release = ref_manifest["release"]
         except (duckdb.Error, ValueError, KeyError) as e:
             print(f"FAIL: reference {reference}: no readable manifest.json ({type(e).__name__})")
             return False
@@ -241,7 +269,12 @@ def gate(release: Path, reference: str | None = DEFAULT_REFERENCE) -> bool:
             return False
     report = verify_release_over_release(
         "bioconice", release, reference, CONTRACTS, UNCONTRACTED_TABLES)
-    checks = [*report.checks, *bundle_checks(con, manifest["tables"], readme_queries())]
+    checks, schema_changes = allow_dropped_history(report.checks, allow_schema_change,
+                                                   ref_manifest, manifest)
+    checks += bundle_checks(con, manifest["tables"], readme_queries())
+    if schema_changes:
+        print("schema change allowed (owner approval, #222): " + "; ".join(
+            f"{t} drops {', '.join(cols) or 'nothing'}" for t, cols in schema_changes.items()))
     by_table: dict[str, list] = {}
     for c in checks:
         # Table checks are named `<schema>.<table>.<check>`; release-wide ones have no dot.
@@ -259,5 +292,6 @@ def gate(release: Path, reference: str | None = DEFAULT_REFERENCE) -> bool:
         (release / GATE_FILE).write_text(json.dumps({
             "release": manifest["release"], "manifest_sha256": manifest_sha256(release),
             "reference": reference, "reference_release": ref_release,
+            "schema_changes": schema_changes,
             "passed_at": datetime.now(UTC).isoformat(timespec="seconds")}, indent=2) + "\n")
     return not failed

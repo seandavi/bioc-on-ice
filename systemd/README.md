@@ -88,3 +88,49 @@ release and only prunes.
   removes a stale one first and writes the new one atomically, last), so a
   re-run rebuilds it. A truncated `manifest.json` from an older publish does
   not parse and is rebuilt too.
+
+## One-off: a release that drops columns (#222)
+
+The weekly script gates without `--allow-schema-change`, so a release that
+drops the row-history columns (`valid_from`, `valid_to`, `landed_in`) is run
+once by hand, serialized with the timer: pause it, wait out any run in
+progress, and hold the script's own lock from publish to the applied upload.
+Do this before #183 wave C, on a UTC date after `latest/`'s release.
+
+Run it in one shell, step by step. `set -euo pipefail` stops at the first failure, and the
+script's own lock is taken *first*: a weekly run in progress holds it for its whole
+run, so `flock` waits that run out (the service is `Type=oneshot`, so `is-active`
+would not).
+
+```bash
+set -euo pipefail
+export TMPDIR=/data/davsean/tmp CU_OPENALEX_LAKE_BACKEND=postgres
+systemctl --user stop bioconice-release.timer
+exec 9>"$TMPDIR/bioconice-release.lock" && flock 9          # held until this shell exits
+cd ~/Documents/git/bioc-on-ice-release
+git fetch -q origin && git checkout -q --detach origin/main
+dir=$TMPDIR/bioconice-release-$(date -u +%F)
+# every table of latest/ that still has a row-history column (77 for v2026-11-01)
+tables=$(curl -fsS https://data.bioconice.cancerdatasci.org/latest/manifest.json | python3 -c '
+import json, sys
+print(" ".join(t["schema"] + "." + t["table"] for t in json.load(sys.stdin)["tables"]
+               if {"valid_from", "valid_to", "landed_in"} & {c["name"] for c in t["columns"]}))')
+uv run bioconice publish --out "$dir"
+uv run bioconice gate --release "$dir" --allow-schema-change $tables
+uv run bioconice upload --release "$dir"           # dry run: read the plan before going on
+uv run bioconice upload --release "$dir" --apply
+ln -sfn "$dir" /data/davsean/bioconice-release
+# latest/ is this bundle's release, and no table has a row-history column
+curl -fsS https://data.bioconice.cancerdatasci.org/latest/manifest.json | python3 -c '
+import json, sys
+m, want = json.load(sys.stdin), json.load(open(sys.argv[1] + "/manifest.json"))["release"]
+left = [t["schema"] + "." + t["table"] for t in m["tables"]
+        if {"valid_from", "valid_to", "landed_in"} & {c["name"] for c in t["columns"]}]
+assert m["release"] == want, (m["release"], want)
+assert not left, left' "$dir"
+systemctl --user start bioconice-release.timer
+exit                                                 # releases the lock
+```
+
+If any step fails, `set -e` ends the shell there: the lock is released and the timer
+stays stopped. Fix the cause, then run the block again from the top.

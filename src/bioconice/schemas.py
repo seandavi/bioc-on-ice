@@ -1243,7 +1243,7 @@ TABLES = {
                             "different dataset_version_id."),
             NestedField(2, "dataset_version_id", StringType(), required=True,
                         doc="Id of this specific dataset version. The business key: a revision or a tombstoned "
-                            "dataset closes this row (valid_to set) rather than updating it in place."),
+                            "dataset retires this row rather than updating it in place."),
             NestedField(3, "collection_id", StringType(), required=True, doc="Id of the collection this dataset belongs to."),
             NestedField(4, "collection_name", StringType(), doc="Collection title, e.g. a study or atlas name."),
             NestedField(5, "collection_doi", StringType(), doc="DOI of the collection's publication, where one exists."),
@@ -1275,8 +1275,8 @@ TABLES = {
             NestedField(25, "revised_at", StringType(), doc="ISO 8601 timestamp of the latest revision; NULL if never revised. Unparsed."),
             NestedField(26, "tombstone", BooleanType(), required=True,
                         doc="CZI's tombstone flag, carried through from raw. Always false in practice here: a "
-                            "tombstoned dataset is excluded from the PUBLIC listing outright, so its row is closed "
-                            "by ordinary retirement (valid_to set) rather than by this flag flipping true."),
+                            "tombstoned dataset is excluded from the PUBLIC listing outright, so its row is retired "
+                            "like any delisted dataset rather than by this flag flipping true."),
             NestedField(27, "is_spatial", BooleanType(), required=True,
                         doc="True for a spatial dataset (the listing's spatial object is non-null: Visium, "
                             "Slide-seq and similar). Issue #84 acceptance criterion 9."),
@@ -1652,8 +1652,7 @@ TABLES = {
         comment="The PubMed citation graph as iCite publishes it: one row per (citing, cited) "
                 "pair: the NIH Open Citation Collection exactly, via the references lists in "
                 "raw.icite__metadata (928,458,585 edges in the 2026-08 snapshot, equal to the OCC file). An edge has no attributes, so it is only ever "
-                "asserted or withdrawn: valid_from is the release it appeared in, valid_to the "
-                "release it vanished. 'Who cites X' is WHERE cited_pmid = X AND valid_to IS NULL. "
+                "asserted or withdrawn. 'Who cites X' is WHERE cited_pmid = X. "
                 "Source: NIH iCite / NIH-OCC, CC BY 4.0.",
         properties={"bioc.column.citing_pmid.prefix": "pubmed",
                     "bioc.column.cited_pmid.prefix": "pubmed"},
@@ -1727,7 +1726,7 @@ TABLES = {
                 "No attributes, so a row is only ever asserted or withdrawn. Not derived: rows "
                 "PubTator3 could not normalise (concept id '-'), and the mention strings, which "
                 "churn between dumps; both stay in raw.pubtator3__*. 'Papers about TP53' is WHERE "
-                "concept_type = 'Gene' AND concept_id = '7157' AND valid_to IS NULL. NCBI public domain.",
+                "concept_type = 'Gene' AND concept_id = '7157'. NCBI public domain.",
         properties={"bioc.column.pmid.prefix": "pubmed", "bioc.license": "public-domain"},
     ),
     "resource.resource_relationship": TableDef(
@@ -2142,8 +2141,8 @@ TABLES = {
                             "vocabulary, not mapped onto Ensembl biotypes or NCBI gene types."),
             NestedField(7, "status", StringType(),
                         doc="Nomenclature status. Currently always 'Approved': the complete set "
-                            "excludes withdrawn records, so a withdrawn gene shows up as a row "
-                            "closed by valid_to rather than as a status value."),
+                            "excludes withdrawn records, so a withdrawn gene drops out of the table "
+                            "rather than showing as a status value."),
             NestedField(8, "location", StringType(), doc="Cytogenetic location, e.g. 17p13.1. Not a coordinate."),
             NestedField(9, "alias_symbol", StringType(),
                         doc="Symbols in use but never approved, '|'-separated as published."),
@@ -2151,8 +2150,7 @@ TABLES = {
                         doc="Names in use but never approved, '|'-separated as published."),
             NestedField(11, "prev_symbol", StringType(),
                         doc="Previously approved symbols, '|'-separated as published. With "
-                            "date_symbol_changed this is HGNC's own symbol history; this table's "
-                            "valid_from/valid_to record changes seen since biocOnIce began loading it."),
+                            "date_symbol_changed this is HGNC's own symbol history."),
             NestedField(12, "prev_name", StringType(),
                         doc="Previously approved names, '|'-separated as published."),
             NestedField(13, "date_approved_reserved", StringType(),

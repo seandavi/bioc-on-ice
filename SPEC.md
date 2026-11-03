@@ -858,6 +858,9 @@ the same day is `YYYY-MM-DD.2`, `.3`, and so on, ordered by date then number
 (never as raw strings). Upstream versions are recorded in provenance, never in
 the id. Each release carries every current row of its tables; there are no
 `valid_from` / `valid_to` columns. The first dataset is `bioconice-bugsigdb`.
+The whole-product bundle (ADR-0014) carries no row-history columns either:
+`valid_from`, `valid_to` and `landed_in` are dropped from every table, including
+those still read from Iceberg, which are filtered to `valid_to IS NULL` first (#222).
 
 **Cadence and retention** (ADR-0016). The public whole-product release
 (ADR-0014) is published weekly, Sundays 00:00 UTC, and only after it passes the
@@ -880,7 +883,11 @@ columns it declares as joins. A table without a contract fails the gate unless
 it is in the previous release and listed as exempt (#208). The reference MUST be
 an older release than the bundle, and the bundle's `manifest.json` MUST match its
 Parquet (row counts, columns, types). The order is publish, gate, dry-run upload,
-upload `--apply`. A pass leaves `gate.json` in the bundle, bound to its
+upload `--apply`. A deliberate schema change needs the owner's approval:
+`bioconice gate --allow-schema-change TABLE…` lets the named tables differ from
+the previous release only by dropping `valid_from`, `valid_to` or `landed_in`,
+and records the tables and dropped columns in the report and in `gate.json`
+(`schema_changes`). A pass leaves `gate.json` in the bundle, bound to its
 `manifest.json` by sha256; only a bundle with a matching one is copied to Hugging
 Face.
 

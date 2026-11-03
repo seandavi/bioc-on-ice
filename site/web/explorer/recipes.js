@@ -22,12 +22,11 @@ export const RECIPES = [
 WITH tp53_papers AS (
   SELECT DISTINCT pubmed_id AS pmid
   FROM bioc.annotation.ncbi__gene_pubmed
-  WHERE gene_id = '7157' AND taxon_id = 9606 AND valid_to IS NULL
+  WHERE gene_id = '7157' AND taxon_id = 9606
 )
 SELECT count(DISTINCT c.citing_pmid) AS citers
 FROM bioc.annotation.icite__citation c
-JOIN tp53_papers p ON c.cited_pmid = p.pmid
-WHERE c.valid_to IS NULL;`,
+JOIN tp53_papers p ON c.cited_pmid = p.pmid;`,
     verified: "558,501 distinct citing PMIDs",
   },
   {
@@ -43,54 +42,53 @@ WITH RECURSIVE t_cell_subtypes AS (
   SELECT r.subject_id
   FROM bioc.ontology.relationship r
   JOIN t_cell_subtypes s ON r.object_id = s.term_id
-  WHERE r.ontology = 'cl' AND r.predicate = 'is_a' AND r.valid_to IS NULL
+  WHERE r.ontology = 'cl' AND r.predicate = 'is_a'
 ),
 blood_datasets AS (
   SELECT DISTINCT resource_id                    -- resource_id = dataset_version_id
   FROM bioc.resource.resource_relationship
-  WHERE relationship = 'has_tissue' AND target_id = 'UBERON:0000178' AND valid_to IS NULL
+  WHERE relationship = 'has_tissue' AND target_id = 'UBERON:0000178'
 ),
 tcell_datasets AS (
   SELECT DISTINCT resource_id
   FROM bioc.resource.resource_relationship rr
   JOIN t_cell_subtypes t ON rr.target_id = t.term_id
-  WHERE rr.relationship = 'has_cell_type' AND rr.valid_to IS NULL
+  WHERE rr.relationship = 'has_cell_type'
 )
 SELECT count(DISTINCT d.dataset_id) AS n_datasets
 FROM bioc.resource.cellxgene__dataset d
 JOIN blood_datasets b ON d.dataset_version_id = b.resource_id
 JOIN tcell_datasets t ON d.dataset_version_id = t.resource_id
-WHERE d.taxon_id = 9606 AND d.valid_to IS NULL;`,
+WHERE d.taxon_id = 9606;`,
     verified: "114 datasets",
   },
   {
     id: "gene-models",
     title: "Gene models for a species at the current release",
     description:
-      "Every current Ensembl transcript for human, joined back to its gene. Swap taxon_id for another organism. The release holds current rows only; a past release's gene models are in the frozen Iceberg archive.",
+      "Every current Ensembl transcript for human, joined back to its gene. Swap taxon_id for another organism. For an earlier release's models, attach its dated /v<date>/ folder instead of /latest/.",
     sql: `${ATTACH}
 
 SELECT g.gene_id, g.symbol, g.gene_type, t.transcript_id, t.biotype, t.canonical
 FROM bioc.annotation.gene g
 JOIN bioc.annotation.transcript t USING (gene_id, taxon_id, source)
-WHERE g.taxon_id = 9606 AND g.source = 'ENSEMBL'
-  AND g.valid_to IS NULL AND t.valid_to IS NULL;`,
+WHERE g.taxon_id = 9606 AND g.source = 'ENSEMBL';`,
     verified: "646,577 transcript rows (human, Ensembl 116)",
   },
   {
     id: "taxon-coverage",
     title: "A taxon's coverage across tables",
     description:
-      "How many current rows human (taxon_id 9606) has in each of the main annotation tables — a quick sanity check when onboarding a new organism.",
+      "How many rows human (taxon_id 9606) has in each of the main annotation tables — a quick sanity check when onboarding a new organism.",
     sql: `${ATTACH}
 
-SELECT 'annotation.gene' AS tbl, count(*) AS n FROM bioc.annotation.gene WHERE taxon_id = 9606 AND valid_to IS NULL
+SELECT 'annotation.gene' AS tbl, count(*) AS n FROM bioc.annotation.gene WHERE taxon_id = 9606
 UNION ALL
-SELECT 'annotation.transcript', count(*) FROM bioc.annotation.transcript WHERE taxon_id = 9606 AND valid_to IS NULL
+SELECT 'annotation.transcript', count(*) FROM bioc.annotation.transcript WHERE taxon_id = 9606
 UNION ALL
-SELECT 'annotation.exon', count(*) FROM bioc.annotation.exon WHERE taxon_id = 9606 AND valid_to IS NULL
+SELECT 'annotation.exon', count(*) FROM bioc.annotation.exon WHERE taxon_id = 9606
 UNION ALL
-SELECT 'annotation.ncbi__gene', count(*) FROM bioc.annotation.ncbi__gene WHERE taxon_id = 9606 AND valid_to IS NULL;`,
+SELECT 'annotation.ncbi__gene', count(*) FROM bioc.annotation.ncbi__gene WHERE taxon_id = 9606;`,
     verified:
       "gene 78,941 · transcript 646,577 · exon 5,087,789 · ncbi__gene 193,813",
   },

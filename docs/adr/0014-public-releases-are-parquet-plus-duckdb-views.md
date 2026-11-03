@@ -36,8 +36,8 @@ bucket `data-bioconice`, served by a Worker on `bioconice.cancerdatasci.org`.
   output, `latest.json` and the frozen DuckLake, with one whole-product bundle
   in the omicidx layout. ADR-0013's principle, versioned datasets and not
   versioned rows, stands, and so does current rows only.
-- Releases carry current rows only (`valid_to IS NULL`). History follows
-  ADR-0013. The Type-2 Iceberg tables stay read-only behind the existing
+- Releases carry current rows only (`valid_to IS NULL`), without the
+  row-history columns (ADR-0013, #222). History follows ADR-0013. The Type-2 Iceberg tables stay read-only behind the existing
   catalog until phase 2 of #187 exports them once to Parquet as an archive
   release; then the R2 Data Catalog, icegate and the PyIceberg writer are
   removed.

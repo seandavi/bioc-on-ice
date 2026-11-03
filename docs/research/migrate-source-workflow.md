@@ -23,16 +23,16 @@ source's data-source issue, is optional. Launch it `async: true`, because a
 stage may ask the orchestrator a question through `contact_supervisor`. After
 editing the workflow, run `node scripts/migrate/check-workflow.mjs`. It runs
 pi-subagents' own validator, then the script with every child stubbed, and
-checks the clean, escalated, parity-failure, paused and idempotence paths.
+checks the clean, escalated, parity-failure, paused, idempotence and perf paths.
 
 ## What it does
 
 | # | stage (key) | model | where | result the script checks |
 |---|---|---|---|---|
-| 1 | `preflight` | haiku | orchestrator cwd | no `status:paused` on #183; the source is the first not yet migrated or in flight in the map's step-9 order (skipping wave A and non-module sources); every table is "new source module", none with mixed `valid_from`; creates the worktrees and scratch root; downloads `latest/manifest.json` |
+| 1 | `preflight` | haiku | orchestrator cwd | no `status:paused` on #183; the source is the first not yet migrated or in flight in the map's step-9 order (skipping wave A and non-module sources); every table is "new source module"; creates the worktrees and scratch root; downloads `latest/manifest.json` |
 | 2 | `module` | opus | cdsci-lake worktree | the module, its registration, licence row and offline tests; ruff and pytest pass |
 | 3 | `scratch-load` | opus | cdsci-lake worktree | a load at the Iceberg version into `<scratch>/lake`, with an idempotent re-run |
-| 4 | `repoint` | opus | bioc-on-ice worktree | `_<table>(src)` shared SQL, `RELEASE` with the frozen #222 columns, `FROM_LAKE`, contracts out of `UNCONTRACTED_TABLES`, `release_matches_lander` test, map rows; pytest passes |
+| 4 | `repoint` | opus | bioc-on-ice worktree | `_<table>(src)` shared SQL, `RELEASE` without the row-history columns (#222), `FROM_LAKE`, contracts out of `UNCONTRACTED_TABLES`, `release_matches_lander` test, map rows; pytest passes |
 | 5 | `equivalence` | opus | bioc-on-ice worktree | `scripts/migrate/equivalence.py`, a typed result per table that the script itself judges (0 / 0 `EXCEPT ALL`, same columns as Iceberg and the manifest, key unique and not null, every table present); `scripts/migrate/partial-gate.sh` prints PASS |
 | 6 | `upstream` | opus | cdsci-lake worktree | the current upstream in a second scratch lake (`<scratch>/current`); differences explained as upstream changes and within the contract bounds |
 | 7 | `prs` | haiku | bioc-on-ice worktree | both PRs open as **drafts**, cdsci-lake first, with the evidence table and the merge order |
@@ -48,9 +48,20 @@ one branch through seven stages in two repositories. A run that finds either
 path already there stops (`blocked`); the orchestrator removes them or resumes
 the stopped run (`subagent({ action: "resume", id })`).
 
+**Run time.** Every stage's long commands run under `timeout 1200`. Before a full
+load, a stage times the parse/curate on a 10% and a 30% prefix of the input. If
+the 30% run takes more than 4 times the 10% run, the stage stops with status
+`perf` and both timings rather than loading the full file. SQL avoids
+`ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING` with `FILTER`, which is
+quadratic under `lake_connect`'s 4 threads; a running sum minus the current
+row's flag gives the same count. The Cellosaurus run (2026-11-02) died this way.
+One stage's full scratch load took about 28 minutes and hit the 30-minute
+subagent cap.
+
 The return value says `review-clean`, `escalated` (blocking findings remain after
 round 2: the orchestrator decides), or `stopped: true` with the stage and why.
-`check-failed` means a child reported done but failed the script's own check.
+`check-failed` means a child reported done but failed the script's own check;
+`perf` means a stage refused a full load whose prefix timings grew superlinearly.
 
 ## What it does not do
 
@@ -60,8 +71,8 @@ stay with the orchestrator and the owner: owner approval of the gate change,
 the production ingest, the cdsci-lake pin bump, marking the PRs ready, merging in
 the stated order, ticking #208, and the experiment-log entry (the workflow trace has each
 child's duration; token usage was not checked to be there). Sources that are not new source modules
-(wave A, small adapters such as `raw.bugsigdb__full_dump`), mixed `valid_from`
-(#222), OBO and Ensembl need a human. Preflight refuses them.
+(wave A, small adapters such as `raw.bugsigdb__full_dump`), OBO and Ensembl need
+a human. Preflight refuses them.
 
 ## Dry run: WikiPathways, 2026-11-01
 
@@ -101,8 +112,8 @@ first wave-B source in the map. Scratch lakes only.
    a tmp catalog.
 6. **`upsert` returns the table's row count**, not rows written. The first test
    assumed otherwise.
-7. **Frozen value in the test.** `release_matches_lander` takes `"2026.09"`, not
-   the test's `REL`.
+7. **Frozen value in the test.** `release_matches_lander` took `"2026.09"`, not
+   the test's `REL`. Gone with #222: releases no longer carry the frozen columns.
 8. **Upstream diff.** When the version is stamped into values (file names,
    packed names), every raw row differs. The stage now compares with it
    stripped.

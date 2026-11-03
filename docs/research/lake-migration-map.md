@@ -34,7 +34,7 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 3. **C**: NCBI Gene on the lake modules that already exist (`ncbi_gene2go`,
    `ncbi_gene2pubmed`, `ncbi_gene`, `ncbi_gene2accession`), plus
    `gene_history`, `gene_orthologs` and `gene_group` dumps added to
-   `ncbi_gene`. Four of these tables have mixed `valid_from` (below).
+   `ncbi_gene`. Four of these tables had mixed `valid_from` (below; moot after #222).
    ADR-0026 folds the `ncbi_gene2*` schemas into `ncbi_gene` at migration.
 4. **D**: eQTL Catalogue, CELLxGENE, ENCODE, BEDbase, then
    `resource.resource_relationship` as one union SELECT.
@@ -54,19 +54,14 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 ## Cross-cutting findings
 
 - **#222 touches 77 of 81 tables, not ~45.** 35 tables carry
-  `valid_from`/`valid_to` and 42 raw tables carry `landed_in`. Until the
-  schema-change release (#222), a lake-backed SELECT keeps them: `valid_to`
-  NULL, and `valid_from`/`landed_in` a frozen constant per source, the value
-  of the last Iceberg load. Read from the `v2026-11-01` Parquet column stats,
-  every raw table has exactly one `landed_in`, so one constant is exact for
-  all 42.
-- **8 SCD2 tables have mixed `valid_from`** (`2026.08` and `2026.09`):
+  `valid_from`/`valid_to` and 42 raw tables carry `landed_in`. #222 drops all
+  three from every release, so a lake-backed SELECT carries none of them and
+  needs no frozen constant.
+- **8 SCD2 tables had mixed `valid_from`** (`2026.08` and `2026.09`, marked ⚑):
   `reference.genome`, `annotation.gene`, `annotation.transcript`,
   `annotation.exon`, `annotation.ncbi__gene`, `annotation.ncbi__gene_go`,
-  `annotation.ncbi__gene_pubmed`, `annotation.identifier_mapping` (marked ⚑).
-  A single constant is not exact for them. Either #222 lands before waves C
-  and G, or those SELECTs carry `valid_from` per key from the previous
-  release's Parquet, or the owner accepts one constant.
+  `annotation.ncbi__gene_pubmed`, `annotation.identifier_mapping`. With #222
+  this no longer blocks them.
 - **Raw tables hold one version in the release**, so the lake's
   latest-snapshot tables match them row for row. No raw table depends on
   Iceberg accumulating versions.
@@ -93,23 +88,23 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 | # | table | rows v2026-11-01 | family | reads now | cdsci-lake equivalent | difference | effort |
 |---|---|---:|---|---|---|---|---|
 | A1 | `annotation.signature_taxon` | 59,486 | BugSigDB | lake (this PR; was `bioc.*`) | `bugsigdb.signature_taxon` (transform/models/bugsigdb/signature_taxon.sql) | none: 0-row diff, same columns/types (step 7) | repoint-only ✅ step 7 |
-| A2 | `annotation.hgnc__gene` | 45,083 | HGNC | lake (this PR; was `bioc.*`) | `hgnc.gene` (src/cdsci/lake/sources/hgnc) | derived by release SELECT (`hgnc.RELEASE`); `valid_from` frozen, `valid_to` NULL (#222) | new source module ✅ step 7 |
-| A2 | `raw.hgnc__complete_set` | 45,083 | HGNC | lake (this PR; was `bioc.*`) | `hgnc.gene` (src/cdsci/lake/sources/hgnc, cdsci-lake PR) | no `landed_in` (frozen, #222); one version, not accumulated | new source module ✅ step 7 |
-| A3 | `annotation.complexportal__complex` | 20,579 | Complex Portal | lake (this PR; was `bioc.*`) | `complexportal.complex` (src/cdsci/lake/sources/complexportal) | derived by release SELECT; frozen `valid_from` (#222) | new source module ✅ step 7 |
-| A3 | `annotation.complexportal__participant` | 101,561 | Complex Portal | lake (this PR; was `bioc.*`) | `complexportal.complex` (src/cdsci/lake/sources/complexportal) | participant explosion is a release SELECT; frozen `valid_from` (#222) | new source module ✅ step 7 |
-| A3 | `raw.complexportal__complex` | 20,579 | Complex Portal | lake (this PR; was `bioc.*`) | `complexportal.complex` (src/cdsci/lake/sources/complexportal, cdsci-lake PR) | no `landed_in` (frozen, #222) | new source module ✅ step 7 |
+| A2 | `annotation.hgnc__gene` | 45,083 | HGNC | lake (this PR; was `bioc.*`) | `hgnc.gene` (src/cdsci/lake/sources/hgnc) | derived by release SELECT (`hgnc.RELEASE`); no row-history columns (#222) | new source module ✅ step 7 |
+| A2 | `raw.hgnc__complete_set` | 45,083 | HGNC | lake (this PR; was `bioc.*`) | `hgnc.gene` (src/cdsci/lake/sources/hgnc, cdsci-lake PR) | no `landed_in` (#222); one version, not accumulated | new source module ✅ step 7 |
+| A3 | `annotation.complexportal__complex` | 20,579 | Complex Portal | lake (this PR; was `bioc.*`) | `complexportal.complex` (src/cdsci/lake/sources/complexportal) | derived by release SELECT; no row-history columns (#222) | new source module ✅ step 7 |
+| A3 | `annotation.complexportal__participant` | 101,561 | Complex Portal | lake (this PR; was `bioc.*`) | `complexportal.complex` (src/cdsci/lake/sources/complexportal) | participant explosion is a release SELECT; no row-history columns (#222) | new source module ✅ step 7 |
+| A3 | `raw.complexportal__complex` | 20,579 | Complex Portal | lake (this PR; was `bioc.*`) | `complexportal.complex` (src/cdsci/lake/sources/complexportal, cdsci-lake PR) | no `landed_in` (#222) | new source module ✅ step 7 |
 | A4 | `raw.metadata` | 40,737,811 | iCite | Iceberg `bioc.*` | `icite.metadata` (src/cdsci/lake/sources/icite) | same 17 columns and types (it is the lake table's old reverse-ETL copy); lake 41,172,752 rows vs 40,737,811 (newer snapshot, within bounds) | repoint-only |
 | A5 | `annotation.pubmed__article` | 41,336,046 | PubMed | lake | `omicidx.pubmed_article` (omicidx producer) | already lake-backed; rename to `pubmed.article` with cdsci-lake#136 (ADR-0026) | repoint-only (rename) |
-| B1 | `annotation.wikipathways__gene_pathway` | 76,046 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | release SELECT over the new lake table (`wikipathways.RELEASE`); frozen `valid_from` (#222) | new source module |
-| B1 | `annotation.wikipathways__pathway` | 1,957 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | release SELECT over the new lake table (`wikipathways.RELEASE`); frozen `valid_from` (#222) | new source module |
-| B1 | `raw.wikipathways__gmt` | 1,957 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | no `landed_in` (frozen, #222); one version, not accumulated | new source module |
-| B2 | `clinical.gwas_catalog__association` | 1,192,472 | GWAS Catalog | lake (migrate/gwas_catalog; was `bioc.*`) | `gwas_catalog.association` (src/cdsci/lake/sources/gwas_catalog, cdsci-lake PR) | release SELECT over the new lake table (`gwas_catalog.RELEASE`); frozen `valid_from` (#222) | new source module |
-| B2 | `clinical.gwas_catalog__study` | 230,057 | GWAS Catalog | lake (migrate/gwas_catalog; was `bioc.*`) | `gwas_catalog.study` (src/cdsci/lake/sources/gwas_catalog, cdsci-lake PR) | release SELECT over the new lake table (`gwas_catalog.RELEASE`); frozen `valid_from` (#222) | new source module |
-| B2 | `raw.gwas_catalog__associations` | 1,192,604 | GWAS Catalog | lake (migrate/gwas_catalog; was `bioc.*`) | `gwas_catalog.association` (src/cdsci/lake/sources/gwas_catalog, cdsci-lake PR) | no `landed_in` (frozen, #222); the lake's key `line_number` is not published; one version, not accumulated | new source module |
-| B2 | `raw.gwas_catalog__studies` | 230,057 | GWAS Catalog | lake (migrate/gwas_catalog; was `bioc.*`) | `gwas_catalog.study` (src/cdsci/lake/sources/gwas_catalog, cdsci-lake PR) | no `landed_in` (frozen, #222); one version, not accumulated | new source module |
-| B3 | `raw.bugsigdb__full_dump` | 7,425 | BugSigDB | lake (this PR; was `bioc.*`) | `bugsigdb.signatures` (src/cdsci/lake/sources/bugsigdb) | release SELECT (`bugsigdb.RELEASE`) casts pmid/year/sample sizes back to text and `curated_date` back with `strftime('%-d %B %Y')` (upstream does not zero-pad the day); `landed_in` frozen at `'2026.08'` (#222). 0-row diff at v1.3.1, same columns/types | small adapter ✅ |
-| B4 | `annotation.mane__transcript` | 19,437 | MANE | lake (migrate/mane; was `bioc.*`) | `mane.transcript` (src/cdsci/lake/sources/mane, cdsci-lake PR) | release SELECT over the new lake table (`mane.RELEASE`); frozen `valid_from` (#222) | new source module |
-| B4 | `raw.ncbi__mane_summary` | 19,437 | MANE | lake (migrate/mane; was `bioc.*`) | `mane.transcript` (src/cdsci/lake/sources/mane, cdsci-lake PR) | no `landed_in` (frozen, #222); one version, not accumulated; MANE's `identifier_mapping` slice stays on Iceberg | new source module |
+| B1 | `annotation.wikipathways__gene_pathway` | 76,046 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | release SELECT over the new lake table (`wikipathways.RELEASE`); no row-history columns (#222) | new source module |
+| B1 | `annotation.wikipathways__pathway` | 1,957 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | release SELECT over the new lake table (`wikipathways.RELEASE`); no row-history columns (#222) | new source module |
+| B1 | `raw.wikipathways__gmt` | 1,957 | WikiPathways | lake (migrate/wikipathways; was `bioc.*`) | `wikipathways.gene_set` (src/cdsci/lake/sources/wikipathways, cdsci-lake PR) | no `landed_in` (#222); one version, not accumulated | new source module |
+| B2 | `clinical.gwas_catalog__association` | 1,192,472 | GWAS Catalog | lake (migrate/gwas_catalog; was `bioc.*`) | `gwas_catalog.association` (src/cdsci/lake/sources/gwas_catalog, cdsci-lake PR) | release SELECT over the new lake table (`gwas_catalog.RELEASE`); no row-history columns (#222) | new source module |
+| B2 | `clinical.gwas_catalog__study` | 230,057 | GWAS Catalog | lake (migrate/gwas_catalog; was `bioc.*`) | `gwas_catalog.study` (src/cdsci/lake/sources/gwas_catalog, cdsci-lake PR) | release SELECT over the new lake table (`gwas_catalog.RELEASE`); no row-history columns (#222) | new source module |
+| B2 | `raw.gwas_catalog__associations` | 1,192,604 | GWAS Catalog | lake (migrate/gwas_catalog; was `bioc.*`) | `gwas_catalog.association` (src/cdsci/lake/sources/gwas_catalog, cdsci-lake PR) | no `landed_in` (#222); the lake's key `line_number` is not published; one version, not accumulated | new source module |
+| B2 | `raw.gwas_catalog__studies` | 230,057 | GWAS Catalog | lake (migrate/gwas_catalog; was `bioc.*`) | `gwas_catalog.study` (src/cdsci/lake/sources/gwas_catalog, cdsci-lake PR) | no `landed_in` (#222); one version, not accumulated | new source module |
+| B3 | `raw.bugsigdb__full_dump` | 7,425 | BugSigDB | lake (this PR; was `bioc.*`) | `bugsigdb.signatures` (src/cdsci/lake/sources/bugsigdb) | release SELECT (`bugsigdb.RELEASE`) casts pmid/year/sample sizes back to text and `curated_date` back with `strftime('%-d %B %Y')` (upstream does not zero-pad the day); no `landed_in` (#222). 0-row diff at v1.3.1, same columns/types | small adapter ✅ |
+| B4 | `annotation.mane__transcript` | 19,437 | MANE | lake (migrate/mane; was `bioc.*`) | `mane.transcript` (src/cdsci/lake/sources/mane, cdsci-lake PR) | release SELECT over the new lake table (`mane.RELEASE`); no row-history columns (#222) | new source module |
+| B4 | `raw.ncbi__mane_summary` | 19,437 | MANE | lake (migrate/mane; was `bioc.*`) | `mane.transcript` (src/cdsci/lake/sources/mane, cdsci-lake PR) | no `landed_in` (#222); one version, not accumulated; MANE's `identifier_mapping` slice stays on Iceberg | new source module |
 | B5 | `annotation.cellosaurus__cell_line` | 168,970 | Cellosaurus | Iceberg `bioc.*` | — | release SELECT | new source module |
 | B5 | `annotation.cellosaurus__disease` | 124,953 | Cellosaurus | Iceberg `bioc.*` | — | release SELECT | new source module |
 | B5 | `annotation.cellosaurus__xref` | 473,381 | Cellosaurus | Iceberg `bioc.*` | — | release SELECT | new source module |

@@ -169,4 +169,4 @@ def test_release_selects_over_the_lake_reproduce_the_lander(cat, gmts, release_m
     """#183: the release reads lake.wikipathways.gene_set, not these Iceberg tables."""
     wikipathways.ingest(cat, REL, url=gmts)
     release_matches_lander(cat, {"lake.wikipathways.gene_set": "raw.wikipathways__gmt"},
-                           wikipathways.RELEASE, "2026.09")
+                           wikipathways.RELEASE)

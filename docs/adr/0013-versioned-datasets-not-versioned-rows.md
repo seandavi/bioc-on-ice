@@ -41,3 +41,12 @@ from cdsci-lake verifies against real lake data".
 - SCD2 needs complete-scope retirement and release-ordering guards on every
   merge.
 - Releases are verified end to end (hashes, contract, frozen DuckLake) as a unit.
+
+## Consequence: releases carry no row-history columns (#222, 2026-11)
+
+The public bundle (ADR-0014) drops `valid_from`, `valid_to` and `landed_in` from
+every table, Iceberg-read ones included. In a release `valid_to` was always NULL,
+and the values of the other two were frozen once a source moved to cdsci-lake.
+Current rows are still selected with `valid_to IS NULL` when the bundle reads
+Iceberg; the column is just not published. The one release that applies the change
+passes the gate with the owner-approved `bioconice gate --allow-schema-change`.
