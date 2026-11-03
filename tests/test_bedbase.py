@@ -220,3 +220,12 @@ def test_a_relationship_target_is_a_curie_not_a_bare_tag(cat, tmp_path):
                if r["resource_id"] == "0000e6a889395d78ab9bf667326d8cff"
                and r["relationship"].startswith("derived_from")}
     assert targets == {"geo:gsm3258890", "geo:gse116712", "geo:gse116707"}
+
+
+def test_release_selects_over_the_lake_reproduce_the_lander(cat, tmp_path, release_matches_lander):
+    """#183: the release reads lake.bedbase.*, which cdsci-lake stamps with the snapshot
+    date, not these Iceberg tables."""
+    ingest(cat, REL, tmp_path)
+    lake = {f"lake.bedbase.{t}": f"raw.bedbase__{t}" for t in ("bed", "bedset", "bedset_membership")}
+    release_matches_lander(cat, lake, bedbase.RELEASE,
+                           stamped=dict.fromkeys(lake, "'2026-09-01' AS bedbase_version"))

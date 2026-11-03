@@ -131,11 +131,11 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 | D3 | `raw.encode__file` | 1,659,000 | ENCODE | lake (migrate/encode; was `bioc.*`) | `encode.file` (src/cdsci/lake/sources/encode, cdsci-lake PR) | no `landed_in` (#222); one crawl | new source module |
 | D3 | `resource.encode__experiment` | 28,642 | ENCODE | lake (migrate/encode; was `bioc.*`) | `encode.experiment` (src/cdsci/lake/sources/encode, cdsci-lake PR) | release SELECT over the lake table (`encode.RELEASE`); no row-history columns (#222); the `resource_relationship` slice stays on Iceberg | new source module |
 | D3 | `resource.encode__file` | 1,659,000 | ENCODE | lake (migrate/encode; was `bioc.*`) | `encode.file` (src/cdsci/lake/sources/encode, cdsci-lake PR) | release SELECT over the lake table (`encode.RELEASE`); no row-history columns (#222) | new source module |
-| D4 | `raw.bedbase__bed` | 663,721 | BEDbase | Iceberg `bioc.*` | — | no lake source; land the monthly Parquet export, never crawl the API | new source module |
-| D4 | `raw.bedbase__bedset` | 22,188 | BEDbase | Iceberg `bioc.*` | — | as above | new source module |
-| D4 | `raw.bedbase__bedset_membership` | 578,552 | BEDbase | Iceberg `bioc.*` | — | as above | new source module |
-| D4 | `resource.bedbase__bedfile` | 663,721 | BEDbase | Iceberg `bioc.*` | — | release SELECT | new source module |
-| D4 | `resource.bedbase__bedset` | 22,188 | BEDbase | Iceberg `bioc.*` | — | release SELECT | new source module |
+| D4 | `raw.bedbase__bed` | 663,721 | BEDbase | lake (migrate/bedbase; was `bioc.*`) | `bedbase.bed` (src/cdsci/lake/sources/bedbase, cdsci-lake PR) | no `landed_in` (#222); one snapshot; the lake's `bedbase_version` column is not published here | new source module |
+| D4 | `raw.bedbase__bedset` | 22,188 | BEDbase | lake (migrate/bedbase; was `bioc.*`) | `bedbase.bedset` (src/cdsci/lake/sources/bedbase, cdsci-lake PR) | as above | new source module |
+| D4 | `raw.bedbase__bedset_membership` | 578,552 | BEDbase | lake (migrate/bedbase; was `bioc.*`) | `bedbase.bedset_membership` (src/cdsci/lake/sources/bedbase, cdsci-lake PR) | as above | new source module |
+| D4 | `resource.bedbase__bedfile` | 663,721 | BEDbase | lake (migrate/bedbase; was `bioc.*`) | `bedbase.bed` (src/cdsci/lake/sources/bedbase, cdsci-lake PR) | release SELECT over the lake table (`bedbase.RELEASE`); no row-history columns (#222); the `resource_relationship` slice stays on Iceberg | new source module |
+| D4 | `resource.bedbase__bedset` | 22,188 | BEDbase | lake (migrate/bedbase; was `bioc.*`) | `bedbase.bedset` (src/cdsci/lake/sources/bedbase, cdsci-lake PR) | release SELECT over the lake table (`bedbase.RELEASE`); no row-history columns (#222) | new source module |
 | D5 | `resource.resource_relationship` | 3,734,643 | resource (cross-source) | Iceberg `bioc.*` | — | union of eQTL Catalogue, CELLxGENE, ENCODE, BEDbase branches; one release SELECT once all four are in the lake (ADR-0015 b) | small adapter (union) |
 | E1 | `raw.biogrid__interactions` | 2,936,093 | BioGRID | Iceberg `bioc.*` | — | no lake source; also `interaction` and `identifier_mapping` slices | new source module |
 | E2 | `raw.intact__mitab` | 1,788,408 | IntAct | Iceberg `bioc.*` | — | no lake source; also `interaction` and `identifier_mapping` slices | new source module |

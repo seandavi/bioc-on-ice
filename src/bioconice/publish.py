@@ -19,7 +19,7 @@ from cdsci.lake.contracts import ColumnContract, TableContract, TemporalModel
 from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.local import LocalFileSystem
 
-from . import (bugsigdb, cellosaurus, cellxgene, complexportal, encode, eqtlcatalogue,
+from . import (bedbase, bugsigdb, cellosaurus, cellxgene, complexportal, encode, eqtlcatalogue,
                gwas_catalog, hgnc, mane, ncbi, ncbi_accession, ncbi_go, ncbi_orthologs,
                ncbi_pubmed, wikipathways)
 from .release import SIGNATURE_TAXON, SIGNATURE_TAXON_SELECT
@@ -54,7 +54,8 @@ FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE, **wikipathways.RELEASE,
              **gwas_catalog.RELEASE, **mane.RELEASE, **bugsigdb.RELEASE,
              **cellosaurus.RELEASE, **ncbi_go.RELEASE, **ncbi_pubmed.RELEASE,
              **ncbi.RELEASE, **ncbi_accession.RELEASE, **ncbi_orthologs.RELEASE,
-             **eqtlcatalogue.RELEASE, **cellxgene.RELEASE, **encode.RELEASE}
+             **eqtlcatalogue.RELEASE, **cellxgene.RELEASE, **encode.RELEASE,
+             **bedbase.RELEASE}
 
 # Every table of the live catalog except annotation.identifier_mapping__pre_repair.
 TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))
