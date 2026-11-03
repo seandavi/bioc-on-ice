@@ -24,7 +24,7 @@ function run(overrides) {
     preflight: { status: "ready", reason: "r", tables, lake_schema: "x", reference_release: "2026-11-01", iceberg_version: "1", version_method: "m" },
     module: { ...done, lake_tables: ["lake.x.y"], key: ["k"], version_column: "x_version", checks: "pass" },
     "scratch-load": { ...done, version: "1", rows: { "lake.x.y": 5 }, idempotent: true },
-    repoint: { ...done, frozen_release: "'2026.09'", contracts: [], checks: "pass" },
+    repoint: { ...done, contracts: [], checks: "pass" },
     equivalence: { ...done, tables: same, gate: "PASS" },
     upstream: { ...done, version: "2", tables: same, within_bounds: true, report: "r" },
     prs: { status: "done", lake_pr: "L", bioc_pr: "B" },

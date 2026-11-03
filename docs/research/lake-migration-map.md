@@ -34,7 +34,7 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 3. **C**: NCBI Gene on the lake modules that already exist (`ncbi_gene2go`,
    `ncbi_gene2pubmed`, `ncbi_gene`, `ncbi_gene2accession`), plus
    `gene_history`, `gene_orthologs` and `gene_group` dumps added to
-   `ncbi_gene`. Four of these tables have mixed `valid_from` (below).
+   `ncbi_gene`. Four of these tables had mixed `valid_from` (below; moot after #222).
    ADR-0026 folds the `ncbi_gene2*` schemas into `ncbi_gene` at migration.
 4. **D**: eQTL Catalogue, CELLxGENE, ENCODE, BEDbase, then
    `resource.resource_relationship` as one union SELECT.
@@ -54,19 +54,14 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 ## Cross-cutting findings
 
 - **#222 touches 77 of 81 tables, not ~45.** 35 tables carry
-  `valid_from`/`valid_to` and 42 raw tables carry `landed_in`. Until the
-  schema-change release (#222), a lake-backed SELECT keeps them: `valid_to`
-  NULL, and `valid_from`/`landed_in` a frozen constant per source, the value
-  of the last Iceberg load. Read from the `v2026-11-01` Parquet column stats,
-  every raw table has exactly one `landed_in`, so one constant is exact for
-  all 42.
-- **8 SCD2 tables have mixed `valid_from`** (`2026.08` and `2026.09`):
+  `valid_from`/`valid_to` and 42 raw tables carry `landed_in`. #222 drops all
+  three from every release, so a lake-backed SELECT carries none of them and
+  needs no frozen constant.
+- **8 SCD2 tables had mixed `valid_from`** (`2026.08` and `2026.09`, marked ⚑):
   `reference.genome`, `annotation.gene`, `annotation.transcript`,
   `annotation.exon`, `annotation.ncbi__gene`, `annotation.ncbi__gene_go`,
-  `annotation.ncbi__gene_pubmed`, `annotation.identifier_mapping` (marked ⚑).
-  A single constant is not exact for them. Either #222 lands before waves C
-  and G, or those SELECTs carry `valid_from` per key from the previous
-  release's Parquet, or the owner accepts one constant.
+  `annotation.ncbi__gene_pubmed`, `annotation.identifier_mapping`. With #222
+  this no longer blocks them.
 - **Raw tables hold one version in the release**, so the lake's
   latest-snapshot tables match them row for row. No raw table depends on
   Iceberg accumulating versions.

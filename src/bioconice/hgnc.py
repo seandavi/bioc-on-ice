@@ -114,14 +114,10 @@ def _gene(src):
 
 
 # Read from cdsci-lake (#183 step 7): lake.hgnc.gene is raw.hgnc__complete_set without
-# landed_in, one HGNC version at a time. landed_in and valid_from are frozen at the last
-# Iceberg load ('2026.09', every current row) and valid_to is NULL, so the released schema
-# is unchanged until the schema-change release drops all three (#222).
-FROZEN_RELEASE = "'2026.09'"
+# landed_in, one HGNC version at a time. Releases carry no row-history columns (#222).
 RELEASE = {
-    "raw.hgnc__complete_set": f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.hgnc.gene",
-    "annotation.hgnc__gene": f"SELECT *, {FROZEN_RELEASE} AS valid_from, NULL::VARCHAR AS valid_to "
-                             f"FROM ({_gene('lake.hgnc.gene')})",
+    "raw.hgnc__complete_set": "SELECT * FROM lake.hgnc.gene",
+    "annotation.hgnc__gene": _gene("lake.hgnc.gene"),
 }
 
 

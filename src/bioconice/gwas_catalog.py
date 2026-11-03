@@ -286,20 +286,13 @@ def _association(src):
 # Read from cdsci-lake (#183): lake.gwas_catalog.{association,study} are
 # raw.gwas_catalog__{associations,studies} without landed_in, one Catalog release at a
 # time; association adds line_number, its key, since the file's whole-row duplicates
-# leave no other. landed_in and valid_from are frozen at the last Iceberg load
-# ('2026.09', every current row) and valid_to is NULL, so the released schema is
-# unchanged until the schema-change release drops all three (#222).
-FROZEN_RELEASE = "'2026.09'"
-_CURRENT = f"{FROZEN_RELEASE} AS valid_from, NULL::VARCHAR AS valid_to"
+# leave no other. Releases carry no row-history columns (#222).
 RELEASE = {
-    "raw.gwas_catalog__associations": f"SELECT * EXCLUDE (line_number), {FROZEN_RELEASE} "
-                                      f"AS landed_in FROM lake.gwas_catalog.association",
-    "raw.gwas_catalog__studies":
-        f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.gwas_catalog.study",
-    "clinical.gwas_catalog__study":
-        f"SELECT *, {_CURRENT} FROM ({_study('lake.gwas_catalog.study')})",
-    "clinical.gwas_catalog__association":
-        f"SELECT *, {_CURRENT} FROM ({_association('lake.gwas_catalog.association')})",
+    "raw.gwas_catalog__associations":
+        "SELECT * EXCLUDE (line_number) FROM lake.gwas_catalog.association",
+    "raw.gwas_catalog__studies": "SELECT * FROM lake.gwas_catalog.study",
+    "clinical.gwas_catalog__study": _study("lake.gwas_catalog.study"),
+    "clinical.gwas_catalog__association": _association("lake.gwas_catalog.association"),
 }
 
 

@@ -183,18 +183,11 @@ def _participant(src):
 
 
 # Read from cdsci-lake (#183 step 7): lake.complexportal.complex is raw.complexportal__complex
-# without landed_in, one release at a time. landed_in and valid_from are frozen at the last
-# Iceberg load ('2026.09', every current row) and valid_to is NULL, so the released schema is
-# unchanged until the schema-change release drops all three (#222).
-FROZEN_RELEASE = "'2026.09'"
-_CURRENT = f"{FROZEN_RELEASE} AS valid_from, NULL::VARCHAR AS valid_to"
+# without landed_in, one release at a time. Releases carry no row-history columns (#222).
 RELEASE = {
-    "raw.complexportal__complex":
-        f"SELECT *, {FROZEN_RELEASE} AS landed_in FROM lake.complexportal.complex",
-    "annotation.complexportal__complex":
-        f"SELECT *, {_CURRENT} FROM ({_complex('lake.complexportal.complex')})",
-    "annotation.complexportal__participant":
-        f"SELECT *, {_CURRENT} FROM ({_participant('lake.complexportal.complex')})",
+    "raw.complexportal__complex": "SELECT * FROM lake.complexportal.complex",
+    "annotation.complexportal__complex": _complex("lake.complexportal.complex"),
+    "annotation.complexportal__participant": _participant("lake.complexportal.complex"),
 }
 
 

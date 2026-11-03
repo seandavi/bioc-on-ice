@@ -61,67 +61,38 @@ def test_guard_sql_rejects_forbidden_keyword_inside_a_with():
 
 
 # --------------------------------------------------------------------------
-# resolve_release_impl, fed a small fixture provenance table (no network)
+# resolve_release_impl, fed a manifest (no network)
 # --------------------------------------------------------------------------
 
-PROVENANCE_ROWS = [
-    ("2026.08", "ensembl", "116", "release_number", "homo_sapiens"),
-    ("2026.08", "ncbi_gene", "2026-08-07", "retrieval_date", None),   # a pre-#96 summed row
-    ("2026.09", "ensembl", "116", "release_number", "homo_sapiens"),
-    ("2026.09", "ensembl", "116", "release_number", "mus_musculus"),
-    ("2026.09", "icite", "2026-08", "release_number", "metadata"),
-    ("2026.09", "ncbi_gene", "2026-09-12", "retrieval_date", "gene_info"),
-]
+PROVENANCE = [{"release": "2026.09", "source": "ensembl", "source_version": "116"}]
 
 
-def test_resolve_release_by_ensembl_shortcut_picks_the_latest_matching_release():
-    result = mcp.resolve_release_impl(ensembl=116, rows=PROVENANCE_ROWS)
-    assert result["release"] == "2026.09"
-    assert result["predicate"] == (
-        "valid_from <= '2026.09' AND (valid_to IS NULL OR valid_to > '2026.09')"
-    )
-    assert result["provenance"] == {
-        "source": "ensembl", "source_version": "116", "version_method": "release_number",
-    }
+def test_resolve_release_returns_the_id_its_pinned_url_and_provenance():
+    result = mcp.resolve_release_impl(manifest={"release": "2026-11-01", "provenance": PROVENANCE})
+    assert result == {"release": "2026-11-01",
+                      "url": "https://data.bioconice.cancerdatasci.org/v2026-11-01",
+                      "provenance": PROVENANCE}
 
 
-def test_resolve_release_unknown_version_lists_known_ones():
-    with pytest.raises(ValueError, match=r"known ensembl versions: \['116'\]"):
-        mcp.resolve_release_impl(ensembl=999, rows=PROVENANCE_ROWS)
+def test_resolve_release_reads_the_pinned_manifest(monkeypatch):
+    seen = []
+    monkeypatch.setattr(mcp, "_manifest", lambda base: seen.append(base) or {"release": "2026-10-31"})
+    assert mcp.resolve_release(release="2026-10-31")["url"].endswith("/v2026-10-31")
+    assert mcp.resolve_release()["release"] == "2026-10-31"
+    assert seen == ["https://data.bioconice.cancerdatasci.org/v2026-10-31", mcp.RELEASE_URL]
 
 
-def test_resolve_release_unknown_source_lists_known_sources():
-    with pytest.raises(ValueError, match="known sources"):
-        mcp.resolve_release_impl(source="bogus", rows=PROVENANCE_ROWS)
+def test_a_pruned_release_points_at_the_hf_archive(monkeypatch):
+    def gone(base):
+        raise ValueError("HTTP 404")
+    monkeypatch.setattr(mcp, "_manifest", gone)
+    with pytest.raises(ValueError, match="hf download seandavis/bioconice"):
+        mcp.resolve_release_impl(release="2026-01-01")
 
 
-def test_resolve_release_by_explicit_release_id():
-    result = mcp.resolve_release_impl(release="2026.08", rows=PROVENANCE_ROWS)
-    assert result["release"] == "2026.08"
-    assert len(result["provenance"]) == 2  # ensembl + ncbi_gene rows at that release
-    # a source read species by species is one row per artifact, each named
-    now = mcp.resolve_release_impl(release="2026.09", rows=PROVENANCE_ROWS)["provenance"]
-    assert [p["artifact"] for p in now if p["source"] == "ensembl"] == ["homo_sapiens", "mus_musculus"]
-
-
-def test_resolve_release_unknown_release_id():
-    with pytest.raises(ValueError, match="unknown release"):
-        mcp.resolve_release_impl(release="1999.01", rows=PROVENANCE_ROWS)
-
-
-def test_resolve_release_icite_shortcut():
-    result = mcp.resolve_release_impl(icite="2026-08", rows=PROVENANCE_ROWS)
-    assert result["release"] == "2026.09"
-
-
-def test_resolve_release_needs_something():
-    with pytest.raises(ValueError, match="pass release="):
-        mcp.resolve_release_impl(rows=PROVENANCE_ROWS)
-
-
-def test_resolve_release_rejects_two_shortcuts_at_once():
-    with pytest.raises(ValueError, match="only one of"):
-        mcp.resolve_release_impl(ensembl=116, icite="2026-08", rows=PROVENANCE_ROWS)
+def test_resolve_release_refuses_a_malformed_id():
+    with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        mcp.resolve_release_impl(release="2026.09")
 
 
 # --------------------------------------------------------------------------
@@ -138,10 +109,10 @@ async def test_tools_registered():
 
 
 @pytest.mark.anyio
-async def test_query_and_resolve_release_descriptions_warn_about_valid_to():
+async def test_resolve_release_takes_only_a_release_and_query_has_no_current():
     tools = {t.name: t for t in await mcp.mcp.list_tools()}
-    assert "valid_to" in tools["query"].description
-    assert "valid_to" in tools["resolve_release"].description
+    assert set(tools["resolve_release"].inputSchema["properties"]) == {"release"}
+    assert set(tools["query"].inputSchema["properties"]) == {"sql", "limit"}
 
 
 @pytest.mark.anyio
@@ -207,8 +178,6 @@ _FAKE_MANIFEST = {
              "doc": "NCBI taxonomy id of the organism, e.g. 9606 for human."},
             {"name": "pubmed_id", "type": "VARCHAR",
              "doc": "PubMed id (PMID) of a publication discussing this gene."},
-            {"name": "valid_from", "type": "VARCHAR", "doc": "..."},
-            {"name": "valid_to", "type": "VARCHAR", "doc": "..."},
         ],
     }],
 }
@@ -219,30 +188,22 @@ def _fake_lake_con():
     import duckdb
     con = duckdb.connect()
     con.execute("ATTACH ':memory:' AS b")
-    con.execute("CREATE SCHEMA b.provenance")
-    con.execute(
-        "CREATE TABLE b.provenance.release "
-        "(release VARCHAR, source VARCHAR, source_version VARCHAR, version_method VARCHAR, "
-        "artifact VARCHAR)"
-    )
-    con.execute("INSERT INTO b.provenance.release VALUES "
-                "('2026.09', 'ensembl', '116', 'release_number', 'homo_sapiens')")
     con.execute("CREATE SCHEMA b.annotation")
     con.execute(
         "CREATE TABLE b.annotation.ncbi__gene_pubmed "
-        "(gene_id VARCHAR, taxon_id INTEGER, pubmed_id VARCHAR, valid_to VARCHAR)"
+        "(gene_id VARCHAR, taxon_id INTEGER, pubmed_id VARCHAR)"
     )
     con.execute("INSERT INTO b.annotation.ncbi__gene_pubmed VALUES "
-                "('7157', 9606, 'p1', NULL), ('7157', 9606, 'p2', NULL), ('999', 9606, 'p3', NULL)")
+                "('7157', 9606, 'p1'), ('7157', 9606, 'p2'), ('999', 9606, 'p3')")
     con.execute("CREATE TABLE b.annotation.icite__citation "
-                "(citing_pmid VARCHAR, cited_pmid VARCHAR, valid_to VARCHAR)")
+                "(citing_pmid VARCHAR, cited_pmid VARCHAR)")
     con.execute("INSERT INTO b.annotation.icite__citation VALUES "
-                "('c1', 'p1', NULL), ('c2', 'p1', NULL), ('c3', 'p2', NULL)")
+                "('c1', 'p1'), ('c2', 'p1'), ('c3', 'p2')")
     return con
 
 
 def test_scripted_session_offline(monkeypatch):
-    monkeypatch.setattr(mcp, "_manifest", lambda: _FAKE_MANIFEST)
+    monkeypatch.setattr(mcp, "_manifest", lambda base=None: _FAKE_MANIFEST)
     monkeypatch.setattr(mcp, "_duck", _fake_lake_con)
 
     tables = mcp.list_tables()
@@ -259,16 +220,10 @@ def test_scripted_session_offline(monkeypatch):
     with pytest.raises(ValueError, match="list_tables"):
         mcp.describe_table("annotation.nope")
 
-    resolved = mcp.resolve_release(ensembl="116")
-    assert resolved["release"] == "2026.09"
+    resolved = mcp.resolve_release()
+    assert resolved["url"] == "https://data.bioconice.cancerdatasci.org/v2026-10-31"
 
-    citers = mcp.query(
-        "WITH gene_papers AS ("
-        "  SELECT pubmed_id FROM b.annotation.ncbi__gene_pubmed"
-        "  WHERE gene_id='7157' AND taxon_id=9606 AND valid_to IS NULL"
-        ") SELECT COUNT(*) AS n FROM b.annotation.icite__citation c"
-        " JOIN gene_papers g ON c.cited_pmid = g.pubmed_id WHERE c.valid_to IS NULL"
-    )
+    citers = mcp.query(next(r["sql"] for r in mcp.recipes() if r["name"] == "gene_to_citers"))
     assert citers["rows"][0][0] == 3  # c1, c2 cite p1; c3 cites p2
 
 
@@ -287,22 +242,16 @@ def test_live_scripted_session():
     assert described["business_key"] == ["gene_id", "taxon_id"]
     assert all(c["doc"] for c in described["columns"])
 
-    resolved = mcp.resolve_release(ensembl="116")
-    assert resolved["release"] >= "2026.09"
+    resolved = mcp.resolve_release()
+    assert resolved["url"].endswith(f"/v{resolved['release']}") and resolved["provenance"]
 
     papers = mcp.query(
         "SELECT COUNT(*) AS n FROM b.annotation.ncbi__gene_pubmed "
-        "WHERE gene_id='7157' AND taxon_id=9606 AND valid_to IS NULL"
+        "WHERE gene_id='7157' AND taxon_id=9606"
     )
     assert papers["rows"][0][0] == 20_400
 
-    citers = mcp.query(
-        "WITH gene_papers AS ("
-        "  SELECT pubmed_id FROM b.annotation.ncbi__gene_pubmed"
-        "  WHERE gene_id='7157' AND taxon_id=9606 AND valid_to IS NULL"
-        ") SELECT COUNT(*) AS n FROM b.annotation.icite__citation c"
-        " JOIN gene_papers g ON c.cited_pmid = g.pubmed_id WHERE c.valid_to IS NULL"
-    )
+    citers = mcp.query(next(r["sql"] for r in mcp.recipes() if r["name"] == "gene_to_citers"))
     assert citers["rows"][0][0] == 1_085_204
 
 

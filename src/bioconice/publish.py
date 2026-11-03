@@ -32,10 +32,19 @@ ATTACH_LIVE = (
 )
 
 
+# Iceberg row history, not published: a release is a versioned dataset, not versioned rows
+# (ADR-0013, #222).
+ROW_HISTORY = ("valid_from", "valid_to", "landed_in")
+
+
 def _current(name, d):
-    """Current rows only (ADR-0013): `valid_to IS NULL` where the table carries it."""
-    versioned = any(f.name == "valid_to" for f in d.schema.fields)
-    return f"SELECT * FROM bioc.{name}" + (" WHERE valid_to IS NULL" if versioned else "")
+    """Current rows only (ADR-0013): `valid_to IS NULL` where the table carries it, without
+    the row-history columns."""
+    names = {f.name for f in d.schema.fields}
+    history = [c for c in ROW_HISTORY if c in names]
+    exclude = f" EXCLUDE ({', '.join(history)})" if history else ""
+    return (f"SELECT *{exclude} FROM bioc.{name}"
+            + (" WHERE valid_to IS NULL" if "valid_to" in names else ""))
 
 
 # Declared tables already read from cdsci-lake (#183): each source module's RELEASE.

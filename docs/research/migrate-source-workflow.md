@@ -29,10 +29,10 @@ checks the clean, escalated, parity-failure, paused and idempotence paths.
 
 | # | stage (key) | model | where | result the script checks |
 |---|---|---|---|---|
-| 1 | `preflight` | haiku | orchestrator cwd | no `status:paused` on #183; the source is the first not yet migrated or in flight in the map's step-9 order (skipping wave A and non-module sources); every table is "new source module", none with mixed `valid_from`; creates the worktrees and scratch root; downloads `latest/manifest.json` |
+| 1 | `preflight` | haiku | orchestrator cwd | no `status:paused` on #183; the source is the first not yet migrated or in flight in the map's step-9 order (skipping wave A and non-module sources); every table is "new source module"; creates the worktrees and scratch root; downloads `latest/manifest.json` |
 | 2 | `module` | opus | cdsci-lake worktree | the module, its registration, licence row and offline tests; ruff and pytest pass |
 | 3 | `scratch-load` | opus | cdsci-lake worktree | a load at the Iceberg version into `<scratch>/lake`, with an idempotent re-run |
-| 4 | `repoint` | opus | bioc-on-ice worktree | `_<table>(src)` shared SQL, `RELEASE` with the frozen #222 columns, `FROM_LAKE`, contracts out of `UNCONTRACTED_TABLES`, `release_matches_lander` test, map rows; pytest passes |
+| 4 | `repoint` | opus | bioc-on-ice worktree | `_<table>(src)` shared SQL, `RELEASE` without the row-history columns (#222), `FROM_LAKE`, contracts out of `UNCONTRACTED_TABLES`, `release_matches_lander` test, map rows; pytest passes |
 | 5 | `equivalence` | opus | bioc-on-ice worktree | `scripts/migrate/equivalence.py`, a typed result per table that the script itself judges (0 / 0 `EXCEPT ALL`, same columns as Iceberg and the manifest, key unique and not null, every table present); `scripts/migrate/partial-gate.sh` prints PASS |
 | 6 | `upstream` | opus | cdsci-lake worktree | the current upstream in a second scratch lake (`<scratch>/current`); differences explained as upstream changes and within the contract bounds |
 | 7 | `prs` | haiku | bioc-on-ice worktree | both PRs open as **drafts**, cdsci-lake first, with the evidence table and the merge order |
@@ -60,8 +60,8 @@ stay with the orchestrator and the owner: owner approval of the gate change,
 the production ingest, the cdsci-lake pin bump, marking the PRs ready, merging in
 the stated order, ticking #208, and the experiment-log entry (the workflow trace has each
 child's duration; token usage was not checked to be there). Sources that are not new source modules
-(wave A, small adapters such as `raw.bugsigdb__full_dump`), mixed `valid_from`
-(#222), OBO and Ensembl need a human. Preflight refuses them.
+(wave A, small adapters such as `raw.bugsigdb__full_dump`), OBO and Ensembl need
+a human. Preflight refuses them.
 
 ## Dry run: WikiPathways, 2026-11-01
 
@@ -101,8 +101,8 @@ first wave-B source in the map. Scratch lakes only.
    a tmp catalog.
 6. **`upsert` returns the table's row count**, not rows written. The first test
    assumed otherwise.
-7. **Frozen value in the test.** `release_matches_lander` takes `"2026.09"`, not
-   the test's `REL`.
+7. **Frozen value in the test.** `release_matches_lander` took `"2026.09"`, not
+   the test's `REL`. Gone with #222: releases no longer carry the frozen columns.
 8. **Upstream diff.** When the version is stamped into values (file names,
    packed names), every raw row differs. The stage now compares with it
    stripped.

@@ -468,7 +468,8 @@ def test_bugsigdb_release_reads_the_typed_lake_table_back_as_published(cat):
     con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.bugsigdb")
     con.execute("CREATE TABLE lake.bugsigdb.signatures AS "
                 + lake_ingest._select_sql(BSDB, "v1.3.1", "2026-04-24_00:41_UTC", None))
-    con.register("lander", cat.load_table("raw.bugsigdb__full_dump").scan().to_arrow())
+    con.register("landed", cat.load_table("raw.bugsigdb__full_dump").scan().to_arrow())
+    con.execute("CREATE VIEW lander AS SELECT * EXCLUDE (landed_in) FROM landed")
     con.execute(f"CREATE TABLE got AS {bugsigdb.RELEASE['raw.bugsigdb__full_dump']}")
     assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE lander").fetchall()
     for a, b in (("got", "lander"), ("lander", "got")):

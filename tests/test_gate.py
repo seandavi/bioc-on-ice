@@ -116,7 +116,7 @@ def test_dropped_table_fails(tmp_path, reference, monkeypatch, capsys):
 
 def test_reference_defaults_to_latest(tmp_path, monkeypatch):
     seen = []
-    monkeypatch.setattr(gate, "gate", lambda release, reference: seen.append(reference) or True)
+    monkeypatch.setattr(gate, "gate", lambda release, reference, allow: seen.append(reference) or True)
     assert _run(monkeypatch, "--release", str(tmp_path)) == 0
     assert seen == ["https://data.bioconice.cancerdatasci.org/latest"]
 
@@ -142,5 +142,42 @@ def test_every_declared_table_with_a_key_gets_a_contract():
     for name, d in gate.DECLARED.items():
         if d.business_key:
             c = gate.declared_contract(name, license="test")
-            assert c.primary_key == d.business_key and len(c.columns) == len(d.schema.fields)
+            assert c.primary_key == d.business_key
+            assert [x.name for x in c.columns] == [
+                f.name for f in d.schema.fields if f.name not in ("valid_from", "valid_to", "landed_in")]
     assert gate.declared_contract("raw.hgnc__complete_set", ("hgnc_id",)).columns[0].nullable is False
+
+
+# #222: a table that drops its row-history columns, against one that still has them.
+HISTORY = "SELECT i::VARCHAR AS pmid, '2026.09' AS valid_from, NULL::VARCHAR AS valid_to FROM range(5) t(i)"
+
+
+def _with_history(tmp_path, candidate_pubmed):
+    reference = _bundle(tmp_path / "ref", "2026-10-31", {
+        "annotation.pubmed__article": HISTORY, "provenance.release": PROVENANCE.format(n=1)})
+    candidate = _bundle(tmp_path / "candidate", "2026-11-01", {
+        "annotation.pubmed__article": candidate_pubmed,
+        "provenance.release": PROVENANCE.format(n=1)})
+    return ["--release", str(candidate), "--reference", str(reference)], candidate
+
+
+def test_an_allowed_table_may_drop_row_history(tmp_path, monkeypatch, capsys):
+    argv, candidate = _with_history(tmp_path, "SELECT i::VARCHAR AS pmid FROM range(5) t(i)")
+    assert _run(monkeypatch, *argv, "--allow-schema-change", "annotation.pubmed__article") == 0
+    out = capsys.readouterr().out
+    assert "  ok    columns_unchanged  (schema change allowed: dropped valid_from, valid_to)" in out
+    assert "annotation.pubmed__article drops valid_from, valid_to" in out
+    assert json.loads((candidate / gate.GATE_FILE).read_text())["schema_changes"] == {
+        "annotation.pubmed__article": ["valid_from", "valid_to"]}
+
+
+def test_dropping_row_history_from_an_unlisted_table_fails(tmp_path, monkeypatch, capsys):
+    argv, _ = _with_history(tmp_path, "SELECT i::VARCHAR AS pmid FROM range(5) t(i)")
+    assert _run(monkeypatch, *argv, "--allow-schema-change", "provenance.release") == 1
+    assert "  FAIL  columns_unchanged  (differs:" in capsys.readouterr().out
+
+
+def test_another_column_change_fails_even_when_listed(tmp_path, monkeypatch, capsys):
+    argv, _ = _with_history(tmp_path, "SELECT i::VARCHAR AS pmid, 1 AS extra FROM range(5) t(i)")
+    assert _run(monkeypatch, *argv, "--allow-schema-change", "annotation.pubmed__article") == 1
+    assert "  FAIL  columns_unchanged  (differs:" in capsys.readouterr().out

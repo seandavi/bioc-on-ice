@@ -424,5 +424,5 @@ function renderResultTable(rows) {
 
 document.getElementById("query-box").appendChild(buildQueryPanel(`SELECT gene_id, symbol, source, gene_type
 FROM annotation.gene
-WHERE taxon_id = 9606 AND symbol = 'TP53' AND valid_to IS NULL;`));
+WHERE taxon_id = 9606 AND symbol = 'TP53';`));
 loadCatalog();

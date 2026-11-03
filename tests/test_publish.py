@@ -56,7 +56,9 @@ def test_bundle_attaches_with_current_rows_and_docs(con, tmp_path):
     assert view.startswith(publish.DECLARED["annotation.exon"].comment[:40])
     docs = dict(db.sql("SELECT column_name, comment FROM duckdb_columns() WHERE database_name = 'rel' "
                        "AND schema_name = 'annotation' AND table_name = 'exon'").fetchall())
-    assert docs["end"] and docs["valid_to"].startswith("The biocOnIce release at which")
+    assert docs["end"]
+    # releases carry no row history (#222)
+    assert not {c["name"] for t in m["tables"] for c in t["columns"]} & set(publish.ROW_HISTORY)
 
     # restore.sql builds a local copy and checks it against manifest.json
     local = duckdb.connect()

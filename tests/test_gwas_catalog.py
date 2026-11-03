@@ -218,4 +218,4 @@ def test_release_selects_over_the_lake_reproduce_the_lander(cat, url, release_ma
     gw.ingest(cat, REL, url=url)
     release_matches_lander(cat, {"lake.gwas_catalog.association": "raw.gwas_catalog__associations",
                                  "lake.gwas_catalog.study": "raw.gwas_catalog__studies"},
-                           gw.RELEASE, "2026.09", line_numbered={"lake.gwas_catalog.association"})
+                           gw.RELEASE, line_numbered={"lake.gwas_catalog.association"})

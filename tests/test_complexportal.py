@@ -180,4 +180,4 @@ def test_release_selects_over_the_lake_reproduce_the_lander(cat, url, release_ma
     """#183 step 7: the release reads lake.complexportal.complex, not these Iceberg tables."""
     complexportal.ingest(cat, REL, url=url)
     release_matches_lander(cat, {"lake.complexportal.complex": "raw.complexportal__complex"},
-                           complexportal.RELEASE, "2026.09")
+                           complexportal.RELEASE)

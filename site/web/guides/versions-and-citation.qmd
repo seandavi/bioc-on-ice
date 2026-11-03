@@ -28,6 +28,26 @@ the weekly schedule
 following Sunday.
 :::
 
+## Schema changes
+
+**No row-history columns** ([#222](https://github.com/seandavi/bioc-on-ice/issues/222)).
+From the first release built after `v2026-11-01` with #222, tables no longer carry
+`valid_from` and `valid_to` (35 derived tables) or `landed_in` (42 `raw.*`
+tables). They were bookkeeping from biocOnIce's Iceberg tables, where each row
+recorded the internal load (e.g. `2026.09`) that opened or closed it. A release
+holds only current rows, so `valid_to` was always NULL. The sources now load
+through cdsci-lake, which has no row history, so the values were frozen and
+stopped meaning anything. A release is now a versioned dataset rather than a set
+of versioned rows
+([ADR-0013](https://github.com/seandavi/bioc-on-ice/blob/main/docs/adr/0013-versioned-datasets-not-versioned-rows.md)).
+To use it:
+
+- Drop `valid_to IS NULL` filters: every row is current.
+- To reproduce a result, pin the release (a dated folder or a monthly tag)
+  instead of filtering on `valid_from`.
+
+`v2026-11-01` and earlier releases keep the old columns.
+
 ## Which one to use
 
 - **Exploring, or building something that should track the sources:** use `latest/`.

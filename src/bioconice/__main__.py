@@ -200,6 +200,9 @@ def main():
                     help="bundle directory written by `bioconice publish`")
     ga.add_argument("--reference", default=gate.DEFAULT_REFERENCE, metavar="URL_OR_DIR",
                     help=f"previous release, its base URL or directory (default: {gate.DEFAULT_REFERENCE})")
+    ga.add_argument("--allow-schema-change", nargs="+", default=[], metavar="TABLE",
+                    help="owner-approved: these tables may drop valid_from, valid_to and "
+                         "landed_in (#222); any other column change still fails")
 
     up = sub.add_parser("upload",
                         help="upload a built release bundle to R2 v{release}/ and latest/, "
@@ -226,7 +229,8 @@ def main():
     args = p.parse_args()
 
     if args.cmd == "gate":
-        raise SystemExit(0 if gate.gate(args.release, args.reference) else 1)
+        raise SystemExit(0 if gate.gate(args.release, args.reference,
+                                        args.allow_schema_change) else 1)
 
     if args.cmd == "upload":
         from . import upload

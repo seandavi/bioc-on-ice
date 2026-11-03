@@ -153,14 +153,12 @@ def land_raw(cat, release, version=DEFAULT_VERSION, url=None):
 
 # The release reads lake.bugsigdb.signatures (cdsci-lake), which types five columns; cast
 # them back to the text this table has always published. '%-d' because upstream writes
-# '4 July 2022', not '04 July 2022'. landed_in is frozen at the value on every current row
-# until #222 drops it.
-FROZEN_RELEASE = "'2026.08'"
+# '4 July 2022', not '04 July 2022'.
 RELEASE = {
-    "raw.bugsigdb__full_dump": f"""SELECT * REPLACE (
+    "raw.bugsigdb__full_dump": """SELECT * REPLACE (
         pmid::VARCHAR AS pmid, year::VARCHAR AS year,
         group_0_sample_size::VARCHAR AS group_0_sample_size,
         group_1_sample_size::VARCHAR AS group_1_sample_size,
-        strftime(curated_date, '%-d %B %Y') AS curated_date), {FROZEN_RELEASE} AS landed_in
+        strftime(curated_date, '%-d %B %Y') AS curated_date)
     FROM lake.bugsigdb.signatures""",
 }
