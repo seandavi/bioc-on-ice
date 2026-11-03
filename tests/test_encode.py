@@ -225,3 +225,11 @@ def test_every_column_is_documented(cat, tmp_path):
         assert "citing-encode" in table.properties["comment"], identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+def test_release_selects_over_the_lake_reproduce_the_lander(cat, tmp_path, release_matches_lander):
+    """#183: the release reads lake.encode.experiment and lake.encode.file, not these
+    Iceberg tables."""
+    ingest(cat, tmp_path)
+    release_matches_lander(cat, {"lake.encode.experiment": "raw.encode__experiment",
+                                 "lake.encode.file": "raw.encode__file"}, encode.RELEASE)

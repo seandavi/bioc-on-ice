@@ -57,6 +57,9 @@ def declared_contract(name, primary_key=None, references=None, license=None, gra
         references=references or {})
 
 
+ENCODE_LICENSE = "LicenseRef-ENCODE-Data-Use-Policy"
+
+
 # The bundle's own tables that have a contract outside a dataset release of their own.
 BUNDLE = DatasetContract(
     id="bioconice", title="biocOnIce release bundle",
@@ -132,6 +135,12 @@ BUNDLE = DatasetContract(
         declared_contract("resource.eqtlcatalogue__dataset"),
         declared_contract("raw.cellxgene__dataset", ("dataset_version_id",)),
         declared_contract("resource.cellxgene__dataset"),
+        # schemas.py declares no bioc.license for ENCODE: its Data Use Policy names no
+        # licence instrument, only free use with citation (encodeproject.org/help/citing-encode/).
+        declared_contract("raw.encode__experiment", ("accession",), license=ENCODE_LICENSE),
+        declared_contract("raw.encode__file", ("title",), license=ENCODE_LICENSE),
+        declared_contract("resource.encode__experiment", license=ENCODE_LICENSE),
+        declared_contract("resource.encode__file", license=ENCODE_LICENSE),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -160,8 +169,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.bedbase__bedset",
     "raw.bedbase__bedset_membership",
     "raw.biogrid__interactions",
-    "raw.encode__experiment",
-    "raw.encode__file",
     "raw.ensembl__gtf",
     "raw.icite__metadata",
     "raw.intact__mitab",
@@ -183,8 +190,6 @@ UNCONTRACTED_TABLES = frozenset({
     "reference.genome",
     "resource.bedbase__bedfile",
     "resource.bedbase__bedset",
-    "resource.encode__experiment",
-    "resource.encode__file",
     "resource.resource_relationship",
 })
 
