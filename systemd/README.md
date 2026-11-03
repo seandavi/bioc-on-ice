@@ -88,3 +88,44 @@ release and only prunes.
   removes a stale one first and writes the new one atomically, last), so a
   re-run rebuilds it. A truncated `manifest.json` from an older publish does
   not parse and is rebuilt too.
+
+## One-off: a release that drops columns (#222)
+
+The weekly script gates without `--allow-schema-change`, so a release that
+drops the row-history columns (`valid_from`, `valid_to`, `landed_in`) is run
+once by hand, serialized with the timer: pause it, wait out any run in
+progress, and hold the script's own lock from publish to the applied upload.
+Do this before #183 wave C, on a UTC date after `latest/`'s release.
+
+```bash
+systemctl --user stop bioconice-release.timer
+while systemctl --user is-active -q bioconice-release.service; do sleep 60; done
+cd ~/Documents/git/bioc-on-ice-release
+git fetch -q origin && git checkout -q --detach origin/main
+export TMPDIR=/data/davsean/tmp CU_OPENALEX_LAKE_BACKEND=postgres
+flock "$TMPDIR/bioconice-release.lock" bash -euxo pipefail <<'SH'
+dir=$TMPDIR/bioconice-release-$(date -u +%F)
+# every table of latest/ that still has a row-history column (77 for v2026-11-01)
+tables=$(curl -fsS https://data.bioconice.cancerdatasci.org/latest/manifest.json | python3 -c '
+import json, sys
+print(" ".join(t["schema"] + "." + t["table"] for t in json.load(sys.stdin)["tables"]
+               if {"valid_from", "valid_to", "landed_in"} & {c["name"] for c in t["columns"]}))')
+uv run bioconice publish --out "$dir"
+uv run bioconice gate --release "$dir" --allow-schema-change $tables
+uv run bioconice upload --release "$dir"
+uv run bioconice upload --release "$dir" --apply
+ln -sfn "$dir" /data/davsean/bioconice-release
+SH
+# latest/ is the new release and no table has a row-history column
+curl -fsS https://data.bioconice.cancerdatasci.org/latest/manifest.json | python3 -c '
+import json, sys
+m = json.load(sys.stdin)
+left = [t["schema"] + "." + t["table"] for t in m["tables"]
+        if {"valid_from", "valid_to", "landed_in"} & {c["name"] for c in t["columns"]}]
+print(m["release"], left)
+assert not left' && systemctl --user start bioconice-release.timer
+```
+
+Check that the printed release is today's before restarting the timer. If a
+step fails, the check fails and the timer stays stopped: fix the cause, then
+re-run from the `flock` block.

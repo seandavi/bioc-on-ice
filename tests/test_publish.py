@@ -66,6 +66,14 @@ def test_bundle_attaches_with_current_rows_and_docs(con, tmp_path):
     assert local.sql("SELECT count(*) FROM annotation.exon").fetchone()[0] == want["annotation.exon"]
 
 
+def test_published_docs_never_mention_row_history():
+    # manifest.json, views.sql and the MCP carry these docs; releases have no row history (#222)
+    for schema, table, _ in publish.TABLES:
+        comment, docs = publish._docs(f"{schema}.{table}")
+        texts = [comment or ""] + [v for k, v in docs.items() if k not in publish.ROW_HISTORY]
+        assert not [t for t in texts if any(c in t for c in publish.ROW_HISTORY)], f"{schema}.{table}"
+
+
 def test_a_failed_publish_leaves_no_manifest_from_an_earlier_run(con, tmp_path, monkeypatch):
     out = tmp_path / "release"
     out.mkdir()
