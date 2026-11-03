@@ -218,16 +218,11 @@ def _check(con):
                          + "; ".join(f"{k} ({v:,} rows)" for k, v in failed.items()))
 
 
-def transform(cat, release):
-    """Phase 2: one resource row per experiment and per file, plus their relationships."""
-    con = duckdb.connect()
-    for name in ("experiment", "file"):  # raw holds one crawl, so the whole table is the input
-        con.register(f"raw_{name}", cat.load_table(f"raw.encode__{name}").scan().to_arrow())
-
+def _experiment(src):
+    """resource.encode__experiment's columns, from a table shaped like raw.encode__experiment."""
     # taxon_id is a TRY_CAST: a mixed-species experiment lists two ids ('9606,10090')
     # and becomes NULL rather than a wrong single taxon — bedbase.py's rule.
-    con.execute(f"""
-        CREATE TABLE experiment AS
+    return f"""
         SELECT 'encode:' || accession AS resource_id, accession, status, description,
                assay_term_id, assay_term_name, assay_title,
                biosample_ontology_term_id AS biosample_term_id,
@@ -245,16 +240,18 @@ def transform(cat, release):
                doi, date_submitted, date_released,
                '{BASE}/experiments/' || accession || '/' AS portal_uri,
                'ENCODE' AS provider
-        FROM raw_experiment
-    """)
+        FROM {src}
+    """
 
+
+def _file(src):
+    """resource.encode__file's columns, from a table shaped like raw.encode__file."""
     # dataset is an object path, '/experiments/ENCSR…/' or '/annotations/ENCSR…/':
     # its two segments are the dataset's type and accession. A file is keyed on
     # `title`, not `accession`: 1,283 files (2026-09-18: SRA runs, named reference
     # files) have only an external accession, and title is what the portal itself
     # keys them by — the segment their own path and others' derived_from carry.
-    con.execute(f"""
-        CREATE TABLE file AS
+    return f"""
         SELECT 'encode:' || title AS resource_id, title AS accession,
                'encode:' || split_part(dataset, '/', 3) AS dataset_id,
                split_part(dataset, '/', 2) AS dataset_type,
@@ -271,8 +268,27 @@ def transform(cat, release):
                list_sort(list_distinct(list_transform(str_split(derived_from, ','),
                    x -> 'encode:' || split_part(x, '/', 3)))) AS derived_from,
                lab_title AS lab, date_created, 'ENCODE' AS provider
-        FROM raw_file
-    """)
+        FROM {src}
+    """
+
+
+# Read from cdsci-lake (#183): lake.encode.experiment and lake.encode.file are the raw
+# tables without landed_in, one crawl each. Releases carry no row-history columns (#222).
+RELEASE = {
+    "raw.encode__experiment": "SELECT * FROM lake.encode.experiment",
+    "raw.encode__file": "SELECT * FROM lake.encode.file",
+    "resource.encode__experiment": _experiment("lake.encode.experiment"),
+    "resource.encode__file": _file("lake.encode.file"),
+}
+
+
+def transform(cat, release):
+    """Phase 2: one resource row per experiment and per file, plus their relationships."""
+    con = duckdb.connect()
+    for name in ("experiment", "file"):  # raw holds one crawl, so the whole table is the input
+        con.register(f"raw_{name}", cat.load_table(f"raw.encode__{name}").scan().to_arrow())
+    con.execute(f"CREATE TABLE experiment AS {_experiment('raw_experiment')}")
+    con.execute(f"CREATE TABLE file AS {_file('raw_file')}")
     _check(con)
 
     # The joinable form. Targets keep the spelling their own table uses: ontology
