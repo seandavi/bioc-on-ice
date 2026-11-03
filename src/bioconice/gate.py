@@ -154,6 +154,9 @@ BUNDLE = DatasetContract(
                               "bedfile_id": "raw.bedbase__bed.id"}),
         declared_contract("resource.bedbase__bedfile", license=BEDBASE_LICENSE),
         declared_contract("resource.bedbase__bedset", license=BEDBASE_LICENSE),
+        # Each row is under its writer's licence: eQTL Catalogue and CELLxGENE are CC BY 4.0.
+        declared_contract("resource.resource_relationship",
+                          license=f"CC-BY-4.0 AND {ENCODE_LICENSE} AND {BEDBASE_LICENSE}"),
         declared_contract("raw.biogrid__interactions", ("biogrid_interaction_id",)),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
@@ -198,7 +201,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.pubtator3__species",
     "raw.rnacentral__id_mapping",
     "reference.genome",
-    "resource.resource_relationship",
 })
 
 

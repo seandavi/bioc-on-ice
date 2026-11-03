@@ -272,6 +272,25 @@ def _file(src):
     """
 
 
+def _relationship(file, experiment):
+    """resource.resource_relationship's ENCODE rows, from tables shaped like
+    resource.encode__file and resource.encode__experiment."""
+    # The joinable form. Targets keep the spelling their own table uses: ontology
+    # CURIEs as ontology.term.term_id writes them, 'encode:' accessions as BEDbase's
+    # rows and resource_id here write them, Entrez ids under Bioregistry's 'ncbigene'.
+    return f"""
+        SELECT DISTINCT * FROM (
+            SELECT resource_id, 'part_of_dataset' AS relationship, dataset_id AS target_id,
+                   'encode' AS source FROM {file} WHERE dataset_id IS NOT NULL
+            UNION ALL
+            SELECT resource_id, 'has_biosample', biosample_term_id, 'encode'
+            FROM {experiment} WHERE biosample_term_id IS NOT NULL
+            UNION ALL
+            SELECT resource_id, 'has_target_gene', 'ncbigene:' || unnest(target_gene_ids), 'encode'
+            FROM {experiment})
+    """
+
+
 # Read from cdsci-lake (#183): lake.encode.experiment and lake.encode.file are the raw
 # tables without landed_in, one crawl each. Releases carry no row-history columns (#222).
 RELEASE = {
@@ -280,6 +299,10 @@ RELEASE = {
     "resource.encode__experiment": _experiment("lake.encode.experiment"),
     "resource.encode__file": _file("lake.encode.file"),
 }
+# This source's branch of the resource.resource_relationship union (publish.py).
+RELATIONSHIP = (f"WITH file AS ({RELEASE['resource.encode__file']}), "
+                f"experiment AS ({RELEASE['resource.encode__experiment']}) "
+                + _relationship("file", "experiment"))
 
 
 def transform(cat, release):
@@ -291,20 +314,7 @@ def transform(cat, release):
     con.execute(f"CREATE TABLE file AS {_file('raw_file')}")
     _check(con)
 
-    # The joinable form. Targets keep the spelling their own table uses: ontology
-    # CURIEs as ontology.term.term_id writes them, 'encode:' accessions as BEDbase's
-    # rows and resource_id here write them, Entrez ids under Bioregistry's 'ncbigene'.
-    rel = con.sql("""
-        SELECT DISTINCT * FROM (
-            SELECT resource_id, 'part_of_dataset' AS relationship, dataset_id AS target_id,
-                   'encode' AS source FROM file WHERE dataset_id IS NOT NULL
-            UNION ALL
-            SELECT resource_id, 'has_biosample', biosample_term_id, 'encode'
-            FROM experiment WHERE biosample_term_id IS NOT NULL
-            UNION ALL
-            SELECT resource_id, 'has_target_gene', 'ncbigene:' || unnest(target_gene_ids), 'encode'
-            FROM experiment)
-    """).to_arrow_table()
+    rel = con.sql(_relationship("file", "experiment")).to_arrow_table()
     return {
         "resource.encode__experiment": merge.merge(
             cat, "resource.encode__experiment", con.sql("SELECT * FROM experiment").to_arrow_table(),
