@@ -12,16 +12,19 @@ def release_matches_lander():
     table is that raw table without `landed_in`, which is what the cdsci-lake source
     lands. Each SELECT in `release` must give the lander's current rows, with the same
     columns and types less the row-history columns (#222). Lake tables in `line_numbered`
-    are keyed by a leading line_number, as cdsci-lake lands them.
+    are keyed by a leading line_number, as cdsci-lake lands them. `stamped` maps a lake
+    table to the SQL of columns cdsci-lake adds at ingest beyond the raw table's.
     """
-    def check(cat, lake, release, line_numbered=()):
+    def check(cat, lake, release, line_numbered=(), stamped=None):
         con = duckdb.connect()
         con.execute("ATTACH ':memory:' AS lake")
         for name, raw in lake.items():
             con.register("raw", cat.load_table(raw).scan().to_arrow())
             con.execute(f"CREATE SCHEMA IF NOT EXISTS lake.{name.split('.')[1]}")
             number = "row_number() OVER ()::INTEGER AS line_number, " if name in line_numbered else ""
-            con.execute(f"CREATE TABLE {name} AS SELECT {number}* EXCLUDE (landed_in) FROM raw")
+            extra = f", {stamped[name]}" if name in (stamped or {}) else ""
+            con.execute(f"CREATE TABLE {name} AS SELECT {number}* EXCLUDE (landed_in){extra} "
+                        "FROM raw")
         for name, sql in release.items():
             con.register("lander", cat.load_table(name).scan().to_arrow())
             cols = [c[0] for c in con.sql("DESCRIBE lander").fetchall()]

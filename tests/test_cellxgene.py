@@ -196,3 +196,12 @@ def test_every_column_is_documented(cat):
         assert table.properties.get("comment"), identifier
         for f in table.schema().fields:
             assert f.doc, f"{identifier}.{f.name} has no doc"
+
+
+def test_release_selects_over_the_lake_reproduce_the_lander(cat, release_matches_lander):
+    """#183: the release reads lake.cellxgene.dataset, which cdsci-lake stamps with the
+    Census build, not these Iceberg tables."""
+    ingest(cat)
+    release_matches_lander(cat, {"lake.cellxgene.dataset": "raw.cellxgene__dataset"},
+                           cellxgene.RELEASE,
+                           stamped={"lake.cellxgene.dataset": f"'{CENSUS}' AS census_release"})
