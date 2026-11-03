@@ -97,6 +97,11 @@ BUNDLE = DatasetContract(
         declared_contract("raw.ncbi__gene2go", (
             "taxon_id", "gene_id", "go_id", "evidence", "qualifier", "category")),
         declared_contract("annotation.ncbi__gene_go"),
+        # The whole row is the lake's merge key. No reference from pubmed_id to
+        # pubmed__article.pmid: ~0.06% of the PMIDs (968 of 1,496,495 for taxon 9606
+        # on 2026-11-02) are not in it yet, and the gate allows no orphans.
+        declared_contract("raw.ncbi__gene2pubmed", ("taxon_id", "gene_id", "pubmed_id")),
+        declared_contract("annotation.ncbi__gene_pubmed"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -116,7 +121,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.identifier_mapping",
     "annotation.interaction",
     "annotation.ncbi__gene",
-    "annotation.ncbi__gene_pubmed",
     "annotation.ortholog",
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
@@ -139,7 +143,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.metadata",
     "raw.ncbi__gene2accession",
     "raw.ncbi__gene2ensembl",
-    "raw.ncbi__gene2pubmed",
     "raw.ncbi__gene_group",
     "raw.ncbi__gene_history",
     "raw.ncbi__gene_info",

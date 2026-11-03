@@ -2,6 +2,7 @@
 
 import gzip
 
+import duckdb
 import pytest
 
 from bioconice import catalog, ncbi_pubmed
@@ -89,3 +90,32 @@ def test_landing_a_url_with_no_rows_fails_loudly(cat, tmp_path):
     empty.write_bytes(gzip.compress(b"#tax_id\tGeneID\tPubMed_ID\n"))
     with pytest.raises(SystemExit, match="yielded no rows"):
         ncbi_pubmed.land_raw(cat, REL, url=str(empty))
+
+
+def test_release_matches_lander(cat, g2p):
+    """The lake-backed RELEASE SELECTs give the lander's current rows and types (#183).
+
+    The lake tables are built as cdsci-lake lands them: pubmed_id named pmid, it and
+    gene_id BIGINT, a snapshot_version, and one row per whole-row key, so the fixture's
+    duplicated link is one row there; gene_publication is its model, columns reordered.
+    """
+    ncbi_pubmed.ingest(cat, REL, url=g2p)
+    con = duckdb.connect()
+    con.register("raw", cat.load_table("raw.ncbi__gene2pubmed").scan().to_arrow())
+    con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.ncbi_gene2pubmed")
+    con.execute("""CREATE TABLE lake.ncbi_gene2pubmed.gene2pubmed AS SELECT DISTINCT taxon_id,
+        gene_id::BIGINT AS gene_id, pubmed_id::BIGINT AS pmid, '2026-09-12' AS snapshot_version
+        FROM raw""")
+    con.execute("""CREATE TABLE lake.ncbi_gene2pubmed.gene_publication AS SELECT DISTINCT
+        gene_id, pmid, taxon_id FROM lake.ncbi_gene2pubmed.gene2pubmed""")
+    for name, sql in ncbi_pubmed.RELEASE.items():
+        con.register("lander", cat.load_table(name).scan(row_filter="valid_to IS NULL"
+                     if name.startswith("annotation") else "True").to_arrow())
+        con.execute("CREATE OR REPLACE TABLE want AS SELECT DISTINCT * EXCLUDE "
+                    f"({'valid_from, valid_to' if name.startswith('annotation') else 'landed_in'}) "
+                    "FROM lander")
+        con.execute(f"CREATE OR REPLACE TABLE got AS {sql}")
+        assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE want").fetchall(), name
+        for a, b in (("got", "want"), ("want", "got")):
+            assert con.sql(f"SELECT count(*) FROM (SELECT * FROM {a} EXCEPT ALL "
+                           f"SELECT * FROM {b})").fetchone()[0] == 0, (name, a)
