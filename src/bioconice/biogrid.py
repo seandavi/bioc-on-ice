@@ -181,6 +181,12 @@ def land_raw(cat, release, version=None, url=None):
     return version, n
 
 
+# Read from cdsci-lake (#183): lake.biogrid.interaction is raw.biogrid__interactions without
+# landed_in, one BioGRID release at a time. Releases carry no row-history columns (#222).
+# The annotation.interaction slice stays on Iceberg until IntAct's moves too (map, E3).
+RELEASE = {"raw.biogrid__interactions": "SELECT * FROM lake.biogrid.interaction"}
+
+
 def transform(cat, release, version):
     """Phase 2: BioGRID's rows of annotation.interaction, in its own identifier space."""
     con = duckdb.connect()

@@ -154,6 +154,7 @@ BUNDLE = DatasetContract(
                               "bedfile_id": "raw.bedbase__bed.id"}),
         declared_contract("resource.bedbase__bedfile", license=BEDBASE_LICENSE),
         declared_contract("resource.bedbase__bedset", license=BEDBASE_LICENSE),
+        declared_contract("raw.biogrid__interactions", ("biogrid_interaction_id",)),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -178,7 +179,6 @@ UNCONTRACTED_TABLES = frozenset({
     "ontology.relationship",
     "ontology.term",
     "provenance.release",
-    "raw.biogrid__interactions",
     "raw.ensembl__gtf",
     "raw.icite__metadata",
     "raw.intact__mitab",
