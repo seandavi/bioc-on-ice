@@ -111,6 +111,15 @@ BUNDLE = DatasetContract(
             "one row per distinct (gene_id, ensembl_gene_id, rna_accession, ensembl_rna_id, "
             "protein_accession, ensembl_protein_id); the RNA and protein columns may be NULL")),
         declared_contract("annotation.ncbi__gene"),
+        # The lake's merge key is every column but the gi numbers and symbol, and all of
+        # them except taxon_id and gene_id are NULL on some rows (mature_peptide_accession
+        # on every 9606 row), so no key, as gene2ensembl.
+        declared_contract("raw.ncbi__gene2accession", (), grain=(
+            "one row per distinct (taxon_id, gene_id, status, rna_nucleotide_accession_version, "
+            "protein_accession_version, genomic_nucleotide_accession_version, "
+            "start_position_on_the_genomic_accession, end_position_on_the_genomic_accession, "
+            "orientation, assembly, mature_peptide_accession_version); all but taxon_id and "
+            "gene_id may be NULL")),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -149,7 +158,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.icite__metadata",
     "raw.intact__mitab",
     "raw.metadata",
-    "raw.ncbi__gene2accession",
     "raw.ncbi__gene_group",
     "raw.ncbi__gene_orthologs",
     "raw.obo__cl",

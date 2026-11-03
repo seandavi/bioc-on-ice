@@ -1006,7 +1006,8 @@ TABLES = {
                 "landed uninterpreted. Regenerated nightly upstream, so the retrieval "
                 "date is the version.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
-                    "bioc.column.gene_id.prefix": "ncbigene"},
+                    "bioc.column.gene_id.prefix": "ncbigene",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     ),
     "raw.ncbi__gene2go": TableDef(
         schema=Schema(

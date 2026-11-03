@@ -137,6 +137,32 @@ def test_rerun_is_a_noop_not_a_churn(cat, g2a):
     assert counts["annotation.identifier_mapping"]["unchanged"] == 3
 
 
+def test_release_reads_the_lake_table_back_as_published(cat, g2a):
+    """The lake-backed RELEASE SELECT gives the lander's rows and types (#183 C5).
+
+    The lake table is landed with cdsci-lake's own landing SELECT: eight short names,
+    BIGINT ids/gi/positions, a snapshot_version, and the minus strand NULL.
+    """
+    import importlib
+
+    import duckdb
+    from cdsci.lake.sources.ncbi_gene2accession import COLUMNS
+    lake_ingest = importlib.import_module("cdsci.lake.sources.ncbi_gene.ingest")
+
+    ncbi_accession.land_raw(cat, REL, url=g2a)
+    con = duckdb.connect()
+    con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.ncbi_gene2accession")
+    con.execute("CREATE TABLE lake.ncbi_gene2accession.gene2accession AS "
+                + lake_ingest._select_sql(Path(g2a), "2026-09-12", COLUMNS, None, None))
+    con.register("lander", cat.load_table("raw.ncbi__gene2accession").scan().to_arrow())
+    con.execute("CREATE TABLE want AS SELECT * EXCLUDE (landed_in) FROM lander")
+    con.execute(f"CREATE TABLE got AS {ncbi_accession.RELEASE['raw.ncbi__gene2accession']}")
+    assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE want").fetchall()
+    for a, b in (("got", "want"), ("want", "got")):
+        assert con.sql(f"SELECT count(*) FROM (SELECT * FROM {a} EXCEPT ALL "
+                       f"SELECT * FROM {b})").fetchone()[0] == 0, a
+
+
 NCBI_URLS = {name: str(Path(__file__).parent / f"tiny_{name}.tsv")
              for name in ("gene2ensembl", "gene_info", "gene_history")}
 
