@@ -106,6 +106,7 @@ BUNDLE = DatasetContract(
         # column, NULLs included (no RefSeq RNA or protein on a row), and the gate allows no
         # NULL in a key, so it gets no key, as raw.gwas_catalog__associations.
         declared_contract("raw.ncbi__gene_info", ("gene_id",)),
+        declared_contract("raw.ncbi__gene_history", ("discontinued_gene_id",)),
         declared_contract("raw.ncbi__gene2ensembl", (), grain=(
             "one row per distinct (gene_id, ensembl_gene_id, rna_accession, ensembl_rna_id, "
             "protein_accession, ensembl_protein_id); the RNA and protein columns may be NULL")),
@@ -150,7 +151,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.metadata",
     "raw.ncbi__gene2accession",
     "raw.ncbi__gene_group",
-    "raw.ncbi__gene_history",
     "raw.ncbi__gene_orthologs",
     "raw.obo__cl",
     "raw.obo__doid",
