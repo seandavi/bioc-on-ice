@@ -7,6 +7,7 @@ untested. Run with `uv run pytest`.
 
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from bioconice import catalog, ncbi_go
@@ -131,3 +132,32 @@ def test_landing_no_rows_fails_loudly(cat, tmp_path):
     empty.write_text("#tax_id\tGeneID\tGO_ID\tEvidence\tQualifier\tGO_term\tPubMed\tCategory\n")
     with pytest.raises(SystemExit, match="yielded no rows"):
         ncbi_go.land_raw(cat, REL, url=str(empty))
+
+
+def test_release_matches_lander(cat):
+    """The lake-backed RELEASE SELECTs give the lander's current rows and types (#183).
+
+    The lake tables are built as cdsci-lake lands them: gene_id BIGINT and a
+    snapshot_version on gene2go, and gene_go its transform model with the GO
+    columns, which here resolve to nothing. Its key columns keep NCBI's '-' as NULL.
+    """
+    load(cat, taxa=(None,))
+    con = duckdb.connect()
+    con.register("raw", cat.load_table("raw.ncbi__gene2go").scan().to_arrow())
+    con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.ncbi_gene2go")
+    con.execute("""CREATE TABLE lake.ncbi_gene2go.gene2go AS SELECT * EXCLUDE (landed_in)
+        REPLACE (gene_id::BIGINT AS gene_id), '2026-09-12' AS snapshot_version FROM raw""")
+    con.execute("""CREATE TABLE lake.ncbi_gene2go.gene_go AS SELECT DISTINCT gene_id, taxon_id,
+        go_id, evidence, qualifier, go_term, category, NULL::VARCHAR AS go_label,
+        NULL::BOOLEAN AS go_obsolete FROM lake.ncbi_gene2go.gene2go""")
+    for name, sql in ncbi_go.RELEASE.items():
+        con.register("lander", cat.load_table(name).scan(row_filter="valid_to IS NULL"
+                     if name.startswith("annotation") else "True").to_arrow())
+        con.execute("CREATE OR REPLACE TABLE want AS SELECT * EXCLUDE "
+                    f"({'valid_from, valid_to' if name.startswith('annotation') else 'landed_in'}) "
+                    "FROM lander")
+        con.execute(f"CREATE OR REPLACE TABLE got AS {sql}")
+        assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE want").fetchall(), name
+        for a, b in (("got", "want"), ("want", "got")):
+            assert con.sql(f"SELECT count(*) FROM (SELECT * FROM {a} EXCEPT ALL "
+                           f"SELECT * FROM {b})").fetchone()[0] == 0, (name, a)

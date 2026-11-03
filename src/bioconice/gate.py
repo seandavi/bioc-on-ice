@@ -93,6 +93,10 @@ BUNDLE = DatasetContract(
             "accession": "annotation.cellosaurus__cell_line.accession"}),
         declared_contract("annotation.cellosaurus__disease", references={
             "accession": "annotation.cellosaurus__cell_line.accession"}),
+        # The lake's merge key; pubmed is the one updatable attribute (cdsci-lake ncbi_gene2go).
+        declared_contract("raw.ncbi__gene2go", (
+            "taxon_id", "gene_id", "go_id", "evidence", "qualifier", "category")),
+        declared_contract("annotation.ncbi__gene_go"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -112,7 +116,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.identifier_mapping",
     "annotation.interaction",
     "annotation.ncbi__gene",
-    "annotation.ncbi__gene_go",
     "annotation.ncbi__gene_pubmed",
     "annotation.ortholog",
     "annotation.pubtator3__mention",
@@ -136,7 +139,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.metadata",
     "raw.ncbi__gene2accession",
     "raw.ncbi__gene2ensembl",
-    "raw.ncbi__gene2go",
     "raw.ncbi__gene2pubmed",
     "raw.ncbi__gene_group",
     "raw.ncbi__gene_history",

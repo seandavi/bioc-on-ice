@@ -1034,7 +1034,8 @@ TABLES = {
                 "nightly upstream, so the retrieval date is the version.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
-                    "bioc.column.pubmed.prefix": "pubmed"},
+                    "bioc.column.pubmed.prefix": "pubmed",
+                    "bioc.license": "public-domain"},
     ),
     "annotation.ncbi__gene_go": TableDef(
         schema=Schema(
@@ -1074,7 +1075,8 @@ TABLES = {
                 "snapshot, which is its own source.",
         properties={"bioc.column.gene_id.prefix": "ncbigene",
                     "bioc.column.taxon_id.prefix": "ncbitaxon",
-                    "bioc.column.go_id.prefix": "go"},
+                    "bioc.column.go_id.prefix": "go",
+                    "bioc.license": "public-domain"},
     ),
     "raw.icite__metadata": TableDef(
         schema=Schema(
