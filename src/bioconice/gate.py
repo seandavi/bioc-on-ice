@@ -130,6 +130,8 @@ BUNDLE = DatasetContract(
         declared_contract("raw.eqtlcatalogue__tabix_ftp_paths", ("dataset_id",), references={
             "dataset_id": "raw.eqtlcatalogue__dataset.dataset_id"}),
         declared_contract("resource.eqtlcatalogue__dataset"),
+        declared_contract("raw.cellxgene__dataset", ("dataset_version_id",)),
+        declared_contract("resource.cellxgene__dataset"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -158,7 +160,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.bedbase__bedset",
     "raw.bedbase__bedset_membership",
     "raw.biogrid__interactions",
-    "raw.cellxgene__dataset",
     "raw.encode__experiment",
     "raw.encode__file",
     "raw.ensembl__gtf",
@@ -182,7 +183,6 @@ UNCONTRACTED_TABLES = frozenset({
     "reference.genome",
     "resource.bedbase__bedfile",
     "resource.bedbase__bedset",
-    "resource.cellxgene__dataset",
     "resource.encode__experiment",
     "resource.encode__file",
     "resource.resource_relationship",

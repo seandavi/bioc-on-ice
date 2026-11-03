@@ -202,24 +202,14 @@ def _check(con):
                           "; ".join(f"{k} ({v:,} rows)" for k, v in failed.items()))
 
 
-def transform(cat, release, retrieval_date, census_release):
-    """Phase 2: one resource row per dataset version, Type 2 by dataset_version_id.
+def _dataset(src, census_release):
+    """resource.cellxgene__dataset's columns, from a table shaped like raw.cellxgene__dataset.
 
-    Organism -> taxon_id and spatial_platform are resolved with a SQL `error()`
-    in the same expression that computes them (`_flag`'s pattern in icite.py):
-    a dataset with an unmapped organism or, if spatial, an unmapped assay term
-    fails the moment the row is built, before `_check` even runs and long
-    before `merge.merge` writes anything.
+    `census_release` is SQL: a quoted literal for the lander, a column for the lake table.
     """
-    con = duckdb.connect()
-    con.register("raw", cat.load_table("raw.cellxgene__dataset").scan(
-        row_filter=EqualTo("retrieval_date", retrieval_date)).to_arrow())
-
     platform_cases = " ".join(
         f"WHEN assay_term_id_1 = '{term}' THEN '{name}'" for term, name in SPATIAL_PLATFORMS.items())
-
-    con.execute(f"""
-        CREATE TABLE ds AS
+    return f"""
         WITH x AS (
             SELECT
                 dataset_id, dataset_version_id, collection_id, collection_name, collection_doi,
@@ -233,10 +223,11 @@ def transform(cat, release, retrieval_date, census_release):
                 {_ids('cell_type')} AS cell_type_term_ids,
                 cell_count, primary_cell_count, mean_genes_per_cell, schema_version,
                 (list_filter(from_json(assets, '{_ASSET}'), a -> a.filetype = 'H5AD'))[1].url AS h5ad_uri,
+                {census_release} AS census_release,
                 published_at, revised_at, tombstone,
                 spatial IS NOT NULL AS is_spatial,
                 (from_json(assay, '{_LABEL_ID}'))[1].ontology_term_id AS assay_term_id_1
-            FROM raw
+            FROM {src}
         )
         SELECT
             dataset_id, dataset_version_id, collection_id, collection_name, collection_doi, title,
@@ -251,7 +242,7 @@ def transform(cat, release, retrieval_date, census_release):
             cell_count, primary_cell_count, mean_genes_per_cell, schema_version,
             '{LICENSE}' AS license,
             h5ad_uri,
-            '{census_release}' AS census_release,
+            census_release,
             published_at, revised_at, tombstone,
             is_spatial,
             CASE WHEN NOT is_spatial THEN NULL
@@ -264,7 +255,31 @@ def transform(cat, release, retrieval_date, census_release):
             -- only); NULL throughout until one does, per issue #84's spatial comment.
             NULL::VARCHAR AS spatialdata_uri
         FROM x
-    """)
+    """
+
+
+# Read from cdsci-lake (#183): lake.cellxgene.dataset is raw.cellxgene__dataset without
+# landed_in, one crawl, plus census_release, the Census build stamped at ingest.
+# Releases carry no row-history columns (#222).
+RELEASE = {
+    "raw.cellxgene__dataset": "SELECT * EXCLUDE (census_release) FROM lake.cellxgene.dataset",
+    "resource.cellxgene__dataset": _dataset("lake.cellxgene.dataset", "census_release"),
+}
+
+
+def transform(cat, release, retrieval_date, census_release):
+    """Phase 2: one resource row per dataset version, Type 2 by dataset_version_id.
+
+    Organism -> taxon_id and spatial_platform are resolved with a SQL `error()`
+    in the same expression that computes them (`_flag`'s pattern in icite.py):
+    a dataset with an unmapped organism or, if spatial, an unmapped assay term
+    fails the moment the row is built, before `_check` even runs and long
+    before `merge.merge` writes anything.
+    """
+    con = duckdb.connect()
+    con.register("raw", cat.load_table("raw.cellxgene__dataset").scan(
+        row_filter=EqualTo("retrieval_date", retrieval_date)).to_arrow())
+    con.execute(f"CREATE TABLE ds AS {_dataset('raw', f"'{census_release}'")}")
     _check(con)
     ds = con.sql("SELECT * FROM ds").to_arrow_table()
 
