@@ -120,6 +120,11 @@ BUNDLE = DatasetContract(
             "start_position_on_the_genomic_accession, end_position_on_the_genomic_accession, "
             "orientation, assembly, mature_peptide_accession_version); all but taxon_id and "
             "gene_id may be NULL")),
+        # The lake's merge key: a pair can carry two relationships in gene_group
+        # ('Readthrough sibling' and 'Potential readthrough sibling'), so not the pair alone.
+        declared_contract("raw.ncbi__gene_orthologs", ("gene_id", "relationship", "other_gene_id")),
+        declared_contract("raw.ncbi__gene_group", ("gene_id", "relationship", "other_gene_id")),
+        declared_contract("annotation.ortholog"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -138,7 +143,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.icite__publication",
     "annotation.identifier_mapping",
     "annotation.interaction",
-    "annotation.ortholog",
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
     "annotation.transcript",
@@ -158,8 +162,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.icite__metadata",
     "raw.intact__mitab",
     "raw.metadata",
-    "raw.ncbi__gene_group",
-    "raw.ncbi__gene_orthologs",
     "raw.obo__cl",
     "raw.obo__doid",
     "raw.obo__efo",

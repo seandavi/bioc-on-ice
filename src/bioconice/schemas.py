@@ -231,7 +231,8 @@ def _ncbi_gene_pairs(comment, relationship):
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
                     "bioc.column.other_taxon_id.prefix": "ncbitaxon",
                     "bioc.column.gene_id.prefix": "ncbigene",
-                    "bioc.column.other_gene_id.prefix": "ncbigene"},
+                    "bioc.column.other_gene_id.prefix": "ncbigene",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     )
 
 
@@ -2234,7 +2235,8 @@ TABLES = {
                 "and is not materialised. The whole tuple is the key: a pair has no attributes, "
                 "so it is only ever asserted or withdrawn.",
         properties={"bioc.column.taxon_id.prefix": "ncbitaxon",
-                    "bioc.column.ortholog_taxon_id.prefix": "ncbitaxon"},
+                    "bioc.column.ortholog_taxon_id.prefix": "ncbitaxon",
+                    "bioc.license": "LicenseRef-NCBI-Molecular-Data-Usage"},
     ),
     "raw.ncbi__mane_summary": TableDef(
         schema=Schema(
