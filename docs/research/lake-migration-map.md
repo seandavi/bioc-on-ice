@@ -29,8 +29,9 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 1. **A**: merge step 7; repoint `raw.metadata` to `lake.icite.metadata`
    (same columns and types). `pubmed__article` follows cdsci-lake#136.
 2. **B**: WikiPathways, GWAS Catalog, `raw.bugsigdb__full_dump`, MANE,
-   Cellosaurus. All are small and need no other source. MANE and Cellosaurus
-   also write `identifier_mapping`; those branches stay on Iceberg until G.
+   Cellosaurus. All are small and need no other source. MANE also writes
+   `identifier_mapping`; that branch stays on Iceberg until G. Cellosaurus
+   writes none (its cross-references are `cellosaurus__xref`).
 3. **C**: NCBI Gene on the lake modules that already exist (`ncbi_gene2go`,
    `ncbi_gene2pubmed`, `ncbi_gene`, `ncbi_gene2accession`), plus
    `gene_history`, `gene_orthologs` and `gene_group` dumps added to
@@ -105,10 +106,10 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 | B3 | `raw.bugsigdb__full_dump` | 7,425 | BugSigDB | lake (this PR; was `bioc.*`) | `bugsigdb.signatures` (src/cdsci/lake/sources/bugsigdb) | release SELECT (`bugsigdb.RELEASE`) casts pmid/year/sample sizes back to text and `curated_date` back with `strftime('%-d %B %Y')` (upstream does not zero-pad the day); no `landed_in` (#222). 0-row diff at v1.3.1, same columns/types | small adapter ✅ |
 | B4 | `annotation.mane__transcript` | 19,437 | MANE | lake (migrate/mane; was `bioc.*`) | `mane.transcript` (src/cdsci/lake/sources/mane, cdsci-lake PR) | release SELECT over the new lake table (`mane.RELEASE`); no row-history columns (#222) | new source module |
 | B4 | `raw.ncbi__mane_summary` | 19,437 | MANE | lake (migrate/mane; was `bioc.*`) | `mane.transcript` (src/cdsci/lake/sources/mane, cdsci-lake PR) | no `landed_in` (#222); one version, not accumulated; MANE's `identifier_mapping` slice stays on Iceberg | new source module |
-| B5 | `annotation.cellosaurus__cell_line` | 168,970 | Cellosaurus | Iceberg `bioc.*` | — | release SELECT | new source module |
-| B5 | `annotation.cellosaurus__disease` | 124,953 | Cellosaurus | Iceberg `bioc.*` | — | release SELECT | new source module |
-| B5 | `annotation.cellosaurus__xref` | 473,381 | Cellosaurus | Iceberg `bioc.*` | — | release SELECT | new source module |
-| B5 | `raw.cellosaurus__release` | 3,188,709 | Cellosaurus | Iceberg `bioc.*` | — | no lake source; also an `identifier_mapping` slice | new source module |
+| B5 | `annotation.cellosaurus__cell_line` | 168,970 | Cellosaurus | lake (migrate/cellosaurus; was `bioc.*`) | `cellosaurus.line` (src/cdsci/lake/sources/cellosaurus, cdsci-lake PR) | release SELECT over the new lake table (`cellosaurus.RELEASE`); no row-history columns (#222) | new source module |
+| B5 | `annotation.cellosaurus__disease` | 124,953 | Cellosaurus | lake (migrate/cellosaurus; was `bioc.*`) | `cellosaurus.line` (src/cdsci/lake/sources/cellosaurus, cdsci-lake PR) | release SELECT over the new lake table (`cellosaurus.RELEASE`); no row-history columns (#222) | new source module |
+| B5 | `annotation.cellosaurus__xref` | 473,381 | Cellosaurus | lake (migrate/cellosaurus; was `bioc.*`) | `cellosaurus.line` (src/cdsci/lake/sources/cellosaurus, cdsci-lake PR) | release SELECT over the new lake table (`cellosaurus.RELEASE`); no row-history columns (#222) | new source module |
+| B5 | `raw.cellosaurus__release` | 3,188,709 | Cellosaurus | lake (migrate/cellosaurus; was `bioc.*`) | `cellosaurus.line` (src/cdsci/lake/sources/cellosaurus, cdsci-lake PR) | no `landed_in` (#222); one version, not accumulated | new source module |
 | C1 | `annotation.ncbi__gene_go` | 124,738,605 | NCBI gene2go | Iceberg `bioc.*` | `ncbi_gene2go.gene_go` (transform/models/ncbi_gene2go/gene_go.sql) | lake adds `go_label`, `go_obsolete`; `gene_id` BIGINT; 126.1M vs 124.7M; mixed `valid_from` ⚑mixed `valid_from` | small adapter |
 | C1 | `raw.ncbi__gene2go` | 124,738,605 | NCBI gene2go | Iceberg `bioc.*` | `ncbi_gene2go.gene2go` (src/cdsci/lake/sources/ncbi_gene2go) | lake `gene_id` BIGINT vs VARCHAR; adds `snapshot_version`, no `landed_in`; 126.1M vs 124.7M rows (newer dump) | small adapter |
 | C2 | `annotation.ncbi__gene_pubmed` | 82,882,628 | NCBI gene2pubmed | Iceberg `bioc.*` | `ncbi_gene2pubmed.gene_publication` (transform/models/ncbi_gene2pubmed/gene_publication.sql) | rename `pmid`→`pubmed_id`, casts; 84.2M vs 82.9M; mixed `valid_from` ⚑mixed `valid_from` | small adapter |
@@ -154,7 +155,7 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 | G1 | `annotation.transcript` | 14,092,671 | Ensembl | Iceberg `bioc.*` | `ensembl.transcript` (transform/models/ensembl/transcript.sql) | as above; 20.7M vs 14.1M ⚑mixed `valid_from` | hard |
 | G1 | `raw.ensembl__gtf` | 334,547,700 | Ensembl | Iceberg `bioc.*` | `ensembl.gtf` (src/cdsci/lake/sources/ensembl) | lake keys by assembly and adds `species`, `assembly`, `genome_accession`; `ncbitaxon_id` vs `taxon_id`; 466.4M rows (359 genomes) vs 334.5M (276): which assemblies to publish is a scope decision (memory ensembl-one-assembly-per-taxon) | hard |
 | G1 | `reference.genome` | 276 | Ensembl | Iceberg `bioc.*` | `ensembl.genome` (transform/models/ensembl/genome.sql) | grain (species, release) vs (genome_id, taxon, source); `assembly_name`/`source` same; mixed `valid_from` ⚑mixed `valid_from` | hard |
-| G2 | `annotation.identifier_mapping` | 464,335,857 | identifier mapping (cross-source) | Iceberg `bioc.*` | `ncbi_gene.mapping`, `ncbi_gene2accession.mapping`, `uniprot.identifier_mapping` (transform/models/…) | union of 9 writers (NCBI, NCBI accession, Ensembl, HGNC, MANE, Cellosaurus, BioGRID, IntAct, RNAcentral); 464M rows; ENA rows drop under ADR-0015 c; mixed `valid_from`. Migrate as a release-SELECT union, one branch per migrated writer ⚑mixed `valid_from` | hard |
+| G2 | `annotation.identifier_mapping` | 464,335,857 | identifier mapping (cross-source) | Iceberg `bioc.*` | `ncbi_gene.mapping`, `ncbi_gene2accession.mapping`, `uniprot.identifier_mapping` (transform/models/…) | union of 8 writers (NCBI, NCBI accession, Ensembl, HGNC, MANE, BioGRID, IntAct, RNAcentral); 464M rows; ENA rows drop under ADR-0015 c; mixed `valid_from`. Migrate as a release-SELECT union, one branch per migrated writer ⚑mixed `valid_from` | hard |
 | H1 | `annotation.icite__citation` | 928,458,585 | iCite | Iceberg `bioc.*` | — | 928M citation edges from `cited_by`/`references`; not in the lake | hard |
 | H1 | `annotation.icite__metrics` | 41,035,229 | iCite | Iceberg `bioc.*` | — (subset of `icite.metadata`) | needs `molecular_cellular`, `provisional`, `snapshot` | hard |
 | H1 | `annotation.icite__publication` | 41,035,229 | iCite | Iceberg `bioc.*` | — (subset of `icite.metadata`) | needs `authors` | hard |

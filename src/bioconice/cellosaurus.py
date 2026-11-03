@@ -121,6 +121,55 @@ def land_raw(cat, release, url=None):
     return version, n
 
 
+# Multi-valued cells are sorted, so upstream reordering a list is not a new
+# version. SY and AS are one '; '-separated line each; OX and HI repeat.
+# 'Sex unspecified' and 'Age unspecified' are upstream's words and are kept:
+# they are not the same statement as a missing SX or AG line (NULL).
+_JOINED = "array_to_string(list_sort({}), '|')"
+
+
+def _cell_line(src):
+    """annotation.cellosaurus__cell_line's columns, from a table shaped like raw.cellosaurus__release."""
+    return f"""
+        SELECT accession,
+               max(value) FILTER (code = 'ID') AS name,
+               {_JOINED.format("str_split(max(value) FILTER (code = 'SY'), '; ')")} AS synonyms,
+               {_JOINED.format("str_split(max(value) FILTER (code = 'AS'), '; ')")} AS secondary_accessions,
+               -- the CASE keeps the cast off other codes' values; FILTER alone does not
+               list_sort(list(CASE WHEN code = 'OX' THEN regexp_extract(value, 'NCBI_TaxID=(\\d+)', 1)::INT END)
+                         FILTER (code = 'OX')) AS taxon_ids,
+               max(value) FILTER (code = 'SX') AS sex,
+               max(value) FILTER (code = 'AG') AS age,
+               max(value) FILTER (code = 'CA') AS category,
+               {_JOINED.format("list(split_part(value, ' ! ', 1)) FILTER (code = 'HI')")} AS parent_accessions
+        FROM {src} WHERE accession IS NOT NULL GROUP BY accession
+    """
+
+
+def _xref(src):
+    """annotation.cellosaurus__xref's columns, from a table shaped like raw.cellosaurus__release.
+
+    Identifiers are kept as published ('EFO_0001185', 'Q847482'): the databases
+    do not share a CURIE convention to normalise them to. The identifier is
+    everything after the first '; ', in case one ever contains the separator.
+    """
+    return f"""
+        SELECT DISTINCT accession, split_part(value, '; ', 1) AS database,
+               substr(value, strpos(value, '; ') + 2) AS identifier
+        FROM {src} WHERE code = 'DR'
+    """
+
+
+def _disease(src):
+    """annotation.cellosaurus__disease's columns, from a table shaped like raw.cellosaurus__release."""
+    return f"""
+        SELECT accession, d.database, d.disease_id, d.disease_name
+        FROM (SELECT accession, regexp_extract(value, '^([^;]+); ([^;]+); (.*)$',
+                                               ['database', 'disease_id', 'disease_name']) AS d
+              FROM {src} WHERE code = 'DI')
+    """
+
+
 def transform(cat, release, version):
     """Phase 2: the cell line, its cross-references and its diseases.
 
@@ -130,50 +179,23 @@ def transform(cat, release, version):
     con = duckdb.connect()
     con.register("raw", cat.load_table("raw.cellosaurus__release").scan(
         row_filter=EqualTo("cellosaurus_version", version)).to_arrow())
-
-    # Multi-valued cells are sorted, so upstream reordering a list is not a new
-    # version. SY and AS are one '; '-separated line each; OX and HI repeat.
-    # 'Sex unspecified' and 'Age unspecified' are upstream's words and are kept:
-    # they are not the same statement as a missing SX or AG line (NULL).
-    joined = "array_to_string(list_sort({}), '|')"
-    cell_line = con.sql(f"""
-        SELECT accession,
-               max(value) FILTER (code = 'ID') AS name,
-               {joined.format("str_split(max(value) FILTER (code = 'SY'), '; ')")} AS synonyms,
-               {joined.format("str_split(max(value) FILTER (code = 'AS'), '; ')")} AS secondary_accessions,
-               -- the CASE keeps the cast off other codes' values; FILTER alone does not
-               list_sort(list(CASE WHEN code = 'OX' THEN regexp_extract(value, 'NCBI_TaxID=(\\d+)', 1)::INT END)
-                         FILTER (code = 'OX')) AS taxon_ids,
-               max(value) FILTER (code = 'SX') AS sex,
-               max(value) FILTER (code = 'AG') AS age,
-               max(value) FILTER (code = 'CA') AS category,
-               {joined.format("list(split_part(value, ' ! ', 1)) FILTER (code = 'HI')")} AS parent_accessions
-        FROM raw WHERE accession IS NOT NULL GROUP BY accession
-    """).to_arrow_table()
-
-    # Identifiers are kept as published ('EFO_0001185', 'Q847482'): the databases
-    # do not share a CURIE convention to normalise them to. The identifier is
-    # everything after the first '; ', in case one ever contains the separator.
-    xref = con.sql("""
-        SELECT DISTINCT accession, split_part(value, '; ', 1) AS database,
-               substr(value, strpos(value, '; ') + 2) AS identifier
-        FROM raw WHERE code = 'DR'
-    """).to_arrow_table()
-
-    disease = con.sql("""
-        SELECT accession, d.database, d.disease_id, d.disease_name
-        FROM (SELECT accession, regexp_extract(value, '^([^;]+); ([^;]+); (.*)$',
-                                               ['database', 'disease_id', 'disease_name']) AS d
-              FROM raw WHERE code = 'DI')
-    """).to_arrow_table()
-
     # Cellosaurus is the only writer of all three, so each scope is the whole table.
     return {
-        name: merge.merge(cat, name, arrow, release, AlwaysTrue())
-        for name, arrow in (("annotation.cellosaurus__cell_line", cell_line),
-                            ("annotation.cellosaurus__xref", xref),
-                            ("annotation.cellosaurus__disease", disease))
+        name: merge.merge(cat, name, con.sql(sql("raw")).to_arrow_table(), release, AlwaysTrue())
+        for name, sql in (("annotation.cellosaurus__cell_line", _cell_line),
+                          ("annotation.cellosaurus__xref", _xref),
+                          ("annotation.cellosaurus__disease", _disease))
     }
+
+
+# Read from cdsci-lake (#183): lake.cellosaurus.line is raw.cellosaurus__release without
+# landed_in, one release at a time. Releases carry no row-history columns (#222).
+RELEASE = {
+    "raw.cellosaurus__release": "SELECT * FROM lake.cellosaurus.line",
+    "annotation.cellosaurus__cell_line": _cell_line("lake.cellosaurus.line"),
+    "annotation.cellosaurus__xref": _xref("lake.cellosaurus.line"),
+    "annotation.cellosaurus__disease": _disease("lake.cellosaurus.line"),
+}
 
 
 def ingest(cat, release, url=None):
