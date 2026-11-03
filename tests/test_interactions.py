@@ -133,6 +133,14 @@ def test_biogrid_rerun_is_a_noop_and_a_later_release_retires_and_adds(cat, tmp_p
     assert {r["biogrid_version"] for r in rows(cat, "raw.biogrid__interactions")} == {"5.0.262"}
 
 
+def test_biogrid_release_select_over_the_lake_reproduces_the_lander(cat, tmp_path,
+                                                                    release_matches_lander):
+    """#183: the release reads lake.biogrid.interaction, not raw.biogrid__interactions."""
+    biogrid.ingest(cat, REL, url=bg_zip(tmp_path, "5.0.261", BG_DATA))
+    release_matches_lander(cat, {"lake.biogrid.interaction": "raw.biogrid__interactions"},
+                           biogrid.RELEASE)
+
+
 # ---------------------------------------------------------------- IntAct
 
 def ia_line(**cells):

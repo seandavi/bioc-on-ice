@@ -157,6 +157,7 @@ BUNDLE = DatasetContract(
         # Each row is under its writer's licence: eQTL Catalogue and CELLxGENE are CC BY 4.0.
         declared_contract("resource.resource_relationship",
                           license=f"CC-BY-4.0 AND {ENCODE_LICENSE} AND {BEDBASE_LICENSE}"),
+        declared_contract("raw.biogrid__interactions", ("biogrid_interaction_id",)),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -181,7 +182,6 @@ UNCONTRACTED_TABLES = frozenset({
     "ontology.relationship",
     "ontology.term",
     "provenance.release",
-    "raw.biogrid__interactions",
     "raw.ensembl__gtf",
     "raw.icite__metadata",
     "raw.intact__mitab",
