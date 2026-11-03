@@ -102,6 +102,14 @@ BUNDLE = DatasetContract(
         # on 2026-11-02) are not in it yet, and the gate allows no orphans.
         declared_contract("raw.ncbi__gene2pubmed", ("taxon_id", "gene_id", "pubmed_id")),
         declared_contract("annotation.ncbi__gene_pubmed"),
+        # gene_id is the lake's merge key for gene_info. gene2ensembl's is every identifier
+        # column, NULLs included (no RefSeq RNA or protein on a row), and the gate allows no
+        # NULL in a key, so it gets no key, as raw.gwas_catalog__associations.
+        declared_contract("raw.ncbi__gene_info", ("gene_id",)),
+        declared_contract("raw.ncbi__gene2ensembl", (), grain=(
+            "one row per distinct (gene_id, ensembl_gene_id, rna_accession, ensembl_rna_id, "
+            "protein_accession, ensembl_protein_id); the RNA and protein columns may be NULL")),
+        declared_contract("annotation.ncbi__gene"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -120,7 +128,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.icite__publication",
     "annotation.identifier_mapping",
     "annotation.interaction",
-    "annotation.ncbi__gene",
     "annotation.ortholog",
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
@@ -142,10 +149,8 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.intact__mitab",
     "raw.metadata",
     "raw.ncbi__gene2accession",
-    "raw.ncbi__gene2ensembl",
     "raw.ncbi__gene_group",
     "raw.ncbi__gene_history",
-    "raw.ncbi__gene_info",
     "raw.ncbi__gene_orthologs",
     "raw.obo__cl",
     "raw.obo__doid",
