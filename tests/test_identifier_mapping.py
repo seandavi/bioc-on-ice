@@ -29,6 +29,9 @@ REL = "2026.08"
 NAME = "annotation.identifier_mapping"
 # A human ENA row: the published taxa had ENA ids until ADR-0015 c.
 ENA = [test_rnacentral.MIR, "ENA", "GU786683.1:1..200:rRNA", "9606", "pre_miRNA", ""]
+# A chimp miRBase row: not ENA, so only the taxon scope keeps it out (the fixture's other
+# out-of-scope rows are all ENA).
+CHIMP = [test_rnacentral.MIR, "MIRBASE", "MI0008196", "9598", "pre_miRNA", "ptr-mir-1827"]
 UNIPROT = [("ENTREZ", "7157", "UNIPROT", "P04637", 9606, "UniProt", None),
            ("ENTREZ", "22059", "UNIPROT", "P02340", 10090, "UniProt", None)]
 
@@ -64,7 +67,7 @@ def test_release_union_over_the_lake_reproduces_every_writer(cat, tmp_path):
     mane.ingest(cat, REL, test_mane.write(tmp_path / "MANE.GRCh38.v1.5.summary.txt",
                                           mane.COLUMNS, test_mane.DATA))
     rnacentral.ingest(cat, REL, list(rnacentral.RNA_TAXA), "27", test_rnacentral.gz(
-        tmp_path / "id_mapping.tsv.gz", [*test_rnacentral.DATA, ENA]))
+        tmp_path / "id_mapping.tsv.gz", [*test_rnacentral.DATA, ENA, CHIMP]))
 
     con = duckdb.connect()
     con.execute("ATTACH ':memory:' AS lake")
@@ -115,6 +118,7 @@ def test_release_union_over_the_lake_reproduces_every_writer(cat, tmp_path):
     dropped = con.sql("SELECT * FROM lander EXCEPT ALL SELECT * FROM got").fetchall()
     assert dropped == [("RNACENTRAL", f"{test_rnacentral.MIR}_9606", "ENA", ENA[2], 9606,
                         "RNACENTRAL", None)]
+    assert con.sql("SELECT count(*) FROM got WHERE taxon_id = 9598").fetchone()[0] == 0
     # the gate's key holds
     assert con.sql("SELECT count(*) - count(DISTINCT (source_namespace, source_id, "
                    "target_namespace, target_id, taxon_id, source)) FROM got").fetchone()[0] == 0

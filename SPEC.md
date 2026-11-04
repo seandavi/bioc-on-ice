@@ -431,8 +431,11 @@ valid_to
 ```
 
 Here the whole tuple `(source_namespace, source_id, target_namespace,
-target_id, taxon_id)` is the identifier — a mapping has no attributes that can
-change, so it is only ever asserted or withdrawn, never updated. That makes
+target_id, taxon_id, source)` is the identifier — a mapping has no attributes
+that can change, so it is only ever asserted or withdrawn, never updated.
+`source` is part of it because writers assert independently: when NCBI and
+HGNC both map the same pair, those are two assertions, and one writer
+withdrawing its own must not retire the other's. That makes
 `valid_to` the only signal that a cross-reference went away, and the reason
 retirement has to be modelled rather than left implicit.
 
