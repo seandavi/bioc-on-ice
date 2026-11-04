@@ -70,6 +70,22 @@ def _read(url):
             f"quote='', escape='', columns={COLUMNS})")
 
 
+def _mention(raw):
+    """annotation.pubtator3__mention's rows from one raw table (or its lake copy)."""
+    # DISTINCT because splitting can collide: '6900;1491938' beside a plain '6900'.
+    return f"""
+        SELECT DISTINCT pmid, type AS concept_type, concept_id, resource,
+               (pmid::BIGINT % {SHARDS})::INTEGER AS shard
+        FROM (SELECT pmid, type, resource,
+                     unnest(CASE WHEN type = 'Mutation' THEN [concept_id]
+                                 ELSE str_split(concept_id, ';') END) AS concept_id
+              FROM (SELECT pmid, type, concept_id,
+                           unnest(str_split(resource, '|')) AS resource FROM {raw}
+                    WHERE concept_id <> '-'))
+        WHERE concept_id <> '' AND resource <> ''
+    """
+
+
 def land_raw(cat, release, base=None):
     """Phase 1: the five dumps, verbatim and whole, each with its own manifest row."""
     counts = {}
@@ -108,18 +124,7 @@ def transform(cat, release):
         if bad:
             raise ValueError(f"pubtator3: {bad:,} rows of raw.pubtator3__{kind} have a Type "
                              f"other than '{expected}' or a non-numeric PMID")
-        # DISTINCT because splitting can collide: '6900;1491938' beside a plain '6900'.
-        con.execute(f"""
-            INSERT INTO m
-            SELECT DISTINCT pmid, type, concept_id, resource, (pmid::BIGINT % {SHARDS})::INTEGER
-            FROM (SELECT pmid, type, resource,
-                         unnest(CASE WHEN type = 'Mutation' THEN [concept_id]
-                                     ELSE str_split(concept_id, ';') END) AS concept_id
-                  FROM (SELECT pmid, type, concept_id,
-                               unnest(str_split(resource, '|')) AS resource FROM raw
-                        WHERE concept_id <> '-'))
-            WHERE concept_id <> '' AND resource <> ''
-        """)
+        con.execute(f"INSERT INTO m {_mention('raw')}")
         con.unregister("raw")
     out = {}
     for shard in range(SHARDS):
@@ -131,3 +136,14 @@ def transform(cat, release):
 
 def ingest(cat, release, base=None):
     return {**land_raw(cat, release, base), **transform(cat, release)}
+
+
+# Read from cdsci-lake (#183 wave H2): lake.pubtator3.<kind>_annotation is
+# raw.pubtator3__<kind> keyed by line_number and stamped pubtator3_version, neither
+# published. The mention table is _mention over all five, as transform() derives it.
+RELEASE = {
+    **{f"raw.pubtator3__{kind}": "SELECT * EXCLUDE (line_number, pubtator3_version) "
+                                 f"FROM lake.pubtator3.{kind}_annotation" for kind in KINDS},
+    "annotation.pubtator3__mention": " UNION ALL ".join(
+        _mention(f"lake.pubtator3.{kind}_annotation") for kind in KINDS),
+}
