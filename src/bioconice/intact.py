@@ -174,29 +174,15 @@ def _mi(col):
             f"""NULLIF(regexp_extract({col}, '^psi-mi:"MI:[0-9]+"\\("?(.*?)"?\\)(\\||$)', 1), '')""")
 
 
-# Read from cdsci-lake (#183): lake.intact.interaction is raw.intact__mitab without
-# landed_in, one IntAct release at a time, plus its key (file_name, line_number): the files'
-# whole-row duplicates leave no other. Releases carry no row-history columns (#222).
-# The annotation.interaction slice stays on Iceberg (map, E3).
-RELEASE = {"raw.intact__mitab":
-           "SELECT * EXCLUDE (file_name, line_number) FROM lake.intact.interaction"}
-
-
-def transform(cat, release, version):
-    """Phase 2: IntAct's rows of annotation.interaction, in its own identifier space."""
-    con = duckdb.connect()
-    con.register("raw", cat.load_table("raw.intact__mitab").scan(
-        row_filter=EqualTo("intact_version", version),
-        selected_fields=("id_a", "id_b", "taxid_a", "taxid_b", "detection_methods",
-                         "interaction_types", "expansion_methods", "publication_ids",
-                         "interaction_ids", "negative")).to_arrow())
+def _interaction(raw):
+    """annotation.interaction's IntAct rows, from a table shaped like raw.intact__mitab."""
     (a_ns, a_id), (b_ns, b_id) = _interactor("id_a"), _interactor("b")
     (method_id, method), (type_id, type_) = _mi("detection_methods"), _mi("interaction_types")
     # A/B order is kept as published; a missing B repeats A (module docstring),
     # taxon included — but only then: a small molecule's own taxid is empty. DISTINCT, because the columns dropped here
     # (features, roles, stoichiometry) are all that tell some rows apart. A row
     # with no intact: AC yields a NULL key and fails the cast, as it should.
-    interaction = con.sql(f"""
+    return f"""
         SELECT DISTINCT 'INTACT' AS source,
                NULLIF(regexp_extract(interaction_ids, 'intact:(EBI-[0-9]+)', 1), '') AS interaction_id,
                {a_ns} AS interactor_a_namespace, {a_id} AS interactor_a_id,
@@ -208,8 +194,28 @@ def transform(cat, release, version):
                NULLIF(regexp_extract(publication_ids, 'pubmed:([0-9]+)', 1), '') AS pubmed_id,
                NULLIF(lower(regexp_extract(publication_ids, 'doi:"?(?:doi:)?(10\\.[^|"]+)', 1)), '') AS doi
         FROM (SELECT *, coalesce(id_b, id_a) AS b,
-                     CASE WHEN id_b IS NULL THEN taxid_a ELSE taxid_b END AS b_taxid FROM raw)
-    """).to_arrow_table()
+                     CASE WHEN id_b IS NULL THEN taxid_a ELSE taxid_b END AS b_taxid FROM {raw})
+    """
+
+
+# Read from cdsci-lake (#183): lake.intact.interaction is raw.intact__mitab without
+# landed_in, one IntAct release at a time, plus its key (file_name, line_number): the files'
+# whole-row duplicates leave no other. Releases carry no row-history columns (#222).
+RELEASE = {"raw.intact__mitab":
+           "SELECT * EXCLUDE (file_name, line_number) FROM lake.intact.interaction"}
+# This source's branch of the annotation.interaction union (publish.py).
+INTERACTION = _interaction("lake.intact.interaction")
+
+
+def transform(cat, release, version):
+    """Phase 2: IntAct's rows of annotation.interaction, in its own identifier space."""
+    con = duckdb.connect()
+    con.register("raw", cat.load_table("raw.intact__mitab").scan(
+        row_filter=EqualTo("intact_version", version),
+        selected_fields=("id_a", "id_b", "taxid_a", "taxid_b", "detection_methods",
+                         "interaction_types", "expansion_methods", "publication_ids",
+                         "interaction_ids", "negative")).to_arrow())
+    interaction = con.sql(_interaction("raw")).to_arrow_table()
     # The scope names THIS writer: BioGRID stacks into the same table.
     return {"annotation.interaction": merge.merge(
         cat, "annotation.interaction", interaction, release, EqualTo("source", "INTACT"))}

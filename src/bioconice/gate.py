@@ -163,6 +163,9 @@ BUNDLE = DatasetContract(
         declared_contract("raw.intact__mitab", (), grain=(
             "one row per data line of intact.txt and intact_negative.txt; whole-row "
             "duplicates kept (2,144 rows in 1,052 groups at 2026-01-09)")),
+        # Its business key holds on the lake union: 4,778,696 rows at BioGRID 5.0.263 and
+        # IntAct 2026-10-17 (2026-11-03), none NULL, none repeated.
+        declared_contract("annotation.interaction"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -180,7 +183,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.icite__metrics",
     "annotation.icite__publication",
     "annotation.identifier_mapping",
-    "annotation.interaction",
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
     "annotation.transcript",
