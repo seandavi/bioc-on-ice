@@ -138,9 +138,14 @@ def test_release_selects_over_the_lake_hold_the_landers_values(cat, tmp_path):
              "TIMESTAMP": "timestamp[us]"}
     con = lake_connect(settings)
     for name, sql in icite.RELEASE.items():
-        con.register("lander", cat.load_table(name).scan().to_arrow())
-        current = " WHERE valid_to IS NULL" if "valid_to" in con.sql("DESCRIBE lander").columns \
-            else ""
+        con.register("landed", cat.load_table(name).scan().to_arrow())
+        con.execute("CREATE OR REPLACE TEMP TABLE lander AS SELECT * FROM landed")
+        current = ""
+        if "valid_to" in con.table("lander").columns:
+            current = " WHERE valid_to IS NULL"
+            # a retired version of a current row: the release must not carry it
+            con.execute("INSERT INTO lander SELECT * REPLACE ('2026.08' AS valid_to) "
+                        "FROM landed LIMIT 1")
         con.execute("CREATE OR REPLACE TEMP TABLE want AS "
                     + icite.AS_PUBLISHED[name].format(f"(SELECT * FROM lander{current})"))
         con.execute(f"CREATE OR REPLACE TEMP TABLE got AS {sql}")

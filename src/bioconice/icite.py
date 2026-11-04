@@ -264,8 +264,13 @@ PUBLISHED = {
             ("last_modified", "timestamp[us]", "Upstream last-modified time of the record, "
                                                "UTC."))),
     "annotation.icite__publication": (None, (
-        ("pmid", "int64", None), ("doi", "string", None), ("title", "string", None),
-        ("authors", "string", None), ("journal", "string", None), ("year", "int32", None),
+        ("pmid", "int64", None),
+        ("doi", "string", "DOI, normalised: lower-case, no resolver prefix, always "
+                          "'10.<registrant>/<suffix>'. NULL when iCite has none or its value is "
+                          "not a DOI (6,414 rows in the 2026-08 snapshot); iCite's value, "
+                          "lower-cased, is in raw.icite__metadata.doi. Not unique: 16,521 DOIs "
+                          "map to more than one PMID."),
+        ("title", "string", None), ("authors", "string", None), ("journal", "string", None), ("year", "int32", None),
         ("is_research_article", "bool", None), ("is_clinical", "bool", None))),
     "annotation.icite__metrics": (
         "iCite's citation metrics for one paper as of the latest monthly snapshot, keyed by "

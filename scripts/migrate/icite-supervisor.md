@@ -145,7 +145,7 @@ tail -1 "$T/gate.txt"                         # want: PASS
 ```
 
 The release that ships this runs the full gate with the same four tables:
-`bioconice gate <bundle> --allow-column-change raw.icite__metadata annotation.icite__publication annotation.icite__metrics annotation.icite__citation`.
+`bioconice gate --release <dir> --allow-column-change raw.icite__metadata annotation.icite__publication annotation.icite__metrics annotation.icite__citation`.
 
 ## 5. Clean up
 
