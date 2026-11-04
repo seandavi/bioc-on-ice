@@ -169,12 +169,12 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 | H1 | `annotation.icite__metrics` | 41,035,229 | iCite | Iceberg `bioc.*` | — (subset of `icite.metadata`) | needs `molecular_cellular`, `provisional`, `snapshot` | hard |
 | H1 | `annotation.icite__publication` | 41,035,229 | iCite | Iceberg `bioc.*` | — (subset of `icite.metadata`) | needs `authors` | hard |
 | H1 | `raw.icite__metadata` | 41,035,229 | iCite | Iceberg `bioc.*` | `icite.metadata` (src/cdsci/lake/sources/icite) is a typed subset | release raw has 27 VARCHAR columns incl. `authors`, `cited_by`, `references`, `x_coord`; lake has 17 typed ones | hard |
-| H2 | `annotation.pubtator3__mention` | 478,216,071 | PubTator3 | Iceberg `bioc.*` | — | 478M rows, sharded | hard |
-| H2 | `raw.pubtator3__chemical` | 146,957,635 | PubTator3 | Iceberg `bioc.*` | — | no lake source; bulk BioCXML/TSV | hard |
-| H2 | `raw.pubtator3__disease` | 168,305,967 | PubTator3 | Iceberg `bioc.*` | — | no lake source; bulk BioCXML/TSV | hard |
-| H2 | `raw.pubtator3__gene` | 74,519,899 | PubTator3 | Iceberg `bioc.*` | — | no lake source; bulk BioCXML/TSV | hard |
-| H2 | `raw.pubtator3__mutation` | 8,135,311 | PubTator3 | Iceberg `bioc.*` | — | no lake source; bulk BioCXML/TSV | hard |
-| H2 | `raw.pubtator3__species` | 48,958,091 | PubTator3 | Iceberg `bioc.*` | — | no lake source; bulk BioCXML/TSV | hard |
+| H2 | `annotation.pubtator3__mention` | 478,216,071 | PubTator3 | lake (migrate/pubtator3; was `bioc.*`) | `pubtator3.*_annotation` (src/cdsci/lake/sources/pubtator3, cdsci-lake PR) | release SELECT over the five lake tables (`pubtator3.RELEASE`, the lander's `_mention`); no row-history columns (#222) | hard |
+| H2 | `raw.pubtator3__chemical` | 146,957,635 | PubTator3 | lake (migrate/pubtator3; was `bioc.*`) | `pubtator3.chemical_annotation` (src/cdsci/lake/sources/pubtator3, cdsci-lake PR) | no `landed_in` (#222); the lake's key `line_number` is not published; one version, not accumulated | hard |
+| H2 | `raw.pubtator3__disease` | 168,305,967 | PubTator3 | lake (migrate/pubtator3; was `bioc.*`) | `pubtator3.disease_annotation` (src/cdsci/lake/sources/pubtator3, cdsci-lake PR) | no `landed_in` (#222); the lake's key `line_number` is not published; one version, not accumulated | hard |
+| H2 | `raw.pubtator3__gene` | 74,519,899 | PubTator3 | lake (migrate/pubtator3; was `bioc.*`) | `pubtator3.gene_annotation` (src/cdsci/lake/sources/pubtator3, cdsci-lake PR) | no `landed_in` (#222); the lake's key `line_number` is not published; one version, not accumulated | hard |
+| H2 | `raw.pubtator3__mutation` | 8,135,311 | PubTator3 | lake (migrate/pubtator3; was `bioc.*`) | `pubtator3.mutation_annotation` (src/cdsci/lake/sources/pubtator3, cdsci-lake PR) | no `landed_in` (#222); the lake's key `line_number` is not published; one version, not accumulated | hard |
+| H2 | `raw.pubtator3__species` | 48,958,091 | PubTator3 | lake (migrate/pubtator3; was `bioc.*`) | `pubtator3.species_annotation` (src/cdsci/lake/sources/pubtator3, cdsci-lake PR) | no `landed_in` (#222); the lake's key `line_number` is not published; one version, not accumulated | hard |
 | H3 | `annotation.rnacentral__rna` | 2,753,423 | RNAcentral | Iceberg `bioc.*` | — | release SELECT; `identifier_mapping` slice | hard |
 | H3 | `raw.rnacentral__id_mapping` | 264,333,345 | RNAcentral | Iceberg `bioc.*` | — | 264M rows; ENA stays raw (ADR-0015 c) | hard |
 | Z | `provenance.release` | 44 | provenance (product) | Iceberg `bioc.*` | `lake_ops.run` + snapshot ids | replaced at step 10 by pinned lake snapshot ids in `manifest.json` (ADR-0015); not a source | hard (step 10 design) |
