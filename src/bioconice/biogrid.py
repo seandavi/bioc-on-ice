@@ -181,24 +181,11 @@ def land_raw(cat, release, version=None, url=None):
     return version, n
 
 
-# Read from cdsci-lake (#183): lake.biogrid.interaction is raw.biogrid__interactions without
-# landed_in, one BioGRID release at a time. Releases carry no row-history columns (#222).
-# The annotation.interaction slice stays on Iceberg until IntAct's moves too (map, E3).
-RELEASE = {"raw.biogrid__interactions": "SELECT * FROM lake.biogrid.interaction"}
-
-
-def transform(cat, release, version):
-    """Phase 2: BioGRID's rows of annotation.interaction, in its own identifier space."""
-    con = duckdb.connect()
-    con.register("raw", cat.load_table("raw.biogrid__interactions").scan(
-        row_filter=EqualTo("biogrid_version", version),
-        selected_fields=("biogrid_interaction_id", "entrez_gene_a", "entrez_gene_b",
-                         "biogrid_id_a", "biogrid_id_b", "organism_id_a", "organism_id_b",
-                         "experimental_system", "experimental_system_type",
-                         "publication_source")).to_arrow())
+def _interaction(raw):
+    """annotation.interaction's BioGRID rows, from a table shaped like raw.biogrid__interactions."""
     # A/B order is kept as published: for the bait-prey systems A is the bait.
     # Publication Source is 'PUBMED:<id>' or, for 21,583 preprint rows, 'DOI:<doi>'.
-    interaction = con.sql("""
+    return f"""
         SELECT 'BIOGRID' AS source, biogrid_interaction_id AS interaction_id,
                CASE WHEN entrez_gene_a IS NULL THEN 'BIOGRID' ELSE 'ENTREZ' END AS interactor_a_namespace,
                coalesce(entrez_gene_a, biogrid_id_a) AS interactor_a_id,
@@ -210,8 +197,27 @@ def transform(cat, release, version):
                NULL::VARCHAR AS expansion_method, false AS negative,
                CASE WHEN publication_source LIKE 'PUBMED:%' THEN substr(publication_source, 8) END AS pubmed_id,
                CASE WHEN publication_source LIKE 'DOI:%' THEN lower(substr(publication_source, 5)) END AS doi
-        FROM raw
-    """).to_arrow_table()
+        FROM {raw}
+    """
+
+
+# Read from cdsci-lake (#183): lake.biogrid.interaction is raw.biogrid__interactions without
+# landed_in, one BioGRID release at a time. Releases carry no row-history columns (#222).
+RELEASE = {"raw.biogrid__interactions": "SELECT * FROM lake.biogrid.interaction"}
+# This source's branch of the annotation.interaction union (publish.py).
+INTERACTION = _interaction("lake.biogrid.interaction")
+
+
+def transform(cat, release, version):
+    """Phase 2: BioGRID's rows of annotation.interaction, in its own identifier space."""
+    con = duckdb.connect()
+    con.register("raw", cat.load_table("raw.biogrid__interactions").scan(
+        row_filter=EqualTo("biogrid_version", version),
+        selected_fields=("biogrid_interaction_id", "entrez_gene_a", "entrez_gene_b",
+                         "biogrid_id_a", "biogrid_id_b", "organism_id_a", "organism_id_b",
+                         "experimental_system", "experimental_system_type",
+                         "publication_source")).to_arrow())
+    interaction = con.sql(_interaction("raw")).to_arrow_table()
     # The scope names THIS writer: IntAct stacks into the same table.
     return {"annotation.interaction": merge.merge(
         cat, "annotation.interaction", interaction, release, EqualTo("source", "BIOGRID"))}

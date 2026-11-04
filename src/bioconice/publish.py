@@ -59,7 +59,9 @@ FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE, **wikipathways.RELEASE,
              # Cross-source (ADR-0015 b): each writer's slice, from its own lake tables.
              "resource.resource_relationship": " UNION ALL ".join(
                  f"SELECT * FROM ({m.RELATIONSHIP})" for m in (eqtlcatalogue, cellxgene, encode,
-                                                             bedbase))}
+                                                             bedbase)),
+             "annotation.interaction": " UNION ALL ".join(
+                 f"SELECT * FROM ({m.INTERACTION})" for m in (biogrid, intact))}
 
 # Every table of the live catalog except annotation.identifier_mapping__pre_repair.
 TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))

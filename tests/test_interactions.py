@@ -10,7 +10,7 @@ import zipfile
 
 import pytest
 
-from bioconice import biogrid, catalog, intact
+from bioconice import biogrid, catalog, intact, publish
 
 REL = "2026.08"
 
@@ -285,6 +285,20 @@ def test_biogrid_and_intact_do_not_retire_each_other(cat, tmp_path):
     pairs = {(r["source"], r["interactor_a_id"], r["interactor_b_id"])
              for r in rows(cat, "annotation.interaction", row_filter="valid_to IS NULL")}
     assert {("BIOGRID", "7157", "4193"), ("INTACT", "P04637", "Q00987")} <= pairs
+
+
+def test_interaction_release_union_over_the_lake_reproduces_both_landers(cat, tmp_path,
+                                                                         release_matches_lander):
+    """#183 wave E: annotation.interaction is a UNION ALL of each writer's INTERACTION."""
+    biogrid.ingest(cat, REL, url=bg_zip(tmp_path, "5.0.261", BG_DATA))
+    intact.ingest(cat, REL, url=ia_zip(tmp_path, "2026-01-09", IA_DATA))
+    assert (len(live(cat, "BIOGRID")), len(live(cat, "INTACT"))) == (3, 5)
+    name = "annotation.interaction"
+    release_matches_lander(cat, {"lake.biogrid.interaction": "raw.biogrid__interactions",
+                                 "lake.intact.interaction": "raw.intact__mitab"},
+                           {name: publish.FROM_LAKE[name]},
+                           line_numbered={"lake.intact.interaction"},
+                           stamped={"lake.intact.interaction": "'intact.txt' AS file_name"})
 
 
 def test_every_column_is_documented_and_the_licences_travel(cat, tmp_path):
