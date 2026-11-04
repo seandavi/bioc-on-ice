@@ -164,7 +164,7 @@ NAMESPACES = {
 # is the same list plus each ontology's release URL; test_obo.py asserts the two stay in sync.
 _OBO_ONTOLOGIES = (
     ("cl", "CC-BY-4.0"), ("uberon", "CC-BY-3.0"), ("mondo", "CC-BY-4.0"),
-    ("efo", "Apache-2.0"), ("hsapdv", "CC-BY-4.0"), ("mmusdv", "CC-BY-4.0"), ("go", "CC-BY-4.0"),
+    ("efo", "Apache-2.0"), ("hsapdv", "CC-BY-3.0"), ("mmusdv", "CC-BY-3.0"), ("go", "CC-BY-4.0"),
     ("doid", "CC0-1.0"),
 )
 

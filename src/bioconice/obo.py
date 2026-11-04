@@ -52,8 +52,8 @@ REGISTRY = {
     "uberon":  ("https://purl.obolibrary.org/obo/uberon.json", "CC-BY-3.0"),
     "mondo":   ("https://purl.obolibrary.org/obo/mondo.json", "CC-BY-4.0"),
     "efo":     ("https://github.com/EBISPOT/efo/releases/latest/download/efo.json", "Apache-2.0"),
-    "hsapdv":  ("https://purl.obolibrary.org/obo/hsapdv.json", "CC-BY-4.0"),
-    "mmusdv":  ("https://purl.obolibrary.org/obo/mmusdv.json", "CC-BY-4.0"),
+    "hsapdv":  ("https://purl.obolibrary.org/obo/hsapdv.json", "CC-BY-3.0"),
+    "mmusdv":  ("https://purl.obolibrary.org/obo/mmusdv.json", "CC-BY-3.0"),
     "go":      ("https://purl.obolibrary.org/obo/go/go-basic.json", "CC-BY-4.0"),
     "doid":    ("https://purl.obolibrary.org/obo/doid.json", "CC0-1.0"),
 }
