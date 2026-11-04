@@ -207,6 +207,16 @@ def test_intact_raw_is_verbatim_and_whole(cat, tmp_path):
         intact.land_raw(cat, REL, url="https://ftp.ebi.ac.uk/pub/databases/intact/current/psimitab/intact.zip")
 
 
+def test_intact_release_select_over_the_lake_reproduces_the_lander(cat, tmp_path,
+                                                                   release_matches_lander):
+    """#183: the release reads lake.intact.interaction, not raw.intact__mitab; the whole-row
+    duplicate keeps both its rows."""
+    intact.ingest(cat, REL, url=ia_zip(tmp_path, "2026-01-09", IA_DATA + IA_DATA[:1]))
+    release_matches_lander(cat, {"lake.intact.interaction": "raw.intact__mitab"}, intact.RELEASE,
+                           line_numbered={"lake.intact.interaction"},
+                           stamped={"lake.intact.interaction": "'intact.txt' AS file_name"})
+
+
 def test_intact_derives_interactions_in_its_own_id_space(cat, tmp_path):
     intact.ingest(cat, REL, url=ia_zip(tmp_path, "2026-01-09", IA_DATA))
     got = {(r["interaction_id"], r["interactor_b_id"]): r for r in live(cat, "INTACT")}
