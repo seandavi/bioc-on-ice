@@ -42,11 +42,12 @@ def _arrow(t):
     return f"list<{_arrow(t.element_type)}>" if isinstance(t, ListType) else _ARROW[str(t)]
 
 
-def declared_contract(name, primary_key=None, references=None, license=None, grain=None):
+def declared_contract(name, primary_key=None, references=None, license=None, grain=None,
+                      unpublished=()):
     """A TableContract from the table's declaration in schemas.py: its comment, columns,
     docs and licence (`license` where it declares none), keyed by `primary_key` (default:
     its business key). `grain` is for a table with no key. Row-history columns are not
-    published (#222), so not in the contract."""
+    published (#222), so not in the contract, nor are the `unpublished` ones."""
     d = DECLARED[name]
     key = tuple(primary_key or d.business_key)
     return TableContract(
@@ -54,7 +55,8 @@ def declared_contract(name, primary_key=None, references=None, license=None, gra
         primary_key=key, temporal_model=TemporalModel.UPSERT_LATEST_SNAPSHOT,
         owner="bioc-on-ice", license=license or d.properties["bioc.license"],
         columns=tuple(ColumnContract(f.name, _arrow(f.field_type), f.doc or "", not f.required)
-                      for f in d.schema.fields if f.name not in ROW_HISTORY),
+                      for f in d.schema.fields
+                      if f.name not in ROW_HISTORY and f.name not in unpublished),
         references=references or {})
 
 
@@ -64,6 +66,10 @@ ENCODE_LICENSE = "LicenseRef-ENCODE-Data-Use-Policy"
 # docs/data-licenses.md). schemas.py declares no bioc.license for it.
 BEDBASE_LICENSE = "LicenseRef-DUO-0000042"
 OBO_LICENSE = " AND ".join(sorted({licence for _, licence in _OBO_ONTOLOGIES}))
+# Ensembl names no licence instrument, only "no restrictions on access to, or use of, the
+# data"; cdsci-lake registers it as ensembl-no-restrictions (sources/ensembl/ingest.py).
+# schemas.py declares no bioc.license for it.
+ENSEMBL_LICENSE = "LicenseRef-ensembl-no-restrictions"
 
 
 # The bundle's own tables that have a contract outside a dataset release of their own.
@@ -176,6 +182,20 @@ BUNDLE = DatasetContract(
         # Each row is under its ontology's licence.
         declared_contract("ontology.term", license=OBO_LICENSE),
         declared_contract("ontology.relationship", license=OBO_LICENSE),
+        # One assembly per taxon is published (ensembl.RELEASE), without genome_id on the
+        # feature tables, so their keys are the #94 business keys less genome_id.
+        declared_contract("raw.ensembl__gtf", (), license=ENSEMBL_LICENSE,
+                          unpublished=("genome_id",), grain=(
+                              "one row per feature line of the GTF of each taxon's published "
+                              "assembly")),
+        declared_contract("reference.genome", license=ENSEMBL_LICENSE,
+                          unpublished=("is_canonical",)),
+        declared_contract("annotation.gene", ("gene_id", "taxon_id", "source"),
+                          license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
+        declared_contract("annotation.transcript", ("transcript_id", "taxon_id", "source"),
+                          license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
+        declared_contract("annotation.exon", ("exon_id", "transcript_id", "taxon_id", "source"),
+                          license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -187,17 +207,13 @@ GATE_FILE = "gate.json"
 # Tables with no TableContract yet (#208). They get only the column and row-count checks:
 # no key or join checks. Writing a contract for one means deleting its line here.
 UNCONTRACTED_TABLES = frozenset({
-    "annotation.exon",
-    "annotation.gene",
     "annotation.icite__citation",
     "annotation.icite__metrics",
     "annotation.icite__publication",
     "annotation.identifier_mapping",
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
-    "annotation.transcript",
     "provenance.release",
-    "raw.ensembl__gtf",
     "raw.icite__metadata",
     "raw.metadata",
     "raw.pubtator3__chemical",
@@ -206,7 +222,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.pubtator3__mutation",
     "raw.pubtator3__species",
     "raw.rnacentral__id_mapping",
-    "reference.genome",
 })
 
 
