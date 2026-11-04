@@ -263,14 +263,17 @@ def ingest(cat, release, species, ensembl_release):
 # ensembl_canonical.txt, so the 276 of the lake's 359 Ensembl 116 assemblies the Iceberg
 # tables hold. Not _canonical, whose alphabetical fallback picks
 # cyprinus_carpio_germanmirror.
-# ponytail: the lake holds one Ensembl release; a second doubles every taxon's rows (the
-# gate's key check fails), so filter on ensembl_release when one lands.
-PUBLISHED_SPECIES = """SELECT species FROM lake.ensembl.genome
+# Only the newest Ensembl release in the lake is published: when a second one lands, its
+# rows sit beside the first's until pruned, and both would double every taxon. The release
+# number is text ('116'), so it is compared as an integer ('99' > '116' as text).
+PUBLISHED_SPECIES = """SELECT species, ensembl_release FROM lake.ensembl.genome
+    WHERE ensembl_release::INTEGER = (SELECT max(ensembl_release::INTEGER) FROM lake.ensembl.genome)
     QUALIFY row_number() OVER (PARTITION BY ncbitaxon_id ORDER BY length(species), species) = 1"""
 
 
 def _published(table, columns):
-    return f"SELECT {columns} FROM lake.ensembl.{table} WHERE species IN ({PUBLISHED_SPECIES})"
+    return (f"SELECT {columns} FROM lake.ensembl.{table} "
+            f"SEMI JOIN ({PUBLISHED_SPECIES}) USING (species, ensembl_release)")
 
 
 # Release SELECTs over cdsci-lake (#183 G1), in the published columns: the lake's

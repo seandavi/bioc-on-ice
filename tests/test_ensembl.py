@@ -606,3 +606,13 @@ def test_release_reads_the_lake_back_as_published_one_assembly_per_taxon(cat):
                            f"SELECT * FROM {b})").fetchone()[0] == 0, (name, a)
     assert con.sql(f"SELECT genome_id FROM ({ensembl.RELEASE['reference.genome']}) "
                    "ORDER BY 1").fetchall() == [("GCA_000000002.1",), ("turTru1",)]
+
+    # An older Ensembl release beside the current one is not published, and the release
+    # number compares as an integer: '99' sorts after '116' as text.
+    before = {n: con.sql(f"SELECT count(*) FROM ({q})").fetchone()[0]
+              for n, q in ensembl.RELEASE.items()}
+    for t in ("gtf", "genome", "gene", "transcript", "exon"):
+        con.execute(f"INSERT INTO lake.ensembl.{t} SELECT * REPLACE ('99' AS ensembl_release) "
+                    f"FROM lake.ensembl.{t}")
+    assert {n: con.sql(f"SELECT count(*) FROM ({q})").fetchone()[0]
+            for n, q in ensembl.RELEASE.items()} == before
