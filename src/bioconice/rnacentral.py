@@ -191,6 +191,20 @@ def transform(cat, release, taxon=None):
     return out
 
 
+# Read from cdsci-lake (#183): lake.rnacentral.id_mapping is raw.rnacentral__id_mapping
+# without landed_in, one release at a time, plus its key line_number. annotation.rnacentral__rna
+# is derived from it at release for the taxa the Iceberg derive ran for: v2026-11-03 holds
+# 9606 (2,004,721 rows) and 10090 (748,702) only. Releases carry no row-history columns
+# (#222). The annotation.identifier_mapping slice stays on Iceberg (map, G2).
+RNA_TAXA = (9606, 10090)
+RELEASE = {
+    "raw.rnacentral__id_mapping": "SELECT * EXCLUDE (line_number) FROM lake.rnacentral.id_mapping",
+    "annotation.rnacentral__rna": f"""
+        SELECT DISTINCT urs || '_' || taxon_id AS urs_taxid, taxon_id, rna_type
+        FROM lake.rnacentral.id_mapping WHERE taxon_id IN {RNA_TAXA}""",
+}
+
+
 def ingest(cat, release, taxa=None, number=None, url=None):
     number, n = land_raw(cat, release, number, url)
     return {f"{RAW} [release {number}]": n, **_derive(transform, cat, release, taxa)}

@@ -196,6 +196,12 @@ BUNDLE = DatasetContract(
                           license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
         declared_contract("annotation.exon", ("exon_id", "transcript_id", "taxon_id", "source"),
                           license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
+        # No key, as raw.intact__mitab: line_number, the lake's key, is not published, and no
+        # column set the file declares is one (gene_name is NULL on 86% of rows).
+        declared_contract("raw.rnacentral__id_mapping", (), grain=(
+            "one row per line of the release's id_mapping.tsv.gz: one cross-reference from a "
+            "sequence in one organism to a member database's record")),
+        declared_contract("annotation.rnacentral__rna"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -212,7 +218,6 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.icite__publication",
     "annotation.identifier_mapping",
     "annotation.pubtator3__mention",
-    "annotation.rnacentral__rna",
     "provenance.release",
     "raw.icite__metadata",
     "raw.metadata",
@@ -221,7 +226,6 @@ UNCONTRACTED_TABLES = frozenset({
     "raw.pubtator3__gene",
     "raw.pubtator3__mutation",
     "raw.pubtator3__species",
-    "raw.rnacentral__id_mapping",
 })
 
 
