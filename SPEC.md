@@ -887,7 +887,13 @@ upload `--apply`. A deliberate schema change needs the owner's approval:
 `bioconice gate --allow-schema-change TABLE…` lets the named tables differ from
 the previous release only by dropping `valid_from`, `valid_to` or `landed_in`,
 and records the tables and dropped columns in the report and in `gate.json`
-(`schema_changes`). A pass leaves `gate.json` in the bundle, bound to its
+(`schema_changes`). During the lake migration (#183) a release schema may follow
+the lake's types: `bioconice gate --allow-column-change TABLE…` lets the named
+tables add, remove, rename, retype or reorder columns, and records the exact
+change (added and removed columns with their types, retyped ones old → new type,
+whether the order changed) in the report and in `gate.json` (`column_changes`).
+Every other check still runs on those tables, and the weekly release passes
+neither flag. A pass leaves `gate.json` in the bundle, bound to its
 `manifest.json` by sha256; only a bundle with a matching one is copied to Hugging
 Face.
 
