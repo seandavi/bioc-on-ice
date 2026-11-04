@@ -5,7 +5,7 @@ The heavy steps were not run by the migrating agent. Every number below marked
 
 Paths: bioc-on-ice worktree `$W`, cdsci-lake worktree `$C` (both on
 `migrate/pubtator3`), scratch `$D`. Run each step detached (`systemd-run --user`
-or `nohup … &`) with an explicit `timeout`, and keep every temp file on `/data`.
+or `setsid nohup … &`) with an explicit `timeout`, and keep every temp file on `/data`.
 
 ```bash
 W=~/Documents/git/worktrees/migrate-pubtator3/bioc-on-ice
@@ -60,16 +60,13 @@ counts per table equal to the table above.
 
 ## 2. Idempotence
 
-Re-run at `--mode merge`. Expected: `status=idempotent — no change` and the
-snapshot id unchanged. Each batch's MERGE reads its whole target table, so do the
-two small files first; the big three repeat the same code path.
+Re-run the default merge. Expected: `status=idempotent`, the snapshot id unchanged.
+One batch per file (the default) reads each target once; *measured* 65 s for species
+and 233 s for disease, so all five take ~10 min.
 
 ```bash
-for k in mutation species; do
-  timeout 2h uv run --project "$C" python -m cdsci.lake.sources.pubtator3 run \
-    --directory "$D/iceberg-2026-09-19" --version 2026-09-19 --kind $k
-done
-# optional, hours: the same with no --kind
+timeout 1h uv run --project "$C" python -m cdsci.lake.sources.pubtator3 run \
+  --directory "$D/iceberg-2026-09-19" --version 2026-09-19
 ```
 
 ## 3. Equivalence against Iceberg (read-only)
@@ -104,51 +101,102 @@ Expected: `PASS`. The six tables are contracted now (they left
 keyed `(pmid, concept_type, concept_id, resource)`, so the gate checks that key over
 478M rows.
 
-## 5. Current upstream (optional, before production)
+## 5. Full re-run timing (scratch, detached)
+
+The production procedure (section 6) on the scratch lake: two default runs against
+current upstream, all five kinds, merge. Run 1 rewrites every row (a new dump shifts
+every `line_number`); run 2 must be idempotent. Uses a copy of `$D`'s lake, so the
+Iceberg-version lake stays as sections 3 and 4 need it.
 
 ```bash
-timeout 4h uv run --project "$C" python -m cdsci.lake.sources.pubtator3 run \
-  --version "$(date +%F)" --mode merge
+T=$(mktemp -d /data/davsean/tmp/pubtator3-rerun.XXXXXX)
+cp -a "$D/catalog.ducklake" "$D/data" "$T/"; mkdir -p "$T/duckdb_tmp"
+uv run --project "$C" python -I -c "import duckdb, sys; duckdb.connect(sys.argv[1]).execute(
+  \"UPDATE ducklake_metadata SET value = ? WHERE key = 'data_path'\", [sys.argv[2]])" \
+  "$T/catalog.ducklake" "$T/data/"
+cd "$T"
+export CU_OPENALEX_LAKE_BACKEND=local CU_OPENALEX_STORAGE_BASE_URI="file://$T" \
+  CU_OPENALEX_LAKE_CATALOG="$T/catalog.ducklake" CU_OPENALEX_LAKE_DATA_PREFIX=data \
+  CU_OPENALEX_DUCKDB_TEMP_DIRECTORY="$T/duckdb_tmp" TMPDIR=/data/davsean/tmp
+setsid nohup bash -c 'for i in 1 2; do /usr/bin/time -v timeout 4h uv run --project "$0" \
+  python -m cdsci.lake.sources.pubtator3 run > run$i.log 2>&1 || exit; done' "$C" \
+  < /dev/null > /dev/null 2>&1 &
 ```
 
-With line_number as the key, every line of a new dump shifts, so this rewrites every
-row of every table. On the scratch lake it is a dry run of the monthly refresh cost.
+Expected: `run1.log` ends `status=success`, `rows` equal to the upstream line counts;
+`run2.log` ends `status=idempotent` with `snapshot` equal to run 1's. Times are in
+section 7.
 
 ## 6. Production (standing approval, step 9)
 
-After the cdsci-lake PR merges. The first load goes into empty tables at
-`--mode append`, one file per run so each run is capped on its own:
+After the cdsci-lake PR merges. The tables may or may not exist: the default merge
+creates an absent table and merges into an existing one, so the procedure is the same
+either way. Do not use `--mode append` here: it refuses any slice that holds rows.
+
+Run the default entrypoint **twice** against current upstream, each under its own
+4-hour cap. With no `--version` it downloads the five dumps into
+`raw/pubtator3/<today>/` and stamps today's date; the second run on the same day
+reuses the download.
 
 ```bash
-cd "$(mktemp -d /data/davsean/tmp/pubtator3-prod.XXXXXX)"
+P=$(mktemp -d /data/davsean/tmp/pubtator3-prod.XXXXXX); cd "$P"
 export CU_OPENALEX_LAKE_BACKEND=postgres TMPDIR=/data/davsean/tmp
-V=$(date +%F)
-for k in mutation species gene chemical disease; do
+for i in 1 2; do
   timeout 4h uv run --project ~/Documents/git/cdsci-lake python -m cdsci.lake.sources.pubtator3 run \
-    --kind $k --version $V --mode append || break
+    > run$i.log 2>&1 || { echo "run $i failed: $?"; break; }
 done
 ```
 
-If a run dies part way, its table has some slices and not others. Re-run that
-`--kind` at `--mode merge`: append refuses a slice that already holds rows.
+Acceptance:
 
-## Time against the 4-hour cap (estimates)
+- `run1.log`: `status=success` (or `idempotent` if a previous run already landed
+  this dump), one `<kind>_annotation <- N rows` line per kind.
+- `run2.log`: `status=idempotent — no change`, `snapshot` equal to run 1's, and the
+  same five row counts. An idempotent run makes no snapshot at all, so this holds for
+  every table. `pubtator3_version` is out of change detection, so this also holds if
+  run 2 starts after midnight and re-downloads under the next date.
 
-- **Download**: 5.4 GB from NCBI over https. At 20–50 MB/s that is 2–5 min. Not measured.
-- **Scan**: *measured* 0.39 s for 1,940,315 gene lines (80.8 MB of TSV, ~42 B/line)
-  through `row_number()` plus the shard filter: ~200 MB/s. All five files are ~18.8 GB
-  of TSV, ~95 s per pass. A load makes 1 check pass and `batches` (20) load passes:
-  **~35 min of scanning** for all five, ~13 min for disease alone.
-- **Write**: not measured. The initial append writes ~447M rows of Parquet once. The
-  nearest precedent is gene2accession (285M rows, sharded the same way), whose module
-  calls the parquet write the dominant cost and the job "overnight-shaped". Expect
-  **1–3 h** for all five at `append`, inside the cap per file if not for the whole.
+Retry:
+
+- **A run fails or times out.** Each table's write is its own transaction, so tables
+  are either at the new dump or untouched, never half-merged. Run the same command
+  again: merge is idempotent and finishes the rest. Then run once more and require
+  `idempotent`.
+- **A download dies.** It resumes from `<file>.part` on the next run.
+- **A check fails** (`line N has K fields`, `Type other than`, `zero rows`): nothing
+  was written. Delete that day's `raw/pubtator3/<date>/` file and re-run; a second
+  failure on a fresh download is an upstream problem, stop and report it.
+- **Run 2 is not idempotent.** Upstream regenerates about monthly; compare the files'
+  `Last-Modified` (`curl -sI …/disease2pubtator3.gz`) with run 1's download. If
+  upstream changed, delete `raw/pubtator3/<date>/` and repeat the two runs. If it did
+  not, stop and report: that is a lander bug.
+
+## 7. Time against the 4-hour cap
+
+*Measured* on species and disease, one batch, local scratch lake on this host,
+4 DuckDB threads (2026-11-04). Peak RSS from `/usr/bin/time -v`. Each run reads each
+target once: one MERGE and one prune per table, plus one line delete.
+
+| run | kind | rows | elapsed | peak RSS |
+|---|---|---:|---:|---:|
+| unchanged | species | 48,958,091 | 65 s | 12.8 GB |
+| new dump (every row rewritten) | species | 49,148,290 | 102 s | 16.4 GB |
+| unchanged | disease | 168,305,967 | 233 s | 47.8 GB |
+| new dump (every row rewritten) | disease | 168,857,629 | 367 s | 59.3 GB |
+
+For comparison, the old default of 20 batches took 346 s (2.0 GB) on the unchanged
+species re-run, 279 s of it in 20 gzip passes, and a full re-run of disease and
+chemical would have read each 168M- and 147M-row target 20 times.
+
+Extrapolated by rows (447M rows in all, 2.7x disease): run 1 against a new dump
+~16 min, run 2 ~10 min, plus ~90 s of download (*measured* 62 MB/s from NCBI).
+Peak memory is the largest table, disease: ~59 GB. That is below DuckDB's
+default limit of 70% of RAM, and DuckDB spills to `duckdb_temp_directory` past it.
+The production lake writes Parquet to R2 instead of a local disk; not measured, but
+the write is one pass per table, not twenty.
+
 - **Iceberg re-export** (scratch only): 447M rows over anonymous icegate/R2. Not
   measured; budget 1–2 h.
-- **Merge re-runs** (idempotence, monthly refresh): each of the 20 batch MERGEs reads
-  its whole target, so disease costs ~20 reads of 168M rows. Likely **beyond 4 h** for
-  disease and chemical at `merge`. This is the risk for the monthly refresh: a new dump
-  shifts every line_number, so every row is rewritten anyway.
 - **Publish**: the mention release SELECT is a DISTINCT over ~480M exploded rows. The
   lander measured 16.2 GB peak for species alone (55M derived rows) in memory; DuckDB
   spills, so expect tens of GB in `duckdb_temp_directory`.
@@ -156,7 +204,7 @@ If a run dies part way, its table has some slices and not others. Re-run that
 ## Merge order
 
 1. cdsci-lake PR (`sources/pubtator3`).
-2. Production ingest (section 6).
+2. Production ingest (section 6): two default runs, the second idempotent.
 3. Bump the cdsci-lake pin in bioc-on-ice to the merged commit.
 4. bioc-on-ice PR. Merged earlier, the next `bioconice publish` fails:
    `lake.pubtator3.*` does not exist in the production lake.
