@@ -19,9 +19,9 @@ from cdsci.lake.contracts import ColumnContract, TableContract, TemporalModel
 from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.local import LocalFileSystem
 
-from . import (bedbase, biogrid, bugsigdb, cellosaurus, cellxgene, complexportal, encode, eqtlcatalogue,
-               gwas_catalog, hgnc, intact, mane, ncbi, ncbi_accession, ncbi_go, ncbi_orthologs,
-               ncbi_pubmed, obo, wikipathways)
+from . import (bedbase, biogrid, bugsigdb, cellosaurus, cellxgene, complexportal, encode, ensembl,
+               eqtlcatalogue, gwas_catalog, hgnc, intact, mane, ncbi, ncbi_accession, ncbi_go,
+               ncbi_orthologs, ncbi_pubmed, obo, wikipathways)
 from .release import SIGNATURE_TAXON, SIGNATURE_TAXON_SELECT
 from .schemas import TABLES as DECLARED
 
@@ -56,6 +56,7 @@ FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE, **wikipathways.RELEASE,
              **ncbi.RELEASE, **ncbi_accession.RELEASE, **ncbi_orthologs.RELEASE,
              **eqtlcatalogue.RELEASE, **cellxgene.RELEASE, **encode.RELEASE,
              **bedbase.RELEASE, **biogrid.RELEASE, **intact.RELEASE, **obo.RELEASE,
+             **ensembl.RELEASE,
              # Cross-source (ADR-0015 b): each writer's slice, from its own lake tables.
              "resource.resource_relationship": " UNION ALL ".join(
                  f"SELECT * FROM ({m.RELATIONSHIP})" for m in (eqtlcatalogue, cellxgene, encode,
