@@ -20,7 +20,7 @@ from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.local import LocalFileSystem
 
 from . import (bedbase, biogrid, bugsigdb, cellosaurus, cellxgene, complexportal, encode, ensembl,
-               eqtlcatalogue, gwas_catalog, hgnc, intact, mane, ncbi, ncbi_accession, ncbi_go,
+               eqtlcatalogue, gwas_catalog, hgnc, icite, intact, mane, ncbi, ncbi_accession, ncbi_go,
                ncbi_orthologs, ncbi_pubmed, obo, wikipathways)
 from .release import SIGNATURE_TAXON, SIGNATURE_TAXON_SELECT
 from .schemas import TABLES as DECLARED
@@ -56,7 +56,7 @@ FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE, **wikipathways.RELEASE,
              **ncbi.RELEASE, **ncbi_accession.RELEASE, **ncbi_orthologs.RELEASE,
              **eqtlcatalogue.RELEASE, **cellxgene.RELEASE, **encode.RELEASE,
              **bedbase.RELEASE, **biogrid.RELEASE, **intact.RELEASE, **obo.RELEASE,
-             **ensembl.RELEASE,
+             **ensembl.RELEASE, **icite.RELEASE,
              # Cross-source (ADR-0015 b): each writer's slice, from its own lake tables.
              "resource.resource_relationship": " UNION ALL ".join(
                  f"SELECT * FROM ({m.RELATIONSHIP})" for m in (eqtlcatalogue, cellxgene, encode,
@@ -71,8 +71,9 @@ TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))
     # contract's table (release.py), read from the lake; raw.metadata has no writer here.
     ("annotation", "signature_taxon", SIGNATURE_TAXON_SELECT),
     # iCite metadata straight from cdsci-lake (#183 wave A): the Iceberg copy was its old
-    # reverse-ETL export, same 17 columns and types.
-    ("raw", "metadata", "SELECT * FROM lake.icite.metadata"),
+    # reverse-ETL export, same 17 columns and types. The columns the lake added for
+    # raw.icite__metadata (#183 H1) stay out, so this table's columns do not change.
+    ("raw", "metadata", icite.METADATA_17),
     # From cdsci-lake (#194); becomes lake.pubmed.article with seandavi/cdsci-lake#136.
     ("annotation", "pubmed__article", "SELECT * FROM lake.omicidx.pubmed_article"),
 ]
@@ -148,6 +149,8 @@ def connect():
 
 def _docs(name):
     """(table comment, {column: doc}) from the declarations; nothing for an undeclared table."""
+    if name in icite.PUBLISHED:
+        return icite.published_docs(name, DECLARED[name])
     if name in DECLARED:
         d = DECLARED[name]
         return d.comment, {f.name: f.doc for f in d.schema.fields if f.doc}

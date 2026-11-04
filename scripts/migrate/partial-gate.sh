@@ -8,7 +8,8 @@
 # same tables (its release, published_at and git_sha kept as published), then calls
 # `verify_release_over_release` and the bundle's own manifest checks directly:
 # `bioconice gate` refuses a partial bundle and a same-day reference. Writes nothing
-# outside <out dir>.
+# outside <out dir>. ALLOW_COLUMN_CHANGE="<schema.table> ..." passes those tables'
+# column change, as `bioconice gate --allow-column-change` does (owner approval, #183).
 set -euo pipefail
 W=$1 REF=$2 OUT=$3; shift 3
 mkdir -p "$OUT/bundle" "$OUT/ref"
@@ -16,7 +17,7 @@ uv run --project "$W" bioconice publish --out "$OUT/bundle" --only "$@"
 jq '.tables |= map(select((.schema + "." + .table) as $n | $ARGS.positional | index($n)))' \
    --args "$@" < "$REF" > "$OUT/ref/manifest.json"
 uv run --project "$W" python - "$OUT/bundle" "$OUT/ref" <<'EOF'
-import json, sys
+import json, os, sys
 from pathlib import Path
 from bioconice import gate
 bundle, ref = Path(sys.argv[1]), sys.argv[2]
@@ -26,6 +27,10 @@ print(f"release {m['release']} against {ref} (release {r['release']}, "
       f"published_at {r['published_at']}, git_sha {r['git_sha']})")
 checks = list(gate.verify_release_over_release(
     "bioconice", bundle, ref, gate.CONTRACTS, gate.UNCONTRACTED_TABLES).checks)
+checks, changes = gate.allow_changed_columns(
+    checks, os.environ.get("ALLOW_COLUMN_CHANGE", "").split(), r, m)
+for t, d in changes.items():
+    print(f"column change allowed (owner approval, #183): {t}: {gate._describe(d)}")
 checks += gate.bundle_checks(gate.release_con(bundle, m["tables"]), m["tables"],
                              gate.readme_queries())
 for c in checks:
