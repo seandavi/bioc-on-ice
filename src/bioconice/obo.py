@@ -52,8 +52,8 @@ REGISTRY = {
     "uberon":  ("https://purl.obolibrary.org/obo/uberon.json", "CC-BY-3.0"),
     "mondo":   ("https://purl.obolibrary.org/obo/mondo.json", "CC-BY-4.0"),
     "efo":     ("https://github.com/EBISPOT/efo/releases/latest/download/efo.json", "Apache-2.0"),
-    "hsapdv":  ("https://purl.obolibrary.org/obo/hsapdv.json", "CC-BY-4.0"),
-    "mmusdv":  ("https://purl.obolibrary.org/obo/mmusdv.json", "CC-BY-4.0"),
+    "hsapdv":  ("https://purl.obolibrary.org/obo/hsapdv.json", "CC-BY-3.0"),
+    "mmusdv":  ("https://purl.obolibrary.org/obo/mmusdv.json", "CC-BY-3.0"),
     "go":      ("https://purl.obolibrary.org/obo/go/go-basic.json", "CC-BY-4.0"),
     "doid":    ("https://purl.obolibrary.org/obo/doid.json", "CC0-1.0"),
 }
@@ -161,6 +161,43 @@ def _check(con):
         raise ValueError("obo: derived rows violate " + "; ".join(f"{k} ({v:,} rows)" for k, v in failed.items()))
 
 
+def _term(src):
+    """ontology.term's columns, from a table shaped like lake.obo.element (raw plus ontology)."""
+    return f"""
+        SELECT ontology,
+               {_curie('id')} AS term_id,
+               lbl AS name,
+               json_extract_string(meta, '$.definition.val') AS definition,
+               {_bpv(NAMESPACE_PRED)} AS namespace,
+               list_aggregate(list_transform(coalesce(json_extract(meta, '$.synonyms')::JSON[], []),
+                                              x -> json_extract_string(x, '$.val')),
+                              'string_agg', '|') AS synonyms,
+               coalesce(json_extract_string(meta, '$.deprecated'), 'false') = 'true' AS obsolete,
+               {_curie(_bpv(REPLACED_BY_PRED))} AS replaced_by
+        FROM {src} WHERE kind = 'node'
+    """
+
+
+def _relationship(src):
+    """ontology.relationship's columns, from a table shaped like lake.obo.element."""
+    return f"""
+        SELECT ontology, {_curie('sub')} AS subject_id,
+               {_predicate('pred')} AS predicate, {_curie('obj')} AS object_id
+        FROM {src} WHERE kind = 'edge'
+    """
+
+
+# Read from cdsci-lake (#183): lake.obo.element is every raw.obo__<name> stacked, without
+# landed_in, plus its ontology column; one release per ontology. Releases carry no
+# row-history columns (#222).
+RELEASE = {
+    **{f"raw.obo__{name}": f"SELECT * EXCLUDE (ontology) FROM lake.obo.element "
+                           f"WHERE ontology = '{name}'" for name in REGISTRY},
+    "ontology.term": _term("lake.obo.element"),
+    "ontology.relationship": _relationship("lake.obo.element"),
+}
+
+
 def transform(cat, release, name, version):
     """Phase 2: ontology.term (by node) and ontology.relationship (by edge), for one ontology.
 
@@ -171,26 +208,10 @@ def transform(cat, release, name, version):
     con.register("raw", cat.load_table(f"raw.obo__{name}").scan(
         row_filter=EqualTo("release_version", version)).to_arrow())
 
-    con.execute(f"""
-        CREATE TABLE term AS
-        SELECT '{name}' AS ontology,
-               {_curie('id')} AS term_id,
-               lbl AS name,
-               json_extract_string(meta, '$.definition.val') AS definition,
-               {_bpv(NAMESPACE_PRED)} AS namespace,
-               list_aggregate(list_transform(coalesce(json_extract(meta, '$.synonyms')::JSON[], []),
-                                              x -> json_extract_string(x, '$.val')),
-                              'string_agg', '|') AS synonyms,
-               coalesce(json_extract_string(meta, '$.deprecated'), 'false') = 'true' AS obsolete,
-               {_curie(_bpv(REPLACED_BY_PRED))} AS replaced_by
-        FROM raw WHERE kind = 'node'
-    """)
-    con.execute(f"""
-        CREATE TABLE rel AS
-        SELECT '{name}' AS ontology, {_curie('sub')} AS subject_id,
-               {_predicate('pred')} AS predicate, {_curie('obj')} AS object_id
-        FROM raw WHERE kind = 'edge'
-    """)
+    # The raw table has no ontology column; the lake table has one per row.
+    src = f"(SELECT '{name}' AS ontology, * FROM raw)"
+    con.execute(f"CREATE TABLE term AS {_term(src)}")
+    con.execute(f"CREATE TABLE rel AS {_relationship(src)}")
     _check(con)
     term = con.sql("SELECT * FROM term").to_arrow_table()
     rel = con.sql("SELECT * FROM rel").to_arrow_table()

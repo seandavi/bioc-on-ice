@@ -29,6 +29,7 @@ from pyiceberg.types import ListType
 
 from .publish import PUBMED_ARTICLE, ROW_HISTORY, _lit
 from .release import BUGSIGDB
+from .schemas import _OBO_ONTOLOGIES
 from .schemas import TABLES as DECLARED
 from .upload import PUBLIC_URL
 
@@ -62,6 +63,7 @@ ENCODE_LICENSE = "LicenseRef-ENCODE-Data-Use-Policy"
 # record of the 2026-09-01 snapshot is DUO:0000042, general research use (cdsci-lake
 # docs/data-licenses.md). schemas.py declares no bioc.license for it.
 BEDBASE_LICENSE = "LicenseRef-DUO-0000042"
+OBO_LICENSE = " AND ".join(sorted({licence for _, licence in _OBO_ONTOLOGIES}))
 
 
 # The bundle's own tables that have a contract outside a dataset release of their own.
@@ -166,6 +168,14 @@ BUNDLE = DatasetContract(
         # Its business key holds on the lake union: 4,778,696 rows at BioGRID 5.0.263 and
         # IntAct 2026-10-17 (2026-11-03), none NULL, none repeated.
         declared_contract("annotation.interaction"),
+        # No key, as raw.ncbi__gene2ensembl: a node is keyed by id and an edge by (sub, pred,
+        # obj), so every column of the lake's key is NULL on one kind of row or the other.
+        *(declared_contract(f"raw.obo__{name}", (), grain=(
+            "one row per node (id) and one per edge (sub, pred, obj) of the ontology's "
+            "release file")) for name, _ in _OBO_ONTOLOGIES),
+        # Each row is under its ontology's licence.
+        declared_contract("ontology.term", license=OBO_LICENSE),
+        declared_contract("ontology.relationship", license=OBO_LICENSE),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -186,20 +196,10 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
     "annotation.transcript",
-    "ontology.relationship",
-    "ontology.term",
     "provenance.release",
     "raw.ensembl__gtf",
     "raw.icite__metadata",
     "raw.metadata",
-    "raw.obo__cl",
-    "raw.obo__doid",
-    "raw.obo__efo",
-    "raw.obo__go",
-    "raw.obo__hsapdv",
-    "raw.obo__mmusdv",
-    "raw.obo__mondo",
-    "raw.obo__uberon",
     "raw.pubtator3__chemical",
     "raw.pubtator3__disease",
     "raw.pubtator3__gene",

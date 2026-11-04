@@ -143,3 +143,11 @@ def test_landing_no_rows_fails_loudly(cat, tmp_path):
     empty.write_text(json.dumps({"graphs": [{"meta": {"version": "x"}, "nodes": [], "edges": []}]}))
     with pytest.raises(SystemExit, match="yielded no nodes or edges"):
         obo.land_raw(cat, REL, "cl", url=str(empty))
+
+
+def test_release_select_over_the_lake_reproduces_the_lander(cat, release_matches_lander):
+    """#183: the release reads lake.obo.element, every ontology stacked with its name."""
+    obo.ingest(cat, REL, "cl", url=str(FIXTURE))
+    release = {k: v for k, v in obo.RELEASE.items() if not k.startswith("raw.") or k == "raw.obo__cl"}
+    release_matches_lander(cat, {"lake.obo.element": "raw.obo__cl"}, release,
+                           stamped={"lake.obo.element": "'cl' AS ontology"})
