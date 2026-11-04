@@ -62,7 +62,14 @@ FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE, **wikipathways.RELEASE,
                  f"SELECT * FROM ({m.RELATIONSHIP})" for m in (eqtlcatalogue, cellxgene, encode,
                                                              bedbase)),
              "annotation.interaction": " UNION ALL ".join(
-                 f"SELECT * FROM ({m.INTERACTION})" for m in (biogrid, intact))}
+                 f"SELECT * FROM ({m.INTERACTION})" for m in (biogrid, intact)),
+             # BioGRID and IntAct write none. UniProt has no module here: its rows are the
+             # lake model transform/models/uniprot/identifier_mapping.sql, which v2026-11-03
+             # holds for taxon 9606 only.
+             "annotation.identifier_mapping": " UNION ALL ".join(
+                 [f"SELECT * FROM ({m.MAPPING})" for m in (ncbi, ncbi_accession, ensembl, hgnc,
+                                                         mane, rnacentral)]
+                 + ["SELECT * FROM lake.uniprot.identifier_mapping WHERE taxon_id = 9606"])}
 
 # Every table of the live catalog except annotation.identifier_mapping__pre_repair.
 TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))

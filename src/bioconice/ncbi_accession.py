@@ -64,6 +64,10 @@ RELEASE = {
         mature_peptide_gi::VARCHAR AS mature_peptide_gi, symbol
     FROM lake.ncbi_gene2accession.gene2accession""",
 }
+# This source's branch of the annotation.identifier_mapping union (publish.py): the lake
+# model transform/models/ncbi_gene2accession/mapping.sql, transform()'s `mapping` without
+# confidence.
+MAPPING = "SELECT *, NULL::DOUBLE AS confidence FROM lake.ncbi_gene2accession.mapping"
 
 
 def land_raw(cat, release, url=None):

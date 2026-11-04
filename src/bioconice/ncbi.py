@@ -81,6 +81,9 @@ RELEASE = {
                               "gene_id::VARCHAR AS gene_id, discontinued_gene_id::VARCHAR AS "
                               "discontinued_gene_id) FROM lake.ncbi_gene.gene_history",
 }
+# This source's branch of the annotation.identifier_mapping union (publish.py): the lake
+# model transform/models/ncbi_gene/mapping.sql, transform()'s `mapping` without confidence.
+MAPPING = "SELECT *, NULL::DOUBLE AS confidence FROM lake.ncbi_gene.mapping"
 
 BATCH = 1_000_000
 # Rows accumulated per Iceberg commit. R2 Data Catalog rate-limits commits

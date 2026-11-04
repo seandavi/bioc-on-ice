@@ -431,8 +431,11 @@ valid_to
 ```
 
 Here the whole tuple `(source_namespace, source_id, target_namespace,
-target_id, taxon_id)` is the identifier — a mapping has no attributes that can
-change, so it is only ever asserted or withdrawn, never updated. That makes
+target_id, taxon_id, source)` is the identifier — a mapping has no attributes
+that can change, so it is only ever asserted or withdrawn, never updated.
+`source` is part of it because writers assert independently: when NCBI and
+HGNC both map the same pair, those are two assertions, and one writer
+withdrawing its own must not retire the other's. That makes
 `valid_to` the only signal that a cross-reference went away, and the reason
 retirement has to be modelled rather than left implicit.
 
@@ -444,9 +447,8 @@ RNAcentral's ENA cross-references (`database = 'ENA'`, composite
 `accession:range:feature` ids) are excluded from `identifier_mapping` for every
 taxon. They stay landed whole and published in `raw.rnacentral__id_mapping`,
 with `urs` and `taxon_id`. For human and mouse, none of them exactly matches an
-id another source puts in `identifier_mapping` (ADR-0015). Until RNAcentral's
-derive moves to a release SELECT (#183), `rnacentral.py` still writes the human
-and mouse ENA rows.
+id another source puts in `identifier_mapping` (ADR-0015). The release SELECT
+(#183) drops them; `rnacentral.py`'s retiring Iceberg lander still writes them.
 
 `taxon_id` appears on `transcript`, `exon` and `identifier_mapping` beyond what
 the entity itself strictly needs, because it is part of every merge key: it

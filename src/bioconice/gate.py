@@ -210,6 +210,10 @@ BUNDLE = DatasetContract(
         *(declared_contract(f"raw.pubtator3__{kind}", (), grain=(
             f"one row per line of {kind}2pubtator3.gz")) for kind in pubtator3.KINDS),
         declared_contract("annotation.pubtator3__mention"),
+        # SPEC's key, the whole tuple. Each row is under its writer's licence: NCBI, NCBI
+        # accession and MANE under NCBI's, Ensembl's, HGNC and RNAcentral CC0, UniProt CC BY.
+        declared_contract("annotation.identifier_mapping", license=" AND ".join(sorted({
+            "LicenseRef-NCBI-Molecular-Data-Usage", ENSEMBL_LICENSE, "CC0-1.0", "CC-BY-4.0"}))),
         # No key, as raw.intact__mitab: line_number, the lake's key, is not published, and no
         # column set the file declares is one (gene_name is NULL on 86% of rows).
         declared_contract("raw.rnacentral__id_mapping", (), grain=(
@@ -240,7 +244,6 @@ GATE_FILE = "gate.json"
 # Tables with no TableContract yet (#208). They get only the column and row-count checks:
 # no key or join checks. Writing a contract for one means deleting its line here.
 UNCONTRACTED_TABLES = frozenset({
-    "annotation.identifier_mapping",
     "provenance.release",
     "raw.metadata",
 })

@@ -298,3 +298,10 @@ RELEASE = {
         "exon", 'exon_id, transcript_id, ncbitaxon_id AS taxon_id, source, sequence_name, '
                 '"start", "end", strand, rank, cds_start, cds_end, cds_phase'),
 }
+# This source's branch of the annotation.identifier_mapping union (publish.py): the gene's
+# symbol, for the published assembly, which the runner's ensembl_canonical.txt also gave
+# the lander. source is the lake's 'ENSEMBL'; Iceberg still spells it 'Ensembl'.
+MAPPING = _published(
+    "gene", "'ENSEMBL' AS source_namespace, gene_id AS source_id, 'SYMBOL' AS target_namespace, "
+            "symbol AS target_id, ncbitaxon_id AS taxon_id, source, NULL::DOUBLE AS confidence"
+) + " WHERE symbol IS NOT NULL"
