@@ -27,6 +27,7 @@ from cdsci.lake.publish.release import AcceptanceCheck
 from cdsci.lake.publish.verify import verify_release_over_release
 from pyiceberg.types import ListType
 
+from . import pubtator3
 from .publish import PUBMED_ARTICLE, ROW_HISTORY, _lit
 from .release import BUGSIGDB
 from .schemas import _OBO_ONTOLOGIES
@@ -196,6 +197,10 @@ BUNDLE = DatasetContract(
                           license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
         declared_contract("annotation.exon", ("exon_id", "transcript_id", "taxon_id", "source"),
                           license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
+        # No key: the lake's key, line_number, is not published, and the files declare none.
+        *(declared_contract(f"raw.pubtator3__{kind}", (), grain=(
+            f"one row per line of {kind}2pubtator3.gz")) for kind in pubtator3.KINDS),
+        declared_contract("annotation.pubtator3__mention"),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -211,16 +216,10 @@ UNCONTRACTED_TABLES = frozenset({
     "annotation.icite__metrics",
     "annotation.icite__publication",
     "annotation.identifier_mapping",
-    "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
     "provenance.release",
     "raw.icite__metadata",
     "raw.metadata",
-    "raw.pubtator3__chemical",
-    "raw.pubtator3__disease",
-    "raw.pubtator3__gene",
-    "raw.pubtator3__mutation",
-    "raw.pubtator3__species",
     "raw.rnacentral__id_mapping",
 })
 
