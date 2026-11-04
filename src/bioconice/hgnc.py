@@ -113,12 +113,38 @@ def _gene(src):
     """
 
 
+def _mapping(src):
+    """HGNC's annotation.identifier_mapping rows, from a table shaped like raw.hgnc__complete_set.
+
+    HGNC ids keep their 'HGNC:' prefix, the form ncbi.transform already writes
+    under this namespace, so the two writers' rows join. omim_id is the one
+    '|'-list among the four (11 genes on 2026-09-18); the others are single.
+    """
+    return f"""
+        SELECT DISTINCT 'HGNC' AS source_namespace, hgnc_id AS source_id,
+               target_namespace, target_id, {TAXON} AS taxon_id,
+               'HGNC' AS source, NULL::DOUBLE AS confidence
+        FROM (
+            SELECT hgnc_id, 'ENTREZ' AS target_namespace, entrez_id AS target_id FROM {src}
+          UNION ALL
+            SELECT hgnc_id, 'ENSEMBL', ensembl_gene_id FROM {src}
+          UNION ALL
+            SELECT hgnc_id, 'UCSC', ucsc_id FROM {src}
+          UNION ALL
+            SELECT hgnc_id, 'OMIM', unnest(str_split(omim_id, '|')) FROM {src}
+        )
+        WHERE target_id IS NOT NULL AND target_id <> ''
+    """
+
+
 # Read from cdsci-lake (#183 step 7): lake.hgnc.gene is raw.hgnc__complete_set without
 # landed_in, one HGNC version at a time. Releases carry no row-history columns (#222).
 RELEASE = {
     "raw.hgnc__complete_set": "SELECT * FROM lake.hgnc.gene",
     "annotation.hgnc__gene": _gene("lake.hgnc.gene"),
 }
+# This source's branch of the annotation.identifier_mapping union (publish.py).
+MAPPING = _mapping("lake.hgnc.gene")
 
 
 def transform(cat, release, version):
@@ -135,25 +161,7 @@ def transform(cat, release, version):
     # changes, so carrying it would open a new version row for edits to columns
     # this table does not have.
     gene = con.sql(_gene("raw")).to_arrow_table()
-
-    # HGNC ids keep their 'HGNC:' prefix, the form ncbi.transform already writes
-    # under this namespace, so the two writers' rows join. omim_id is the one
-    # '|'-list among the four (11 genes on 2026-09-18); the others are single.
-    mapping = con.sql(f"""
-        SELECT DISTINCT 'HGNC' AS source_namespace, hgnc_id AS source_id,
-               target_namespace, target_id, {TAXON} AS taxon_id,
-               'HGNC' AS source, NULL::DOUBLE AS confidence
-        FROM (
-            SELECT hgnc_id, 'ENTREZ' AS target_namespace, entrez_id AS target_id FROM raw
-          UNION ALL
-            SELECT hgnc_id, 'ENSEMBL', ensembl_gene_id FROM raw
-          UNION ALL
-            SELECT hgnc_id, 'UCSC', ucsc_id FROM raw
-          UNION ALL
-            SELECT hgnc_id, 'OMIM', unnest(str_split(omim_id, '|')) FROM raw
-        )
-        WHERE target_id IS NOT NULL AND target_id <> ''
-    """).to_arrow_table()
+    mapping = con.sql(_mapping("raw")).to_arrow_table()
 
     return {
         # HGNC is this table's only writer, so its scope is the whole table.

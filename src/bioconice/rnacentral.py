@@ -152,6 +152,21 @@ def _scopes(cat, taxon):
             for lo, hi in zip(bounds, bounds[1:])}
 
 
+def _mapping(src):
+    """RNAcentral's annotation.identifier_mapping rows, from a table shaped like raw.
+
+    DISTINCT because folding ENSEMBL_GENCODE into ENSEMBL_TRANSCRIPT makes
+    duplicates; the file itself has none.
+    """
+    return f"""
+        SELECT DISTINCT 'RNACENTRAL' AS source_namespace,
+               urs || '_' || taxon_id AS source_id,
+               {NAMESPACE} AS target_namespace, external_id AS target_id,
+               taxon_id, 'RNACENTRAL' AS source, NULL::DOUBLE AS confidence
+        FROM {src} WHERE external_id IS NOT NULL
+    """
+
+
 def transform(cat, release, taxon=None):
     """Phase 2: URS_taxid <-> member-database cross-references, and the RNA's type.
 
@@ -166,15 +181,7 @@ def transform(cat, release, taxon=None):
             row_filter=scope,
             selected_fields=("urs", "database", "external_id", "taxon_id", "rna_type")).to_arrow())
 
-        # DISTINCT because folding ENSEMBL_GENCODE into ENSEMBL_TRANSCRIPT makes
-        # duplicates; the file itself has none.
-        mapping = con.sql(f"""
-            SELECT DISTINCT 'RNACENTRAL' AS source_namespace,
-                   urs || '_' || taxon_id AS source_id,
-                   {NAMESPACE} AS target_namespace, external_id AS target_id,
-                   taxon_id, 'RNACENTRAL' AS source, NULL::DOUBLE AS confidence
-            FROM raw WHERE external_id IS NOT NULL
-        """).to_arrow_table()
+        mapping = con.sql(_mapping("raw")).to_arrow_table()
         # One type per (urs, taxon) in release 27. If a release ever gives two,
         # the merge refuses the duplicate key rather than picking one.
         rna = con.sql("""
@@ -195,7 +202,7 @@ def transform(cat, release, taxon=None):
 # without landed_in, one release at a time, plus its key line_number. annotation.rnacentral__rna
 # is derived from it at release for the taxa the Iceberg derive ran for: v2026-11-03 holds
 # 9606 (2,004,721 rows) and 10090 (748,702) only. Releases carry no row-history columns
-# (#222). The annotation.identifier_mapping slice stays on Iceberg (map, G2).
+# (#222).
 RNA_TAXA = (9606, 10090)
 RELEASE = {
     "raw.rnacentral__id_mapping": "SELECT * EXCLUDE (line_number) FROM lake.rnacentral.id_mapping",
@@ -203,6 +210,10 @@ RELEASE = {
         SELECT DISTINCT urs || '_' || taxon_id AS urs_taxid, taxon_id, rna_type
         FROM lake.rnacentral.id_mapping WHERE taxon_id IN {RNA_TAXA}""",
 }
+# This source's branch of the annotation.identifier_mapping union (publish.py), for the same
+# taxa. ENA's composite ids stay in raw only (ADR-0015 c): transform() still writes them.
+MAPPING = _mapping("(SELECT * FROM lake.rnacentral.id_mapping "
+                   f"WHERE taxon_id IN {RNA_TAXA} AND database <> 'ENA')")
 
 
 def ingest(cat, release, taxa=None, number=None, url=None):

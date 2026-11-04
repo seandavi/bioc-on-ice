@@ -130,13 +130,29 @@ def _transcript(src):
     """
 
 
+def _mapping(src):
+    """MANE's annotation.identifier_mapping rows, from a table shaped like raw.ncbi__mane_summary.
+
+    One direction, like every other writer. Both MANE statuses are matched
+    pairs; the status itself is in annotation.mane__transcript.
+    """
+    return f"""
+        SELECT DISTINCT 'REFSEQ_RNA' AS source_namespace, refseq_nuc AS source_id,
+               'ENSEMBL_TRANSCRIPT' AS target_namespace,
+               split_part(ensembl_nuc, '.', 1) AS target_id, {TAXON} AS taxon_id,
+               'MANE' AS source, NULL::DOUBLE AS confidence
+        FROM {src}
+    """
+
+
 # Read from cdsci-lake (#183): lake.mane.transcript is raw.ncbi__mane_summary without
-# landed_in, one MANE release at a time. Releases carry no row-history columns (#222). The
-# identifier_mapping slice stays on Iceberg, written by transform().
+# landed_in, one MANE release at a time. Releases carry no row-history columns (#222).
 RELEASE = {
     "raw.ncbi__mane_summary": "SELECT * FROM lake.mane.transcript",
     "annotation.mane__transcript": _transcript("lake.mane.transcript"),
 }
+# This source's branch of the annotation.identifier_mapping union (publish.py).
+MAPPING = _mapping("lake.mane.transcript")
 
 
 def transform(cat, release, version):
@@ -149,16 +165,7 @@ def transform(cat, release, version):
         row_filter=EqualTo("mane_version", version)).to_arrow())
 
     transcript = con.sql(_transcript("raw")).to_arrow_table()
-
-    # One direction, like every other writer. Both MANE statuses are matched
-    # pairs; the status itself is in annotation.mane__transcript.
-    mapping = con.sql(f"""
-        SELECT DISTINCT 'REFSEQ_RNA' AS source_namespace, refseq_nuc AS source_id,
-               'ENSEMBL_TRANSCRIPT' AS target_namespace,
-               split_part(ensembl_nuc, '.', 1) AS target_id, {TAXON} AS taxon_id,
-               'MANE' AS source, NULL::DOUBLE AS confidence
-        FROM raw
-    """).to_arrow_table()
+    mapping = con.sql(_mapping("raw")).to_arrow_table()
 
     return {
         # MANE is this table's only writer, so its scope is the whole table.
