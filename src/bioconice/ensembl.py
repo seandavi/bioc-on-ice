@@ -255,3 +255,46 @@ def transform(cat, release, info, ensembl_release):
 def ingest(cat, release, species, ensembl_release):
     info, n = land_raw(cat, release, species, ensembl_release)
     return {"raw.ensembl__gtf": n, **transform(cat, release, info, ensembl_release)}
+
+
+# The one assembly per taxon that is published (#183 G1, owner 2026-11-01): the species
+# entry with the shortest name, ties by name: the unsuffixed one where there is one
+# (mus_musculus), else e.g. cyprinus_carpio_huanghe. That is the runner's
+# ensembl_canonical.txt, so the 276 of the lake's 359 Ensembl 116 assemblies the Iceberg
+# tables hold. Not _canonical, whose alphabetical fallback picks
+# cyprinus_carpio_germanmirror.
+# Only the newest Ensembl release in the lake is published: when a second one lands, its
+# rows sit beside the first's until pruned, and both would double every taxon. The release
+# number is text ('116'), so it is compared as an integer ('99' > '116' as text).
+PUBLISHED_SPECIES = """SELECT species, ensembl_release FROM lake.ensembl.genome
+    WHERE ensembl_release::INTEGER = (SELECT max(ensembl_release::INTEGER) FROM lake.ensembl.genome)
+    QUALIFY row_number() OVER (PARTITION BY ncbitaxon_id ORDER BY length(species), species) = 1"""
+
+
+def _published(table, columns):
+    return (f"SELECT {columns} FROM lake.ensembl.{table} "
+            f"SEMI JOIN ({PUBLISHED_SPECIES}) USING (species, ensembl_release)")
+
+
+# Release SELECTs over cdsci-lake (#183 G1), in the published columns: the lake's
+# ncbitaxon_id is taxon_id, and its species, assembly, coordinates on gene and transcript,
+# and genome_id on the feature tables (the filter leaves one assembly per taxon) are not
+# published. genome_id is the accession or, where Ensembl gives none, the assembly name,
+# as species_info derives it.
+RELEASE = {
+    "raw.ensembl__gtf": _published(
+        "gtf", 'seqname, source, feature, "start", "end", score, strand, frame, attribute, '
+               "ncbitaxon_id AS taxon_id, ensembl_release"),
+    "reference.genome": _published(
+        "genome", "coalesce(nullif(genome_id, ''), assembly_name) AS genome_id, "
+                  "ncbitaxon_id AS taxon_id, source, assembly_name"),
+    "annotation.gene": _published(
+        "gene", "gene_id, ncbitaxon_id AS taxon_id, source, version, symbol, gene_type, "
+                "curation_source"),
+    "annotation.transcript": _published(
+        "transcript", "transcript_id, ncbitaxon_id AS taxon_id, source, gene_id, version, "
+                      "biotype, canonical"),
+    "annotation.exon": _published(
+        "exon", 'exon_id, transcript_id, ncbitaxon_id AS taxon_id, source, sequence_name, '
+                '"start", "end", strand, rank, cds_start, cds_end, cds_phase'),
+}

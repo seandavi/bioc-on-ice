@@ -539,3 +539,80 @@ def test_pick_gtf_prefers_release_stamp_and_accepts_cross_imports():
         ensembl._pick_gtf([], "116", "nothing")
     with pytest.raises(SystemExit, match="no unambiguous primary GTF"):
         ensembl._pick_gtf(["A.x.63.gtf.gz", "A.y.64.gtf.gz"], "116", "two_builds")
+
+
+def test_release_reads_the_lake_back_as_published_one_assembly_per_taxon(cat):
+    """#183 G1: lake.ensembl.* hold every assembly; the release SELECTs give the lander's rows
+    of each taxon's shortest-named species entry (cyprinus_carpio_huanghe, not the
+    alphabetically first germanmirror) in the published columns: no genome_id on the
+    feature tables, no is_canonical, none of the lake's extras.
+
+    gtf is landed with cdsci-lake's own landing SELECT; genome, gene, transcript and exon,
+    its models under transform/models/ensembl/, are restated from the lander's tables.
+    """
+    import importlib
+
+    import duckdb
+
+    from bioconice.publish import ROW_HISTORY
+    lake_ingest = importlib.import_module("cdsci.lake.sources.ensembl.ingest")
+    # (species, lander info, GTF, the accession Ensembl's species file gives)
+    assemblies = (
+        ("cyprinus_carpio_germanmirror", {"taxon_id": 7962, "assembly": "Germanmirror_v1",
+                                          "accession": "GCA_000000001.1", "canonical": False},
+         STRAIN_GTF, "GCA_000000001.1"),
+        ("cyprinus_carpio_huanghe", {"taxon_id": 7962, "assembly": "Huanghe_v1",
+                                     "accession": "GCA_000000002.1", "canonical": True},
+         GTF, "GCA_000000002.1"),
+        # one of the 13 with no accession: genome_id is the assembly name
+        ("tursiops_truncatus", {"taxon_id": 9739, "assembly": "turTru1", "accession": "turTru1"},
+         GTF, ""),
+    )
+    con = duckdb.connect()
+    con.execute("ATTACH ':memory:' AS lake; CREATE SCHEMA lake.ensembl")
+    con.execute("CREATE TABLE assembly (genome_id VARCHAR, species VARCHAR)")
+    for i, (species, info, gtf, accession) in enumerate(assemblies):
+        ensembl.land_raw(cat, REL, species, ENS, url=str(gtf), info=info)
+        ensembl.transform(cat, REL, info, ENS)
+        con.execute("INSERT INTO assembly VALUES (?, ?)", [info["accession"], species])
+        con.execute(("INSERT INTO lake.ensembl.gtf " if i else "CREATE TABLE lake.ensembl.gtf AS ")
+                    + lake_ingest._select_sql(gtf, {
+                        "species": species, "ensembl_release": ENS,
+                        "ncbitaxon_id": info["taxon_id"], "assembly": info["assembly"],
+                        "genome_accession": accession}, None))
+    con.execute("""CREATE TABLE lake.ensembl.genome AS SELECT DISTINCT
+        nullif(genome_accession, '') AS genome_id, ncbitaxon_id, ensembl_release, species,
+        assembly AS assembly_name, 'ENSEMBL' AS source FROM lake.ensembl.gtf""")
+    for t in ("gene", "transcript", "exon"):
+        con.register("lander", cat.load_table(f"annotation.{t}").scan().to_arrow())
+        con.execute(f"""CREATE TABLE lake.ensembl.{t} AS SELECT l.* EXCLUDE (taxon_id, genome_id,
+            valid_from, valid_to), taxon_id AS ncbitaxon_id, species, '{ENS}' AS ensembl_release
+            FROM lander l JOIN assembly USING (genome_id) WHERE valid_to IS NULL""")
+
+    published = ("GCA_000000002.1", "turTru1")
+    for name, sql in ensembl.RELEASE.items():
+        con.register("lander", cat.load_table(name).scan().to_arrow())
+        cols = [c[0] for c in con.sql("DESCRIBE lander").fetchall()]
+        drop = (*ROW_HISTORY, "is_canonical") + (() if name == "reference.genome" else ("genome_id",))
+        keep = ", ".join(f'"{c}"' for c in cols if c not in drop)
+        current = " AND valid_to IS NULL" if "valid_to" in cols else ""
+        con.execute(f"CREATE OR REPLACE TABLE want AS SELECT {keep} FROM lander "
+                    f"WHERE genome_id IN {published}{current}")
+        con.execute(f"CREATE OR REPLACE TABLE got AS {sql}")
+        assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE want").fetchall(), name
+        assert con.sql("SELECT count(*) FROM want").fetchone()[0] > 0, name
+        for a, b in (("got", "want"), ("want", "got")):
+            assert con.sql(f"SELECT count(*) FROM (SELECT * FROM {a} EXCEPT ALL "
+                           f"SELECT * FROM {b})").fetchone()[0] == 0, (name, a)
+    assert con.sql(f"SELECT genome_id FROM ({ensembl.RELEASE['reference.genome']}) "
+                   "ORDER BY 1").fetchall() == [("GCA_000000002.1",), ("turTru1",)]
+
+    # An older Ensembl release beside the current one is not published, and the release
+    # number compares as an integer: '99' sorts after '116' as text.
+    before = {n: con.sql(f"SELECT count(*) FROM ({q})").fetchone()[0]
+              for n, q in ensembl.RELEASE.items()}
+    for t in ("gtf", "genome", "gene", "transcript", "exon"):
+        con.execute(f"INSERT INTO lake.ensembl.{t} SELECT * REPLACE ('99' AS ensembl_release) "
+                    f"FROM lake.ensembl.{t}")
+    assert {n: con.sql(f"SELECT count(*) FROM ({q})").fetchone()[0]
+            for n, q in ensembl.RELEASE.items()} == before
