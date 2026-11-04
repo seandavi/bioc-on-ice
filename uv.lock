@@ -44,8 +44,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "cdsci-lake" },
+    { name = "cdsci-publish" },
     { name = "duckdb" },
-    { name = "fsspec" },
     { name = "huggingface-hub" },
     { name = "mcp" },
     { name = "pyiceberg", extra = ["pyarrow", "sql-sqlite"] },
@@ -58,9 +58,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?rev=8a95e506c6b37ad55ac5a2786d9ad391fc3969f3" },
+    { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?rev=5a40ab9c71de2964d7d7ae658651524189dc1d25" },
+    { name = "cdsci-publish", git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=5a40ab9c71de2964d7d7ae658651524189dc1d25" },
     { name = "duckdb", specifier = ">=1.4" },
-    { name = "fsspec" },
     { name = "huggingface-hub", specifier = ">=2.2.0" },
     { name = "mcp", specifier = ">=1.2,<2" },
     { name = "pyiceberg", extras = ["sql-sqlite", "pyarrow"], specifier = ">=0.9" },
@@ -81,13 +81,22 @@ wheels = [
 [[package]]
 name = "cdsci-lake"
 version = "0.4.2"
-source = { git = "https://github.com/seandavi/cdsci-lake?rev=8a95e506c6b37ad55ac5a2786d9ad391fc3969f3#8a95e506c6b37ad55ac5a2786d9ad391fc3969f3" }
+source = { git = "https://github.com/seandavi/cdsci-lake?rev=5a40ab9c71de2964d7d7ae658651524189dc1d25#5a40ab9c71de2964d7d7ae658651524189dc1d25" }
 dependencies = [
     { name = "duckdb" },
     { name = "httpx" },
     { name = "loguru" },
     { name = "pydantic-settings" },
     { name = "tenacity" },
+]
+
+[[package]]
+name = "cdsci-publish"
+version = "0.1.0"
+source = { git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=5a40ab9c71de2964d7d7ae658651524189dc1d25#5a40ab9c71de2964d7d7ae658651524189dc1d25" }
+dependencies = [
+    { name = "duckdb" },
+    { name = "fsspec" },
 ]
 
 [[package]]

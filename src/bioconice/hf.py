@@ -20,10 +20,10 @@ import os
 from datetime import date
 from pathlib import Path
 
+from cdsci.publish import restore_sql, views_sql
 from huggingface_hub import CommitOperationAdd, CommitOperationDelete
 from huggingface_hub.errors import RepositoryNotFoundError
 
-from . import publish
 from .gate import GATE_FILE, manifest_sha256
 from .upload import PUBLIC_URL
 
@@ -203,8 +203,8 @@ def hf_push(release: Path, api, repo=REPO, apply=False):
 
     tables = [{**t, "bytes": (release / t["path"]).stat().st_size} for t in manifest["tables"]]
     generated = {
-        "views.sql": publish.views_sql(tables, "."),
-        "restore.sql": publish.restore_sql(tables, "."),
+        "views.sql": views_sql(tables, "."),
+        "restore.sql": restore_sql(tables, "."),
         "README.md": build_card(tag, manifest, gate, tables, repo),
     }
     files = [t["path"] for t in tables] + ["manifest.json", GATE_FILE]
