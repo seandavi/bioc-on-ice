@@ -42,7 +42,17 @@ RNAcentral under wall-clock caps (12), **Z** `provenance.release` (1, step 10).
 5. **E**: BioGRID, IntAct, then `annotation.interaction` as one union SELECT.
 6. **F**: OBO. **Owner decided (2026-11-01): land the OBO Graph JSON as a new
    `obo` source** (exact equivalence), not derived from the semantic-sql
-   `lake.ontology.*`.
+   `lake.ontology.*`. Equivalence on the Iceberg versions (2026-11-03): exact
+   for `ontology.*` and five raw tables. In `raw.obo__cl`, `uberon` and
+   `mondo`, the published `meta` text changes byte for byte while its JSON
+   value stays the same: 21,827, 34,357 and 40,284 rows now carry upstream's
+   text verbatim, with upstream key order and no explicit nulls. Iceberg
+   holds the #83 lander's `to_json` of an inferred struct for those three
+   ontologies, and #92 replaced that read with JSON paths before the other
+   five were landed. Every one of those rows pairs by
+   `(kind, id, sub, pred, obj)` and differs in `meta` only, and the two
+   strings parse to the same value once null keys are dropped. Release notes
+   should say so for anyone string-matching `meta`.
 7. **G**: Ensembl. **Owner decided (2026-11-01): publish today's 276
    assemblies** (the lake holds 359; memory `ensembl-one-assembly-per-taxon`);
    widening is a separate decision with #94. Then `identifier_mapping` as a union
