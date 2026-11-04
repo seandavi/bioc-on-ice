@@ -174,6 +174,14 @@ def _mi(col):
             f"""NULLIF(regexp_extract({col}, '^psi-mi:"MI:[0-9]+"\\("?(.*?)"?\\)(\\||$)', 1), '')""")
 
 
+# Read from cdsci-lake (#183): lake.intact.interaction is raw.intact__mitab without
+# landed_in, one IntAct release at a time, plus its key (file_name, line_number): the files'
+# whole-row duplicates leave no other. Releases carry no row-history columns (#222).
+# The annotation.interaction slice stays on Iceberg (map, E3).
+RELEASE = {"raw.intact__mitab":
+           "SELECT * EXCLUDE (file_name, line_number) FROM lake.intact.interaction"}
+
+
 def transform(cat, release, version):
     """Phase 2: IntAct's rows of annotation.interaction, in its own identifier space."""
     con = duckdb.connect()

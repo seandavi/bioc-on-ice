@@ -158,6 +158,11 @@ BUNDLE = DatasetContract(
         declared_contract("resource.resource_relationship",
                           license=f"CC-BY-4.0 AND {ENCODE_LICENSE} AND {BEDBASE_LICENSE}"),
         declared_contract("raw.biogrid__interactions", ("biogrid_interaction_id",)),
+        # No key, as raw.gwas_catalog__associations: (file_name, line_number), the lake's
+        # key, is not published, and the files hold whole-row duplicates.
+        declared_contract("raw.intact__mitab", (), grain=(
+            "one row per data line of intact.txt and intact_negative.txt; whole-row "
+            "duplicates kept (2,144 rows in 1,052 groups at 2026-01-09)")),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -184,7 +189,6 @@ UNCONTRACTED_TABLES = frozenset({
     "provenance.release",
     "raw.ensembl__gtf",
     "raw.icite__metadata",
-    "raw.intact__mitab",
     "raw.metadata",
     "raw.obo__cl",
     "raw.obo__doid",
