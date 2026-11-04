@@ -15,7 +15,13 @@ ONLY = ["annotation.gene", "annotation.exon", "raw.ensembl__gtf", "provenance.re
 
 @pytest.fixture
 def con(tmp_path, monkeypatch):
-    """The warehouse after two Ensembl releases (so some rows are closed), as DuckDB `bioc`."""
+    """The warehouse after two Ensembl releases (so some rows are closed), as DuckDB `bioc`.
+
+    The Ensembl tables publish from the lake since #183 G1 (test_ensembl.py checks those
+    SELECTs); here they keep their Iceberg SELECTs, to exercise publish over row history."""
+    monkeypatch.setattr(publish, "TABLES", [
+        (s, t, publish._current(f"{s}.{t}", publish.DECLARED[f"{s}.{t}"])
+         if f"{s}.{t}" in ensembl.RELEASE else sql) for s, t, sql in publish.TABLES])
     monkeypatch.setenv("BIOCONICE_WAREHOUSE", str(tmp_path / "warehouse"))
     monkeypatch.delenv("BIOCONICE_URI", raising=False)
     cat = catalog()
