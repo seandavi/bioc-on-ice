@@ -158,10 +158,12 @@ Acceptance:
 
 Retry:
 
-- **A run fails or times out.** Each table's write is its own transaction, so tables
-  are either at the new dump or untouched, never half-merged. Run the same command
-  again: merge is idempotent and finishes the rest. Then run once more and require
-  `idempotent`.
+- **A run fails or times out.** Tables land one at a time, in the order gene, disease,
+  chemical, species, mutation. Each table's line delete, merge and prune (every batch,
+  with `--batches`) are one transaction and one snapshot, so the tables before the
+  failing one are at the new dump and the failing table and those after it are as
+  they were before the run, never half-merged. Run the same command again: merge is
+  idempotent and finishes the rest. Then run once more and require `idempotent`.
 - **A download dies.** It resumes from `<file>.part` on the next run.
 - **A check fails** (`line N has K fields`, `Type other than`, `zero rows`): nothing
   was written. Delete that day's `raw/pubtator3/<date>/` file and re-run; a second
