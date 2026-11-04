@@ -116,7 +116,7 @@ def test_dropped_table_fails(tmp_path, reference, monkeypatch, capsys):
 
 def test_reference_defaults_to_latest(tmp_path, monkeypatch):
     seen = []
-    monkeypatch.setattr(gate, "gate", lambda release, reference, allow: seen.append(reference) or True)
+    monkeypatch.setattr(gate, "gate", lambda release, reference, *allow: seen.append(reference) or True)
     assert _run(monkeypatch, "--release", str(tmp_path)) == 0
     assert seen == ["https://data.bioconice.cancerdatasci.org/latest"]
 
@@ -181,3 +181,42 @@ def test_another_column_change_fails_even_when_listed(tmp_path, monkeypatch, cap
     argv, _ = _with_history(tmp_path, "SELECT i::VARCHAR AS pmid, 1 AS extra FROM range(5) t(i)")
     assert _run(monkeypatch, *argv, "--allow-schema-change", "annotation.pubmed__article") == 1
     assert "  FAIL  columns_unchanged  (differs:" in capsys.readouterr().out
+
+
+# #183: a lake-migrated table whose text column became typed.
+def _retyped(tmp_path, n=5):
+    return _with_history(tmp_path, f"SELECT i AS pmid FROM range({n}) t(i)")
+
+
+def test_an_allowed_column_change_passes_and_is_recorded(tmp_path, monkeypatch, capsys):
+    argv, candidate = _retyped(tmp_path)
+    assert _run(monkeypatch, *argv, "--allow-column-change", "annotation.pubmed__article") == 0
+    out = capsys.readouterr().out
+    detail = "removed valid_from VARCHAR, valid_to VARCHAR; retyped pmid VARCHAR -> BIGINT"
+    assert f"  ok    columns_unchanged  (column change allowed: {detail})" in out
+    assert f"column change allowed (owner approval, #183): annotation.pubmed__article: {detail}" in out
+    assert json.loads((candidate / gate.GATE_FILE).read_text())["column_changes"] == {
+        "annotation.pubmed__article": {
+            "added": {}, "removed": {"valid_from": "VARCHAR", "valid_to": "VARCHAR"},
+            "retyped": {"pmid": {"from": "VARCHAR", "to": "BIGINT"}}, "reordered": False}}
+
+
+def test_a_column_change_of_an_unlisted_table_fails(tmp_path, monkeypatch, capsys):
+    argv, candidate = _retyped(tmp_path)
+    assert _run(monkeypatch, *argv, "--allow-column-change", "provenance.release") == 1
+    assert "  FAIL  columns_unchanged  (differs:" in capsys.readouterr().out
+    assert not (candidate / gate.GATE_FILE).exists()
+
+
+def test_an_allowed_column_change_still_fails_row_bounds(tmp_path, monkeypatch, capsys):
+    argv, _ = _retyped(tmp_path, n=50)
+    assert _run(monkeypatch, *argv, "--allow-column-change", "annotation.pubmed__article") == 1
+    out = capsys.readouterr().out
+    assert "  ok    columns_unchanged  (column change allowed:" in out
+    assert "  FAIL  row_count_within_bounds  (50 rows vs previous 5" in out
+
+
+def test_column_diff_records_added_renamed_and_reordered():
+    assert gate.column_diff([("a", "INTEGER"), ("b", "VARCHAR"), ("c", "DATE")],
+                            [("b", "VARCHAR"), ("a", "INTEGER"), ("d", "DATE")]) == {
+        "added": {"d": "DATE"}, "removed": {"c": "DATE"}, "retyped": {}, "reordered": True}
