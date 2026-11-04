@@ -135,3 +135,12 @@ def test_every_column_is_documented():
     for identifier, d in schemas.TABLES.items():
         if "pubtator3__" in identifier:
             assert d.comment and all(f.doc for f in d.schema.fields), identifier
+
+
+def test_release_select_over_the_lake_reproduces_the_lander(cat, tmp_path, release_matches_lander):
+    """#183 H2: lake.pubtator3.<kind>_annotation is each file keyed by line_number, and
+    the mention table is derived from all five as transform() derives it."""
+    pubtator3.ingest(cat, REL, dump(tmp_path, "d1", DUMP))
+    lake = {f"lake.pubtator3.{k}_annotation": f"raw.pubtator3__{k}" for k in pubtator3.KINDS}
+    release_matches_lander(cat, lake, pubtator3.RELEASE, line_numbered=lake,
+                           stamped={n: "'2026-09-19' AS pubtator3_version" for n in lake})
