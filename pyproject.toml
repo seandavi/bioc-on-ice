@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-cdsci-lake = { git = "https://github.com/seandavi/cdsci-lake", rev = "5bfeb79e8059262c9fc18930c27f44c72a7f39e3" }
+cdsci-lake = { git = "https://github.com/seandavi/cdsci-lake", rev = "fa6740c86a597920a6e651b14fc4eb16a96e12fa" }
 
 [project.scripts]
 bioconice = "bioconice.__main__:main"
