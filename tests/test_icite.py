@@ -115,3 +115,40 @@ def test_invariant_violation_fails_before_any_write(cat, tmp_path):
         icite.ingest(cat, REL, snapshot="2026-08", csv=str(bad))
     assert "annotation.icite__publication" not in {".".join(t) for ns in cat.list_namespaces()
                                                    for t in cat.list_tables(ns)}
+
+
+def test_release_selects_over_the_lake_hold_the_landers_values(cat, tmp_path):
+    """#183 H1: the release reads lake.icite.{metadata,citation} as cdsci-lake's own icite
+    source lands this CSV, typed as the lake types them. Recast to that shape
+    (icite.AS_PUBLISHED), the lander's current rows are the same values, and the columns
+    are icite.PUBLISHED. A PMID the lake had from an older snapshot is pruned."""
+    from cdsci.lake import Settings, lake_connect
+    from cdsci.lake.sources import icite as lake_icite
+
+    settings = Settings(lake_backend="local", storage_base_uri=f"file://{tmp_path}/lake")
+    old = tmp_path / "old.csv"
+    header, first = Path(CSV).read_text().splitlines()[:2]
+    old.write_text(f"{header}\n{first.replace('1000000', '4000000', 1)}\n")
+    lake_icite.ingest(file=str(old), version="2026-07", settings=settings)
+    lake_icite.ingest(file=CSV, version="2026-08", settings=settings)
+    icite.ingest(cat, REL, snapshot="2026-08", csv=CSV)
+
+    arrow = {"BIGINT": "int64", "INTEGER": "int32", "VARCHAR": "string", "DOUBLE": "double",
+             "BOOLEAN": "bool", "BIGINT[]": "list<int64>",
+             "TIMESTAMP": "timestamp[us]"}
+    con = lake_connect(settings)
+    for name, sql in icite.RELEASE.items():
+        con.register("lander", cat.load_table(name).scan().to_arrow())
+        current = " WHERE valid_to IS NULL" if "valid_to" in con.sql("DESCRIBE lander").columns \
+            else ""
+        con.execute("CREATE OR REPLACE TEMP TABLE want AS "
+                    + icite.AS_PUBLISHED[name].format(f"(SELECT * FROM lander{current})"))
+        con.execute(f"CREATE OR REPLACE TEMP TABLE got AS {sql}")
+        got = [(c[0], arrow[c[1]]) for c in con.sql("DESCRIBE got").fetchall()]
+        assert got == [(c, t) for c, t, _ in icite.PUBLISHED[name][1]], name
+        assert con.sql("DESCRIBE got").fetchall() == con.sql("DESCRIBE want").fetchall(), name
+        assert con.sql("SELECT count(*) FROM got").fetchone()[0] > 0, name
+        for a, b in (("got", "want"), ("want", "got")):
+            diff = con.sql(f"SELECT * FROM {a} EXCEPT ALL SELECT * FROM {b}")
+            assert not diff.shape[0], (name, a)
+    assert con.sql("SELECT count(*) FROM lake.icite.metadata").fetchone()[0] == 3

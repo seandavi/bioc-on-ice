@@ -20,7 +20,7 @@ from fsspec.implementations.dirfs import DirFileSystem
 from fsspec.implementations.local import LocalFileSystem
 
 from . import (bedbase, biogrid, bugsigdb, cellosaurus, cellxgene, complexportal, encode, ensembl,
-               eqtlcatalogue, gwas_catalog, hgnc, intact, mane, ncbi, ncbi_accession, ncbi_go,
+               eqtlcatalogue, gwas_catalog, hgnc, icite, intact, mane, ncbi, ncbi_accession, ncbi_go,
                ncbi_orthologs, ncbi_pubmed, obo, wikipathways)
 from .release import SIGNATURE_TAXON, SIGNATURE_TAXON_SELECT
 from .schemas import TABLES as DECLARED
@@ -56,7 +56,7 @@ FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE, **wikipathways.RELEASE,
              **ncbi.RELEASE, **ncbi_accession.RELEASE, **ncbi_orthologs.RELEASE,
              **eqtlcatalogue.RELEASE, **cellxgene.RELEASE, **encode.RELEASE,
              **bedbase.RELEASE, **biogrid.RELEASE, **intact.RELEASE, **obo.RELEASE,
-             **ensembl.RELEASE,
+             **ensembl.RELEASE, **icite.RELEASE,
              # Cross-source (ADR-0015 b): each writer's slice, from its own lake tables.
              "resource.resource_relationship": " UNION ALL ".join(
                  f"SELECT * FROM ({m.RELATIONSHIP})" for m in (eqtlcatalogue, cellxgene, encode,
@@ -148,6 +148,8 @@ def connect():
 
 def _docs(name):
     """(table comment, {column: doc}) from the declarations; nothing for an undeclared table."""
+    if name in icite.PUBLISHED:
+        return icite.published_docs(name, DECLARED[name])
     if name in DECLARED:
         d = DECLARED[name]
         return d.comment, {f.name: f.doc for f in d.schema.fields if f.doc}

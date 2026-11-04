@@ -27,6 +27,7 @@ from cdsci.lake.publish.release import AcceptanceCheck
 from cdsci.lake.publish.verify import verify_release_over_release
 from pyiceberg.types import ListType
 
+from . import icite
 from .publish import PUBMED_ARTICLE, ROW_HISTORY, _lit
 from .release import BUGSIGDB
 from .schemas import _OBO_ONTOLOGIES
@@ -43,20 +44,27 @@ def _arrow(t):
 
 
 def declared_contract(name, primary_key=None, references=None, license=None, grain=None,
-                      unpublished=()):
+                      unpublished=(), published=None):
     """A TableContract from the table's declaration in schemas.py: its comment, columns,
     docs and licence (`license` where it declares none), keyed by `primary_key` (default:
     its business key). `grain` is for a table with no key. Row-history columns are not
-    published (#222), so not in the contract, nor are the `unpublished` ones."""
+    published (#222), so not in the contract, nor are the `unpublished` ones. `published`
+    is a table whose released columns differ from its declaration (icite.PUBLISHED)."""
     d = DECLARED[name]
     key = tuple(primary_key or d.business_key)
+    if published:
+        comment, docs = icite.published_docs(name, d)
+        columns = tuple(ColumnContract(c, t, docs[c], c not in key)
+                        for c, t, _ in icite.PUBLISHED[name][1])
+    else:
+        comment, columns = d.comment, None
     return TableContract(
-        name=name, description=d.comment, grain=grain or f"one row per ({', '.join(key)})",
+        name=name, description=comment, grain=grain or f"one row per ({', '.join(key)})",
         primary_key=key, temporal_model=TemporalModel.UPSERT_LATEST_SNAPSHOT,
         owner="bioc-on-ice", license=license or d.properties["bioc.license"],
-        columns=tuple(ColumnContract(f.name, _arrow(f.field_type), f.doc or "", not f.required)
-                      for f in d.schema.fields
-                      if f.name not in ROW_HISTORY and f.name not in unpublished),
+        columns=columns or tuple(
+            ColumnContract(f.name, _arrow(f.field_type), f.doc or "", not f.required)
+            for f in d.schema.fields if f.name not in ROW_HISTORY and f.name not in unpublished),
         references=references or {})
 
 
@@ -196,6 +204,19 @@ BUNDLE = DatasetContract(
                           license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
         declared_contract("annotation.exon", ("exon_id", "transcript_id", "taxon_id", "source"),
                           license=ENSEMBL_LICENSE, unpublished=("genome_id",)),
+        # Published typed from cdsci-lake (icite.PUBLISHED). schemas.py declares no
+        # bioc.license for iCite: its Figshare snapshots are CC BY 4.0. citing_pmid is always
+        # an iCite record; cited_pmid is not (68,932 edges in 2026-08 cite a paper iCite has
+        # no record of), so only citing_pmid is a reference.
+        declared_contract("raw.icite__metadata", ("pmid",), license="CC-BY-4.0",
+                          published=True),
+        declared_contract("annotation.icite__publication", license="CC-BY-4.0",
+                          published=True),
+        declared_contract("annotation.icite__metrics", ("pmid",), license="CC-BY-4.0",
+                          published=True, references={
+                              "pmid": "annotation.icite__publication.pmid"}),
+        declared_contract("annotation.icite__citation", license="CC-BY-4.0", published=True,
+                          references={"citing_pmid": "annotation.icite__publication.pmid"}),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -207,14 +228,10 @@ GATE_FILE = "gate.json"
 # Tables with no TableContract yet (#208). They get only the column and row-count checks:
 # no key or join checks. Writing a contract for one means deleting its line here.
 UNCONTRACTED_TABLES = frozenset({
-    "annotation.icite__citation",
-    "annotation.icite__metrics",
-    "annotation.icite__publication",
     "annotation.identifier_mapping",
     "annotation.pubtator3__mention",
     "annotation.rnacentral__rna",
     "provenance.release",
-    "raw.icite__metadata",
     "raw.metadata",
     "raw.pubtator3__chemical",
     "raw.pubtator3__disease",

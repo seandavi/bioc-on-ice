@@ -177,6 +177,118 @@ def _check(con):
         raise ValueError("icite: derived rows violate " + "; ".join(f"{k} ({v:,} rows)" for k, v in failed.items()))
 
 
+# Read from cdsci-lake (#183 H1): lake.icite.metadata and lake.icite.citation, typed as the
+# lake types them. The schema drifts from the Iceberg tables', owner-approved: pmid is
+# BIGINT, raw is typed, relative_citation_ratio is rcr and snapshot is snapshot_version (the
+# load in which a row's values last changed). icite__publication keeps the lander's DOI and
+# whitespace normalisation, applied to the lake's lower-cased doi.
+_LAKE = "lake.icite.metadata"
+RELEASE = {
+    "raw.icite__metadata": f"SELECT * FROM {_LAKE}",
+    "annotation.icite__publication": f"""
+        SELECT pmid, {DOI} AS doi, NULLIF(trim(title), '') AS title,
+               NULLIF(trim(authors), '') AS authors, NULLIF(trim(journal), '') AS journal,
+               year, is_research_article, is_clinical
+        FROM {_LAKE}""",
+    "annotation.icite__metrics": f"""
+        SELECT pmid, snapshot_version, rcr, nih_percentile, citation_count, citations_per_year,
+               expected_citations_per_year, field_citation_rate, human, animal,
+               molecular_cellular, apt, provisional
+        FROM {_LAKE}""",
+    "annotation.icite__citation": "SELECT citing_pmid, cited_pmid, shard FROM lake.icite.citation",
+}
+# The lander's current rows in RELEASE's shape, for the by-value equivalence (#183 H1): {}
+# is the Iceberg table. snapshot_version equals the lander's snapshot only for a lake
+# loaded once, at that snapshot.
+_LIST = "TRY_CAST(string_split(NULLIF({0}, ''), ' ') AS BIGINT[]) AS {0}"
+AS_PUBLISHED = {
+    "raw.icite__metadata": (
+        "SELECT pmid::BIGINT AS pmid, NULLIF(lower(doi), '') AS doi, year::INTEGER AS year, "
+        "title, journal, relative_citation_ratio::DOUBLE AS rcr, "
+        + "".join(f"{c}::{t} AS {c}, " for c, t in (
+            ("nih_percentile", "DOUBLE"), ("citation_count", "BIGINT"),
+            ("citations_per_year", "DOUBLE"), ("expected_citations_per_year", "DOUBLE"),
+            ("field_citation_rate", "DOUBLE")))
+        + f"{_flag('is_research_article')} AS is_research_article, "
+          f"{_flag('is_clinical')} AS is_clinical, apt::DOUBLE AS apt, human::DOUBLE AS human, "
+          "animal::DOUBLE AS animal, snapshot AS snapshot_version, NULLIF(authors, '') AS authors, "
+          f"molecular_cellular::DOUBLE AS molecular_cellular, {_flag('provisional')} AS provisional, "
+          "x_coord::DOUBLE AS x_coord, y_coord::DOUBLE AS y_coord, "
+        + ", ".join(_LIST.format(c) for c in ("cited_by_clin", "cited_by", '"references"'))
+        + ", regexp_replace(last_modified, '\\[.*\\]$', '')::TIMESTAMP AS last_modified FROM {}"),
+    "annotation.icite__publication":
+        "SELECT pmid::BIGINT AS pmid, doi, title, authors, journal, year, is_research_article, "
+        "is_clinical FROM {}",
+    "annotation.icite__metrics":
+        "SELECT pmid::BIGINT AS pmid, snapshot AS snapshot_version, relative_citation_ratio AS rcr, "
+        "nih_percentile, citation_count, citations_per_year, expected_citations_per_year, "
+        "field_citation_rate, human, animal, molecular_cellular, apt, provisional FROM {}",
+    "annotation.icite__citation":
+        "SELECT citing_pmid::BIGINT AS citing_pmid, cited_pmid::BIGINT AS cited_pmid, shard FROM {}",
+}
+_SNAPSHOT_VERSION = ("iCite snapshot label, e.g. '2026-08', of the load in which this row's "
+                     "values last changed.")
+_PMIDS = "PMIDs, as a list; NULL when iCite lists none."
+# The published columns, in order, as (name, arrow type, doc); None takes the declared doc
+# of the same name. The comments replace declarations that no longer describe the release.
+PUBLISHED = {
+    "raw.icite__metadata": (
+        "The NIH iCite database snapshot, every column typed, the citation lists included, "
+        "from cdsci-lake's lake.icite.metadata (pruned to the latest snapshot). CC BY 4.0; "
+        "cite iCite.", (
+            ("pmid", "int64", "PubMed id."),
+            ("doi", "string", "DOI as iCite prints it, lower-cased; NULL when blank. "
+                              "annotation.icite__publication.doi is normalised."),
+            ("year", "int32", None), ("title", "string", None), ("journal", "string", None),
+            ("rcr", "double", "RCR: field- and time-normalised citation rate, NIH R01 "
+                              "papers = 1.0."),
+            ("nih_percentile", "double", None), ("citation_count", "int64", None),
+            ("citations_per_year", "double", None),
+            ("expected_citations_per_year", "double", None),
+            ("field_citation_rate", "double", None),
+            ("is_research_article", "bool", "Publication types consistent with primary "
+                                            "research, per iCite."),
+            ("is_clinical", "bool", "The article itself is clinical, per iCite."),
+            ("apt", "double", None), ("human", "double", None), ("animal", "double", None),
+            ("snapshot_version", "string", _SNAPSHOT_VERSION),
+            ("authors", "string", None), ("molecular_cellular", "double", None),
+            ("provisional", "bool", "RCR is provisional (paper under two years old)."),
+            ("x_coord", "double", None), ("y_coord", "double", None),
+            ("cited_by_clin", "list<int64>", "Clinical articles citing this one: " + _PMIDS),
+            ("cited_by", "list<int64>", "Articles citing this one: " + _PMIDS),
+            ("references", "list<int64>", "Articles this one cites: " + _PMIDS),
+            ("last_modified", "timestamp[us]", "Upstream last-modified time of the record, "
+                                               "UTC."))),
+    "annotation.icite__publication": (None, (
+        ("pmid", "int64", None), ("doi", "string", None), ("title", "string", None),
+        ("authors", "string", None), ("journal", "string", None), ("year", "int32", None),
+        ("is_research_article", "bool", None), ("is_clinical", "bool", None))),
+    "annotation.icite__metrics": (
+        "iCite's citation metrics for one paper as of the latest monthly snapshot, keyed by "
+        "pmid; snapshot_version is the snapshot in which the row's values last changed. "
+        "Source: NIH iCite, CC BY 4.0.", (
+            ("pmid", "int64", None), ("snapshot_version", "string", _SNAPSHOT_VERSION),
+            ("rcr", "double", "RCR: field- and time-normalised citation rate; NIH R01-funded "
+                              "papers average 1.0."),
+            ("nih_percentile", "double", None), ("citation_count", "int64", None),
+            ("citations_per_year", "double", None),
+            ("expected_citations_per_year", "double", None),
+            ("field_citation_rate", "double", None), ("human", "double", None),
+            ("animal", "double", None), ("molecular_cellular", "double", None),
+            ("apt", "double", None), ("provisional", "bool", None))),
+    "annotation.icite__citation": (None, (
+        ("citing_pmid", "int64", None), ("cited_pmid", "int64", None),
+        ("shard", "int32", None))),
+}
+
+
+def published_docs(name, declared):
+    """(table comment, {column: doc}) of a PUBLISHED table, given its declaration."""
+    comment, columns = PUBLISHED[name]
+    docs = {f.name: f.doc for f in declared.schema.fields}
+    return comment or declared.comment, {c: doc or docs[c] for c, _, doc in columns}
+
+
 def transform(cat, release, snapshot):
     """Phase 2: the paper (Type 2, by pmid) and its metrics (by pmid and snapshot).
 
