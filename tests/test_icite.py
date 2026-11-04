@@ -152,3 +152,11 @@ def test_release_selects_over_the_lake_hold_the_landers_values(cat, tmp_path):
             diff = con.sql(f"SELECT * FROM {a} EXCEPT ALL SELECT * FROM {b}")
             assert not diff.shape[0], (name, a)
     assert con.sql("SELECT count(*) FROM lake.icite.metadata").fetchone()[0] == 3
+    # raw.metadata keeps its v2026-11-03 columns: the lake's added ones stay out
+    assert [c[:2] for c in con.sql(f"DESCRIBE {icite.METADATA_17}").fetchall()] == [
+        ("pmid", "BIGINT"), ("doi", "VARCHAR"), ("year", "INTEGER"), ("title", "VARCHAR"),
+        ("journal", "VARCHAR"), ("rcr", "DOUBLE"), ("nih_percentile", "DOUBLE"),
+        ("citation_count", "BIGINT"), ("citations_per_year", "DOUBLE"),
+        ("expected_citations_per_year", "DOUBLE"), ("field_citation_rate", "DOUBLE"),
+        ("is_research_article", "BOOLEAN"), ("is_clinical", "BOOLEAN"), ("apt", "DOUBLE"),
+        ("human", "DOUBLE"), ("animal", "DOUBLE"), ("snapshot_version", "VARCHAR")]

@@ -45,6 +45,8 @@ from pathlib import Path
 import duckdb
 from pyiceberg.expressions import AlwaysTrue, EqualTo
 
+from cdsci.lake.sources.icite.ingest import ADDED
+
 from . import merge
 from .ncbi import _land
 
@@ -183,6 +185,8 @@ def _check(con):
 # load in which a row's values last changed). icite__publication keeps the lander's DOI and
 # whitespace normalisation, applied to the lake's lower-cased doi.
 _LAKE = "lake.icite.metadata"
+# raw.metadata: lake.icite.metadata's original 17 columns, without those added for #183 H1.
+METADATA_17 = f"SELECT * EXCLUDE ({', '.join(f'\"{c}\"' for c in ADDED)}) FROM {_LAKE}"
 RELEASE = {
     "raw.icite__metadata": f"SELECT * FROM {_LAKE}",
     "annotation.icite__publication": f"""

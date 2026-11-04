@@ -71,8 +71,9 @@ TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))
     # contract's table (release.py), read from the lake; raw.metadata has no writer here.
     ("annotation", "signature_taxon", SIGNATURE_TAXON_SELECT),
     # iCite metadata straight from cdsci-lake (#183 wave A): the Iceberg copy was its old
-    # reverse-ETL export, same 17 columns and types.
-    ("raw", "metadata", "SELECT * FROM lake.icite.metadata"),
+    # reverse-ETL export, same 17 columns and types. The columns the lake added for
+    # raw.icite__metadata (#183 H1) stay out, so this table's columns do not change.
+    ("raw", "metadata", icite.METADATA_17),
     # From cdsci-lake (#194); becomes lake.pubmed.article with seandavi/cdsci-lake#136.
     ("annotation", "pubmed__article", "SELECT * FROM lake.omicidx.pubmed_article"),
 ]
