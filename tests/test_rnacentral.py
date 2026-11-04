@@ -111,6 +111,15 @@ def test_derives_taxon_qualified_ids_under_the_shared_namespaces(cat, tsv):
          "valid_from": REL, "valid_to": None}]
 
 
+def test_release_selects_over_the_lake_reproduce_the_lander(cat, tsv, release_matches_lander):
+    """#183: the release reads lake.rnacentral.id_mapping, not raw.rnacentral__id_mapping, and
+    derives annotation.rnacentral__rna for the published taxa only (9598 and 349476 are in
+    raw, not derived)."""
+    rnacentral.ingest(cat, REL, list(rnacentral.RNA_TAXA), "27", tsv)
+    release_matches_lander(cat, {"lake.rnacentral.id_mapping": "raw.rnacentral__id_mapping"},
+                           rnacentral.RELEASE, line_numbered={"lake.rnacentral.id_mapping"})
+
+
 def test_rerun_is_a_noop(cat, tsv):
     rnacentral.land_raw(cat, REL, "27", tsv)
     rnacentral.transform(cat, REL, 9606)

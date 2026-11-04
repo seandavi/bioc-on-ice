@@ -5,7 +5,9 @@ columns and types unchanged, row count within bounds, key not null and unique, j
 coverage. This module supplies bioc-on-ice's contracts and its exemption list, refuses a
 reference that is not older than the bundle, checks the bundle's manifest.json against its
 own Parquet, runs the README queries on the bundle (optional), and prints the report.
-`--allow-schema-change` lets named tables drop the row-history columns (#222), owner-approved.
+`--allow-schema-change` lets named tables drop the row-history columns (#222), and
+`--allow-column-change` lets them change columns in any way (lake migration, #183); both
+owner-approved, and both record the exact change.
 Reads the bundle and the reference's manifest.json only. A pass leaves gate.json in the
 bundle, bound to its manifest.json by sha256: `bioconice hf-push` pushes only such a bundle.
 """
@@ -27,7 +29,7 @@ from cdsci.lake.publish.release import AcceptanceCheck
 from cdsci.lake.publish.verify import verify_release_over_release
 from pyiceberg.types import ListType
 
-from . import pubtator3
+from . import icite, pubtator3
 from .publish import PUBMED_ARTICLE, ROW_HISTORY, _lit
 from .release import BUGSIGDB
 from .schemas import _OBO_ONTOLOGIES
@@ -44,20 +46,27 @@ def _arrow(t):
 
 
 def declared_contract(name, primary_key=None, references=None, license=None, grain=None,
-                      unpublished=()):
+                      unpublished=(), published=None):
     """A TableContract from the table's declaration in schemas.py: its comment, columns,
     docs and licence (`license` where it declares none), keyed by `primary_key` (default:
     its business key). `grain` is for a table with no key. Row-history columns are not
-    published (#222), so not in the contract, nor are the `unpublished` ones."""
+    published (#222), so not in the contract, nor are the `unpublished` ones. `published`
+    is a table whose released columns differ from its declaration (icite.PUBLISHED)."""
     d = DECLARED[name]
     key = tuple(primary_key or d.business_key)
+    if published:
+        comment, docs = icite.published_docs(name, d)
+        columns = tuple(ColumnContract(c, t, docs[c], c not in key)
+                        for c, t, _ in icite.PUBLISHED[name][1])
+    else:
+        comment, columns = d.comment, None
     return TableContract(
-        name=name, description=d.comment, grain=grain or f"one row per ({', '.join(key)})",
+        name=name, description=comment, grain=grain or f"one row per ({', '.join(key)})",
         primary_key=key, temporal_model=TemporalModel.UPSERT_LATEST_SNAPSHOT,
         owner="bioc-on-ice", license=license or d.properties["bioc.license"],
-        columns=tuple(ColumnContract(f.name, _arrow(f.field_type), f.doc or "", not f.required)
-                      for f in d.schema.fields
-                      if f.name not in ROW_HISTORY and f.name not in unpublished),
+        columns=columns or tuple(
+            ColumnContract(f.name, _arrow(f.field_type), f.doc or "", not f.required)
+            for f in d.schema.fields if f.name not in ROW_HISTORY and f.name not in unpublished),
         references=references or {})
 
 
@@ -201,6 +210,25 @@ BUNDLE = DatasetContract(
         *(declared_contract(f"raw.pubtator3__{kind}", (), grain=(
             f"one row per line of {kind}2pubtator3.gz")) for kind in pubtator3.KINDS),
         declared_contract("annotation.pubtator3__mention"),
+        # No key, as raw.intact__mitab: line_number, the lake's key, is not published, and no
+        # column set the file declares is one (gene_name is NULL on 86% of rows).
+        declared_contract("raw.rnacentral__id_mapping", (), grain=(
+            "one row per line of the release's id_mapping.tsv.gz: one cross-reference from a "
+            "sequence in one organism to a member database's record")),
+        declared_contract("annotation.rnacentral__rna"),
+        # Published typed from cdsci-lake (icite.PUBLISHED). schemas.py declares no
+        # bioc.license for iCite: its Figshare snapshots are CC BY 4.0. citing_pmid is always
+        # an iCite record; cited_pmid is not (68,932 edges in 2026-08 cite a paper iCite has
+        # no record of), so only citing_pmid is a reference.
+        declared_contract("raw.icite__metadata", ("pmid",), license="CC-BY-4.0",
+                          published=True),
+        declared_contract("annotation.icite__publication", license="CC-BY-4.0",
+                          published=True),
+        declared_contract("annotation.icite__metrics", ("pmid",), license="CC-BY-4.0",
+                          published=True, references={
+                              "pmid": "annotation.icite__publication.pmid"}),
+        declared_contract("annotation.icite__citation", license="CC-BY-4.0", published=True,
+                          references={"citing_pmid": "annotation.icite__publication.pmid"}),
     )})
 CONTRACTS = [BUGSIGDB, BUNDLE]
 # latest/ is the newest completed release: upload writes its manifest.json last.
@@ -212,15 +240,9 @@ GATE_FILE = "gate.json"
 # Tables with no TableContract yet (#208). They get only the column and row-count checks:
 # no key or join checks. Writing a contract for one means deleting its line here.
 UNCONTRACTED_TABLES = frozenset({
-    "annotation.icite__citation",
-    "annotation.icite__metrics",
-    "annotation.icite__publication",
     "annotation.identifier_mapping",
-    "annotation.rnacentral__rna",
     "provenance.release",
-    "raw.icite__metadata",
     "raw.metadata",
-    "raw.rnacentral__id_mapping",
 })
 
 
@@ -295,11 +317,48 @@ def allow_dropped_history(checks, allowed, ref_manifest, manifest):
     return out, changes
 
 
+def column_diff(before, after):
+    """The exact change from column list `before` to `after`, of (name, type) pairs: a
+    rename is a removal and an addition."""
+    old, new = dict(before), dict(after)
+    return {"added": {n: t for n, t in after if n not in old},
+            "removed": {n: t for n, t in before if n not in new},
+            "retyped": {n: {"from": t, "to": new[n]} for n, t in before
+                        if n in new and new[n] != t},
+            "reordered": [n for n, _ in before if n in new] != [n for n, _ in after if n in old]}
+
+
+def _describe(diff):
+    parts = [f"{k} " + ", ".join(f"{n} {t}" for n, t in diff[k].items())
+             for k in ("added", "removed") if diff[k]]
+    if diff["retyped"]:
+        parts.append("retyped " + ", ".join(f"{n} {t['from']} -> {t['to']}"
+                                            for n, t in diff["retyped"].items()))
+    return "; ".join(parts + ["reordered"] * diff["reordered"]) or "none"
+
+
+def allow_changed_columns(checks, allowed, ref_manifest, manifest):
+    """(checks, {table: column_diff}): a failed columns_unchanged of a table in `allowed`
+    passes whatever its change from the reference (owner approval, #183 lake migration)."""
+    before, after = _columns(ref_manifest), _columns(manifest)
+    changes = {t: column_diff(before.get(t, []), after.get(t, [])) for t in sorted(allowed)}
+    out = []
+    for c in checks:
+        table = c.name.removesuffix(".columns_unchanged")
+        if not c.passed and table in changes and c.name != table:
+            c = AcceptanceCheck(c.name, True, c.required,
+                                f"column change allowed: {_describe(changes[table])}")
+        out.append(c)
+    return out, changes
+
+
 def gate(release: Path, reference: str | None = DEFAULT_REFERENCE,
-         allow_schema_change=()) -> bool:
+         allow_schema_change=(), allow_column_change=()) -> bool:
     """Print the gate report for the bundle `release` against `reference` (a release base
     URL or directory); True when every required check passes, and then write gate.json.
-    Tables in `allow_schema_change` may drop row-history columns (owner approval, #222)."""
+    Tables in `allow_schema_change` may drop row-history columns (owner approval, #222);
+    those in `allow_column_change` may change columns in any way (owner approval, #183).
+    Every other check still runs on both."""
     (release / GATE_FILE).unlink(missing_ok=True)
     manifest = json.loads((release / "manifest.json").read_text())
     ref_release = None
@@ -330,10 +389,15 @@ def gate(release: Path, reference: str | None = DEFAULT_REFERENCE,
         "bioconice", release, reference, CONTRACTS, UNCONTRACTED_TABLES)
     checks, schema_changes = allow_dropped_history(report.checks, allow_schema_change,
                                                    ref_manifest, manifest)
+    checks, column_changes = allow_changed_columns(
+        checks, allow_column_change, ref_manifest, manifest)
     checks += bundle_checks(con, manifest["tables"], readme_queries())
     if schema_changes:
         print("schema change allowed (owner approval, #222): " + "; ".join(
             f"{t} drops {', '.join(cols) or 'nothing'}" for t, cols in schema_changes.items()))
+    if column_changes:
+        print("column change allowed (owner approval, #183): " + "; ".join(
+            f"{t}: {_describe(d)}" for t, d in column_changes.items()))
     by_table: dict[str, list] = {}
     for c in checks:
         # Table checks are named `<schema>.<table>.<check>`; release-wide ones have no dot.
@@ -351,6 +415,6 @@ def gate(release: Path, reference: str | None = DEFAULT_REFERENCE,
         (release / GATE_FILE).write_text(json.dumps({
             "release": manifest["release"], "manifest_sha256": manifest_sha256(release),
             "reference": reference, "reference_release": ref_release,
-            "schema_changes": schema_changes,
+            "schema_changes": schema_changes, "column_changes": column_changes,
             "passed_at": datetime.now(UTC).isoformat(timespec="seconds")}, indent=2) + "\n")
     return not failed

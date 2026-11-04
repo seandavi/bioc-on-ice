@@ -401,9 +401,11 @@ The weekly release (Sundays 00:00 UTC, ADR-0016) runs the four commands above as
 `scripts/release.sh` from a systemd `--user` timer on onclappc02; see
 [`systemd/README.md`](systemd/README.md) for the units, install and recovery.
 
-A release that drops columns cannot pass that script's gate. It is run once by hand
-with `gate --allow-schema-change`, with the timer stopped and under the script's lock
-([one-off procedure](systemd/README.md#one-off-a-release-that-drops-columns-222)).
+A release that changes a table's columns cannot pass that script's gate. It is run
+once by hand with the owner's approval, `gate --allow-schema-change` (dropped
+row-history columns) or `gate --allow-column-change` (any column change), with the
+timer stopped and under the script's lock
+([one-off procedure](systemd/README.md#one-off-a-release-that-changes-columns-222-183)).
 
 ## Acceptance
 

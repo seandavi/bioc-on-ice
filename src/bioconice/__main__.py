@@ -203,6 +203,10 @@ def main():
     ga.add_argument("--allow-schema-change", nargs="+", default=[], metavar="TABLE",
                     help="owner-approved: these tables may drop valid_from, valid_to and "
                          "landed_in (#222); any other column change still fails")
+    ga.add_argument("--allow-column-change", nargs="+", default=[], metavar="TABLE",
+                    help="owner-approved: these tables may add, remove, rename, retype or "
+                         "reorder columns (#183); the change is recorded, every other check "
+                         "still runs")
 
     up = sub.add_parser("upload",
                         help="upload a built release bundle to R2 v{release}/ and latest/, "
@@ -230,7 +234,8 @@ def main():
 
     if args.cmd == "gate":
         raise SystemExit(0 if gate.gate(args.release, args.reference,
-                                        args.allow_schema_change) else 1)
+                                        args.allow_schema_change,
+                                        args.allow_column_change) else 1)
 
     if args.cmd == "upload":
         from . import upload
