@@ -1,6 +1,6 @@
 # 0013 — Versioned datasets, not versioned rows
 
-**Status**: Accepted
+**Status**: Accepted; its release layout (per-dataset `cdsci.lake.publish` releases, the first `bioconice-bugsigdb`) is superseded by [ADR-0014](0014-public-releases-are-parquet-plus-duckdb-views.md)'s whole-product bundle, and `release.py` was removed once the bundle's gate, upload and Hugging Face push moved to `cdsci.publish` (cdsci-lake ADR-0027). The principle, versioned datasets and not versioned rows, stands.
 **Supersedes**: [ADR-0001](0001-point-in-time-lives-in-the-rows.md) and [ADR-0006](0006-full-type-2-history.md), for dataset releases.
 **Amends**: [ADR-0012](0012-cdsci-lake-is-the-source-not-raw-upstream.md)
 

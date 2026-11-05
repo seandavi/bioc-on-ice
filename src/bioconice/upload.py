@@ -1,28 +1,28 @@
 """Upload a built release bundle to R2 (issue #192, map #187): `v{release}/`, then `latest/`.
 
-omicidx's publish_bundle without Prefect. Each folder gets the bundle's Parquet plus its
-own views.sql, restore.sql and bioconice.duckdb, regenerated for that folder's public URL,
-so a pinned `v{release}/` keeps reading its own Parquet and `latest/` reads `latest/`.
-manifest.json goes last in each folder: it marks the folder complete. Then `v*/` folders
-other than the newest `keep` and this release are pruned (ADR-0016); `prune` does only
-that. Dry-run unless `apply`: everything is built and listed, nothing is written to the bucket.
+The mechanics are `cdsci.publish.upload`, shared with cancer-on-ice (cdsci-lake ADR-0027):
+each folder gets the bundle's Parquet plus its own views.sql, restore.sql and
+bioconice.duckdb, regenerated for that folder's public URL, manifest.json last (it marks
+the folder complete); every Parquet file is re-hashed against its manifest sha256 first; a
+completed dated folder of other files is never overwritten; latest/ loses its manifest.json
+before being overwritten; afterwards complete `v*/` folders the retention rule does not
+keep are pruned. Dry run unless `apply`: everything is built and listed, nothing is written.
+
+This module is the bioc policy: the bucket and its public URL, the retention rule (the
+newest `keep` dated releases, this one counted, 4 by default: ADR-0016), `prune` on its own
+around the release `latest/` serves, and the R2 credentials, from GSM as cdsci-lake resolves
+them. gate.json is not uploaded: scripts/release.sh runs the gate before the upload.
 """
 
-import json
-import re
-import tempfile
-import time
-from datetime import datetime
 from pathlib import Path
 
-from cdsci.publish import build_db, restore_sql, views_sql
-from pyarrow import fs as pafs
+import cdsci.publish.upload
+from cdsci.publish.upload import keep_newest
 
 from .publish import DB_FILE
 
 BUCKET = "data-bioconice"
 PUBLIC_URL = "https://data.bioconice.cancerdatasci.org"
-DATED = re.compile(r"v\d{4}-\d{2}-\d{2}")
 
 
 def r2_filesystem():
@@ -35,122 +35,25 @@ def r2_filesystem():
     from cdsci.lake.secrets import get_secret
 
     s = get_settings()
-    account = s.r2_account_id or get_secret(s.r2_account_id_secret, s.gsm_project)
-    return pafs.S3FileSystem(
-        access_key=s.r2_access_key_id or get_secret(s.r2_access_key_secret, s.gsm_project),
-        secret_key=s.r2_secret_access_key or get_secret(s.r2_secret_key_secret, s.gsm_project),
-        endpoint_override=f"{account}.r2.cloudflarestorage.com", region="auto")
+    return cdsci.publish.upload.r2_filesystem(
+        s.r2_account_id or get_secret(s.r2_account_id_secret, s.gsm_project),
+        s.r2_access_key_id or get_secret(s.r2_access_key_secret, s.gsm_project),
+        s.r2_secret_access_key or get_secret(s.r2_secret_key_secret, s.gsm_project))
 
 
-def _put(fs, local, key, apply, attempts=3):
-    """One file to its exact key; retried, since that is idempotent.
-
-    R2 rejects a multipart upload whose non-trailing parts differ in length (omicidx's
-    buffered `.open("wb")` hit it). pyarrow 25 sends uniform 10 MiB parts: checked against
-    a request-logging stand-in, a 3.7 GB file went as 352 x 10,485,760 B plus one shorter
-    trailing part, and S3's 10,000-part cap puts the ceiling near 100 GiB per file.
-    """
-    print(f"put    {key}  ({Path(local).stat().st_size:,} bytes)", flush=True)
-    if not apply:
-        return
-    for attempt in range(1, attempts + 1):
-        try:
-            pafs.copy_files(str(local), key, source_filesystem=pafs.LocalFileSystem(),
-                            destination_filesystem=fs)
-            return
-        except OSError as e:
-            if attempt == attempts or isinstance(e, FileNotFoundError):
-                raise
-            print(f"  retry {attempt}/{attempts - 1} after: {e}", flush=True)
-            time.sleep(10 * attempt)
-
-
-def _folder(fs, root, bundle, manifest, folder, apply):
-    """Upload the bundle into `root/folder/`, with its SQL, DuckDB and manifest for that URL."""
-    base = f"{PUBLIC_URL}/{folder}"
-    # ponytail: latest/ gets a second upload from the local bundle, not a server-side copy
-    # of v{release}/: R2 times out / 502s copying multi-GB objects (omicidx parquet_export).
-    for t in manifest["tables"]:
-        _put(fs, bundle / t["path"], f"{root}/{folder}/{t['path']}", apply)
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
-        views = views_sql(manifest["tables"], base)
-        (tmp / "views.sql").write_text(views)
-        (tmp / "restore.sql").write_text(restore_sql(manifest["tables"], base))
-        (tmp / "manifest.json").write_text(json.dumps({**manifest, "base_url": base}, indent=2) + "\n")
-        build_db(tmp / DB_FILE, views, base, bundle)
-        for name in ("views.sql", "restore.sql", DB_FILE, "manifest.json"):
-            _put(fs, tmp / name, f"{root}/{folder}/{name}", apply)
-
-
-def _dated(name):
-    """True for `v{YYYY-MM-DD}` naming a real calendar date; anything else is never pruned."""
+def _retention(keep):
     try:
-        return bool(DATED.fullmatch(name)) and bool(datetime.strptime(name[1:], "%Y-%m-%d"))
+        return keep_newest(keep)
     except ValueError:
-        return False
-
-
-def _expired(fs, root, current, keep):
-    """`v{date}` folders under `root` beyond the newest `keep`, `current` counted; `current` never is."""
-    names = {i.base_name for i in fs.get_file_info(pafs.FileSelector(root))
-             if i.type == pafs.FileType.Directory}
-    newest = sorted(filter(_dated, names | {current}), reverse=True)
-    return sorted(n for n in newest[keep:] if n != current)
-
-
-def _files(manifest):
-    return sorted((t["path"], t.get("sha256")) for t in manifest["tables"])
-
-
-def _check_keep(keep):
-    # keep < 1 would prune every release but this one, and a negative slice the wrong ones.
-    if not isinstance(keep, int) or keep < 1:
-        raise SystemExit(f"--keep must be an integer >= 1, got {keep!r}")
-
-
-def _prune(fs, root, current, keep, apply):
-    for name in _expired(fs, root, current, keep):
-        print(f"delete {root}/{name}/", flush=True)
-        if apply:
-            fs.delete_dir(f"{root}/{name}")
+        raise SystemExit(f"--keep must be an integer >= 1, got {keep!r}") from None
 
 
 def prune(fs, root=BUCKET, apply=False, keep=4):
     """Only the pruning, around the release `latest/` serves; no bundle needed."""
-    _check_keep(keep)
-    done = f"{root}/latest/manifest.json"
-    if fs.get_file_info(done).type == pafs.FileType.NotFound:
-        raise SystemExit(f"{done} not found; nothing to prune around")
-    with fs.open_input_stream(done) as f:
-        current = f"v{json.loads(f.read()).get('release')}"
-    if not _dated(current):
-        raise SystemExit(f"{done} names no dated release ({current!r}); not pruning")
-    _prune(fs, root, current, keep, apply)
-    if not apply:
-        print("dry run: nothing deleted; --apply to prune")
+    cdsci.publish.upload.prune(fs, root, retention=_retention(keep), apply=apply)
 
 
 def upload(bundle: Path, fs, root=BUCKET, apply=False, keep=4):
     """Upload `bundle` (a `bioconice publish` directory) to `v{release}/` and `latest/`, then prune."""
-    _check_keep(keep)
-    manifest = json.loads((bundle / "manifest.json").read_text())
-    dated = f"v{manifest['release']}"
-    # A completed dated release (manifest.json present) is immutable: users pin it and the next
-    # release is checked against it. A folder without a manifest is an interrupted upload: retry it.
-    # A completed one with this bundle's exact files means latest/ was interrupted: finish only that.
-    folders = (dated, "latest")
-    done = f"{root}/{dated}/manifest.json"
-    if fs.get_file_info(done).type != pafs.FileType.NotFound:
-        with fs.open_input_stream(done) as f:
-            remote = json.loads(f.read())
-        if _files(remote) != _files(manifest):
-            raise SystemExit(f"{root}/{dated}/ is a completed release of other files; "
-                             "dated releases are never overwritten")
-        print(f"{root}/{dated}/ already complete with this bundle; finishing latest/", flush=True)
-        folders = ("latest",)
-    for folder in folders:
-        _folder(fs, root, bundle, manifest, folder, apply)
-    _prune(fs, root, dated, keep, apply)
-    if not apply:
-        print("dry run: nothing written; --apply to upload")
+    cdsci.publish.upload.upload(bundle, fs, root, public_url=PUBLIC_URL, db_file=DB_FILE,
+                                retention=_retention(keep), apply=apply)

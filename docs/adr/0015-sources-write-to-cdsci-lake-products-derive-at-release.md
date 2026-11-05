@@ -48,6 +48,14 @@ ADR-0013 and ADR-0014 replace #178's destination: no release SCD2, no Frozen
 DuckLake, no optional Iceberg adapter, and no shared release builder. The public
 bundle is bioc-on-ice's `publish.py`. #178's remaining route is #183.
 
+*Amended 2026-11-04 by cdsci-lake [ADR-0027](https://github.com/seandavi/cdsci-lake/blob/main/docs/adr/0027-shared-release-bundle-package.md):*
+the bundle mechanics (Parquet, views, manifest; then the R2 upload, the Hugging
+Face push and the gate) are the shared `cdsci.publish` package, adopted here in
+#261 and the step-4 PR that followed. What stays bioc-on-ice's is the policy:
+the table list and docs, the contracts, the bucket, the retention and the card.
+"No shared release builder" was decided with one product; a second product with
+a line-for-line copy of `publish.py` re-priced it.
+
 What survives is **where writers live**. Code that fetches upstream and lands it
 (raw tables landed whole, plus keyed source-scoped curation such as parsing,
 typing and per-source cleanup) lives in **cdsci-lake**, as a source ingestor and

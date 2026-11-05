@@ -178,11 +178,6 @@ def main():
                     help="for a catalog that cannot rename a table: drop, recreate and copy "
                          "<table>__v2 back instead of renaming it into place")
 
-    rb = sub.add_parser("release-bugsigdb",
-                        help="publish the bioconice-bugsigdb dataset release from cdsci-lake (local)")
-    rb.add_argument("--out", type=Path, default=None,
-                    help="keep the release tree here; default is a temporary directory")
-
     pb = sub.add_parser("publish",
                         help="build a release bundle (Parquet, bioconice.duckdb, views.sql, "
                              "restore.sql, manifest.json) from the live catalog, locally")
@@ -254,18 +249,10 @@ def main():
         return
 
     if args.cmd == "publish":
-        from cdsci.lake.publish.release import _check_public_path
-
         # Views in a public bundle must point at public https, never a local path.
-        _check_public_path(args.base_url, field_name="--base-url")
+        if not args.base_url.startswith("https://"):
+            raise SystemExit(f"--base-url must be a public https:// URL, got {args.base_url!r}")
         publish.publish(publish.connect(), args.out, args.base_url, args.only)
-        return
-
-    if args.cmd == "release-bugsigdb":
-        from cdsci.lake.connect import lake_connect
-
-        from .release import release_bugsigdb
-        release_bugsigdb(lake_connect(read_only=True), args.out)
         return
 
 

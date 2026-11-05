@@ -1,6 +1,8 @@
 """`bioconice gate`: a release bundle against the previous release, offline (#183 step 5).
 
-Bundles are tiny Parquet + manifest.json in the `bioconice publish` layout, under tmp_path.
+The gate mechanics are cdsci.publish.gate (cdsci-lake ADR-0027, tested there); these tests
+cover what bioc adds: the contracts' keys, the exemption list, the row-history allow-list,
+the CLI. Bundles are tiny Parquet + manifest.json in the `bioconice publish` layout.
 """
 
 import hashlib
@@ -10,7 +12,7 @@ import sys
 import duckdb
 import pytest
 
-from bioconice import gate
+from bioconice import gate, publish
 from bioconice.__main__ import main
 
 SIGNATURE_TAXON = (
@@ -72,19 +74,7 @@ def test_a_reference_not_older_than_the_release_is_refused(reference, monkeypatc
     assert _run(monkeypatch, "--release", str(reference), "--reference", str(reference)) == 1
     out = capsys.readouterr().out
     assert "reference release 2026-10-31 is not older than 2026-10-31" in out
-    assert "--reference https://data.bioconice.cancerdatasci.org/v<date>" in out
 
-
-def test_a_manifest_row_count_that_disagrees_with_its_parquet_fails(
-        tmp_path, reference, monkeypatch, capsys):
-    candidate = _bundle(tmp_path / "candidate", "2026-11-01", {
-        "annotation.signature_taxon": SIGNATURE_TAXON.format(n=30),
-        "provenance.release": PROVENANCE.format(n=1)})
-    m = json.loads((candidate / "manifest.json").read_text())
-    m["tables"][0]["row_count"] = 31
-    (candidate / "manifest.json").write_text(json.dumps(m))
-    assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 1
-    assert "  FAIL  manifest_row_count  (parquet 30, manifest 31)" in capsys.readouterr().out
 
 
 def test_a_new_pubmed_table_passes_on_its_contract(tmp_path, reference, monkeypatch, capsys):
@@ -93,7 +83,21 @@ def test_a_new_pubmed_table_passes_on_its_contract(tmp_path, reference, monkeypa
         "provenance.release": PROVENANCE.format(n=1),
         "annotation.pubmed__article": "SELECT i::VARCHAR AS pmid FROM range(5) t(i)"})
     assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 0
-    assert "annotation.pubmed__article\n  ok    key_not_null" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "annotation.pubmed__article\n" in out and "  ok    key_not_null" in out
+
+
+def test_a_new_table_without_a_contract_fails_even_if_listed_exempt(
+        tmp_path, reference, monkeypatch, capsys):
+    # #208: the exemption falls back on the column and row-count checks, which a new table lacks
+    candidate = _bundle(tmp_path / "candidate", "2026-11-01", {
+        "annotation.signature_taxon": SIGNATURE_TAXON.format(n=30),
+        "provenance.release": PROVENANCE.format(n=1),
+        "raw.metadata": "SELECT 1 AS pmid"})
+    assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 1
+    out = capsys.readouterr().out
+    assert "raw.metadata\n  ok    manifest_row_count" in out
+    assert "  FAIL  contract_declared  (no TableContract: key and join checks not run)" in out
 
 
 def test_duplicate_key_fails(tmp_path, reference, monkeypatch, capsys):
@@ -107,12 +111,6 @@ def test_duplicate_key_fails(tmp_path, reference, monkeypatch, capsys):
     assert out.endswith("FAIL: 1 required check(s) failed\n")
 
 
-def test_dropped_table_fails(tmp_path, reference, monkeypatch, capsys):
-    candidate = _bundle(tmp_path / "candidate", "2026-11-01", {
-        "annotation.signature_taxon": SIGNATURE_TAXON.format(n=30)})
-    assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 1
-    assert "provenance.release\n  FAIL  present" in capsys.readouterr().out
-
 
 def test_reference_defaults_to_latest(tmp_path, monkeypatch):
     seen = []
@@ -122,19 +120,10 @@ def test_reference_defaults_to_latest(tmp_path, monkeypatch):
 
 
 def test_a_contracted_table_is_not_also_exempt():
-    contracted = {name for c in gate.CONTRACTS for name in c.tables}
-    assert not contracted & gate.UNCONTRACTED_TABLES
+    assert not set(gate.BUNDLE.tables) & gate.UNCONTRACTED_TABLES
+    # every published table has a contract or an exemption
+    assert {f"{s}.{t}" for s, t, _ in publish.TABLES} <= set(gate.BUNDLE.tables) | gate.UNCONTRACTED_TABLES
 
-
-@pytest.mark.parametrize("bad", ["0000-00-00", None])
-def test_a_malformed_release_id_is_refused(tmp_path, reference, monkeypatch, capsys, bad):
-    manifest = json.loads((reference / "manifest.json").read_text())
-    (reference / "manifest.json").write_text(json.dumps({**manifest, "release": bad}))
-    candidate = _bundle(tmp_path / "candidate", "2026-11-01", {
-        "annotation.signature_taxon": SIGNATURE_TAXON.format(n=30),
-        "provenance.release": PROVENANCE.format(n=1)})
-    assert _run(monkeypatch, "--release", str(candidate), "--reference", str(reference)) == 1
-    assert "release ids must be YYYY-MM-DD dates" in capsys.readouterr().out
 
 
 def test_every_declared_table_with_a_key_gets_a_contract():
@@ -171,11 +160,6 @@ def test_an_allowed_table_may_drop_row_history(tmp_path, monkeypatch, capsys):
         "annotation.pubmed__article": ["valid_from", "valid_to"]}
 
 
-def test_dropping_row_history_from_an_unlisted_table_fails(tmp_path, monkeypatch, capsys):
-    argv, _ = _with_history(tmp_path, "SELECT i::VARCHAR AS pmid FROM range(5) t(i)")
-    assert _run(monkeypatch, *argv, "--allow-schema-change", "provenance.release") == 1
-    assert "  FAIL  columns_unchanged  (differs:" in capsys.readouterr().out
-
 
 def test_another_column_change_fails_even_when_listed(tmp_path, monkeypatch, capsys):
     argv, _ = _with_history(tmp_path, "SELECT i::VARCHAR AS pmid, 1 AS extra FROM range(5) t(i)")
@@ -194,18 +178,12 @@ def test_an_allowed_column_change_passes_and_is_recorded(tmp_path, monkeypatch, 
     out = capsys.readouterr().out
     detail = "removed valid_from VARCHAR, valid_to VARCHAR; retyped pmid VARCHAR -> BIGINT"
     assert f"  ok    columns_unchanged  (column change allowed: {detail})" in out
-    assert f"column change allowed (owner approval, #183): annotation.pubmed__article: {detail}" in out
+    assert f"column change allowed (owner approval): annotation.pubmed__article: {detail}" in out
     assert json.loads((candidate / gate.GATE_FILE).read_text())["column_changes"] == {
         "annotation.pubmed__article": {
             "added": {}, "removed": {"valid_from": "VARCHAR", "valid_to": "VARCHAR"},
             "retyped": {"pmid": {"from": "VARCHAR", "to": "BIGINT"}}, "reordered": False}}
 
-
-def test_a_column_change_of_an_unlisted_table_fails(tmp_path, monkeypatch, capsys):
-    argv, candidate = _retyped(tmp_path)
-    assert _run(monkeypatch, *argv, "--allow-column-change", "provenance.release") == 1
-    assert "  FAIL  columns_unchanged  (differs:" in capsys.readouterr().out
-    assert not (candidate / gate.GATE_FILE).exists()
 
 
 def test_an_allowed_column_change_still_fails_row_bounds(tmp_path, monkeypatch, capsys):
@@ -213,10 +191,4 @@ def test_an_allowed_column_change_still_fails_row_bounds(tmp_path, monkeypatch, 
     assert _run(monkeypatch, *argv, "--allow-column-change", "annotation.pubmed__article") == 1
     out = capsys.readouterr().out
     assert "  ok    columns_unchanged  (column change allowed:" in out
-    assert "  FAIL  row_count_within_bounds  (50 rows vs previous 5" in out
-
-
-def test_column_diff_records_added_renamed_and_reordered():
-    assert gate.column_diff([("a", "INTEGER"), ("b", "VARCHAR"), ("c", "DATE")],
-                            [("b", "VARCHAR"), ("a", "INTEGER"), ("d", "DATE")]) == {
-        "added": {"d": "DATE"}, "removed": {"c": "DATE"}, "retyped": {}, "reordered": True}
+    assert "  FAIL  row_count_growth  (50 rows, reference 5, bounds (0.9, 1.5))" in out

@@ -1,30 +1,28 @@
 """Monthly Hugging Face archive (#214, ADR-0016): one gated release bundle pushed to
 hf.co/datasets/seandavis/bioconice as one commit, tagged `YYYY-MM` of its release date.
 
-omicidx's flows/hf_release.py without Prefect or the R2 download: the bundle is the local
-directory `bioconice publish` wrote and `bioconice gate` passed (its gate.json matches its
-manifest.json, and each Parquet file its manifest sha256). It pushes the Parquet,
-manifest.json and gate.json as they are. It also
-generates three files: views.sql and restore.sql, which read paths relative to the download
-directory (the bundle's copies read R2 `latest/`), and README.md, the dataset card. It does
-not push bioconice.duckdb, because that file's views read R2 `latest/`. Users download a
-tag and query it locally. Nothing points at `hf://`: anonymous reads there are
-rate-limited (HTTP 429).
-If the tag already exists, the push does nothing, so a re-fired timer is harmless. Tags
-are never deleted. DOIs are not minted.
+The mechanics are `cdsci.publish.hf`, shared with cancer-on-ice (cdsci-lake ADR-0027): one
+commit of the Parquet, manifest.json and gate.json as they are, plus generated views.sql
+and restore.sql over paths relative to the download directory (the bundle's copies read R2
+`latest/`) and README.md, the dataset card; bioconice.duckdb (whose views read R2) is not
+pushed, and nothing points at `hf://` (anonymous reads there are rate-limited, HTTP 429).
+Every Parquet file is re-hashed against its manifest sha256 first. If the tag exists with
+this bundle's manifest.json the push does nothing, so a re-fired timer is harmless; with a
+different one it fails. Tags are never deleted. Dry run unless `apply`.
+
+This module is the bioc policy: the repo, the tag (`YYYY-MM`), the card, the token from
+GSM, and that only a bundle whose gate.json certifies its manifest.json is pushed
+(`check_proof`, before anything else). DOIs are not minted.
 """
 
-import hashlib
 import json
 import os
 from datetime import date
 from pathlib import Path
 
-from cdsci.publish import restore_sql, views_sql
-from huggingface_hub import CommitOperationAdd, CommitOperationDelete
-from huggingface_hub.errors import RepositoryNotFoundError
+import cdsci.publish.hf
+from cdsci.publish.gate import GATE_FILE, check_proof
 
-from .gate import GATE_FILE, manifest_sha256
 from .upload import PUBLIC_URL
 
 REPO = "seandavis/bioconice"
@@ -172,59 +170,10 @@ DOIs are not minted. Cite the tag:
 def hf_push(release: Path, api, repo=REPO, apply=False):
     """Push the gated bundle `release` to `repo` as one commit tagged YYYY-MM. Dry run unless
     `apply`: the plan is printed, and nothing is created or written on Hugging Face."""
-    manifest = json.loads((release / "manifest.json").read_text())
-    tag = date.fromisoformat(manifest["release"]).strftime("%Y-%m")
-    if apply:
-        api.create_repo(repo, repo_type="dataset", private=False, exist_ok=True)
-    try:
-        tags = {t.name for t in api.list_repo_refs(repo, repo_type="dataset").tags}
-        remote = api.list_repo_files(repo, repo_type="dataset")
-    except RepositoryNotFoundError:  # a dry run before the first push
-        tags, remote = set(), []
-    if tag in tags:
-        print(f"{repo}@{tag} already exists; nothing to do")
-        return
-    proof = release / GATE_FILE
-    if not proof.exists():
-        raise SystemExit(f"{release}: no {GATE_FILE}; only a release that passed "
-                         "`bioconice gate` is pushed")
-    gate = json.loads(proof.read_text())
-    if gate.get("manifest_sha256") != manifest_sha256(release):
-        raise SystemExit(f"{release}/{GATE_FILE} is for another manifest.json; "
-                         "re-run `bioconice gate` on this bundle")
-    # gate.json binds manifest.json, not the Parquet: re-hash every file against its manifest
-    # sha256. Streamed. Disk-bound on onclappc02 (sha256 1.6 GB/s, cold reads ~250 MB/s):
-    # about 6 minutes for a 94 GB bundle, against an hours-long upload.
-    for t in manifest["tables"]:
-        with (release / t["path"]).open("rb") as f:
-            if hashlib.file_digest(f, "sha256").hexdigest() != t["sha256"]:
-                raise SystemExit(f"{release}/{t['path']} does not match its manifest.json "
-                                 "sha256; re-publish and re-gate this bundle")
-
-    tables = [{**t, "bytes": (release / t["path"]).stat().st_size} for t in manifest["tables"]]
-    generated = {
-        "views.sql": views_sql(tables, "."),
-        "restore.sql": restore_sql(tables, "."),
-        "README.md": build_card(tag, manifest, gate, tables, repo),
-    }
-    files = [t["path"] for t in tables] + ["manifest.json", GATE_FILE]
-    # create_commit, not upload_folder: with hf_xet installed, upload_folder splits a large
-    # upload into several commits; a release is exactly one. Remote files not in this
-    # release leave main (they stay reachable at older tags).
-    ops = [CommitOperationAdd(p, release / p) for p in files]
-    ops += [CommitOperationAdd(p, text.encode()) for p, text in generated.items()]
-    keep = {*files, *generated}
-    deletes = [CommitOperationDelete(p) for p in remote if p not in keep and p != ".gitattributes"]
-    for p in files:
-        print(f"put    {p}  ({(release / p).stat().st_size:,} bytes)", flush=True)
-    for p, text in generated.items():
-        print(f"put    {p}  (generated, {len(text.encode()):,} bytes)", flush=True)
-    for d in deletes:
-        print(f"delete {d.path_in_repo}", flush=True)
-    message = f"biocOnIce release {tag} (v{manifest['release']})"
-    if not apply:
-        print(f"dry run: would push {repo}@{tag}; nothing written; --apply to push")
-        return
-    commit = api.create_commit(repo, ops + deletes, repo_type="dataset", commit_message=message)
-    api.create_tag(repo, repo_type="dataset", tag=tag, revision=commit.oid, tag_message=message)
-    print(f"pushed {repo}@{tag} ({commit.oid})")
+    gate = check_proof(release)
+    release_id = json.loads((release / "manifest.json").read_text())["release"]
+    tag = date.fromisoformat(release_id).strftime("%Y-%m")
+    cdsci.publish.hf.hf_push(
+        release, api, repo=repo, tag=tag, apply=apply, extra_files=(GATE_FILE,),
+        card=lambda tag, manifest, tables: build_card(tag, manifest, gate, tables, repo),
+        message=f"biocOnIce release {tag} (v{release_id})")
