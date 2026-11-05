@@ -854,15 +854,17 @@ bug fix). Snapshot ids are opaque and unordered across tables.
 ## Dataset releases
 
 A source that has moved to dataset releases (ADR-0013) is published as
-immutable **full-snapshot releases** by `cdsci.lake.publish`, not as row
-history. A release id is the UTC build date, `YYYY-MM-DD`; a second release on
-the same day is `YYYY-MM-DD.2`, `.3`, and so on, ordered by date then number
-(never as raw strings). Upstream versions are recorded in provenance, never in
-the id. Each release carries every current row of its tables; there are no
-`valid_from` / `valid_to` columns. The first dataset is `bioconice-bugsigdb`.
-The whole-product bundle (ADR-0014) carries no row-history columns either:
-`valid_from`, `valid_to` and `landed_in` are dropped from every table, including
-those still read from Iceberg, which are filtered to `valid_to IS NULL` first (#222).
+immutable **full-snapshot releases**, not as row history. The release is the
+whole-product bundle (ADR-0014), built, gated, uploaded and archived by the
+shared `cdsci.publish` package (cdsci-lake ADR-0027); the per-dataset
+`cdsci.lake.publish` releases that ADR-0013 first used (`bioconice-bugsigdb`)
+are retired. A release id is the UTC build date, `YYYY-MM-DD`; a completed
+dated release is never overwritten, so a second build on the same day waits
+for the next date. Upstream versions are recorded in provenance, never in the
+id. Each release carries every current row of its tables; there are no
+`valid_from` / `valid_to` columns: `valid_from`, `valid_to` and `landed_in`
+are dropped from every table, including those still read from Iceberg, which
+are filtered to `valid_to IS NULL` first (#222).
 
 **Cadence and retention** (ADR-0016). The public whole-product release
 (ADR-0014) is published weekly, Sundays 00:00 UTC, and only after it passes the

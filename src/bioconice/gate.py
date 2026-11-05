@@ -1,38 +1,31 @@
 """Publish gate (#183 step 5): a release bundle against the previous published release.
 
-`cdsci.lake.publish.verify.verify_release_over_release` does the checking: per table,
-columns and types unchanged, row count within bounds, key not null and unique, join
-coverage. This module supplies bioc-on-ice's contracts and its exemption list, refuses a
-reference that is not older than the bundle, checks the bundle's manifest.json against its
-own Parquet, runs the README queries on the bundle (optional), and prints the report.
-`--allow-schema-change` lets named tables drop the row-history columns (#222), and
-`--allow-column-change` lets them change columns in any way (lake migration, #183); both
-owner-approved, and both record the exact change.
-Reads the bundle and the reference's manifest.json only. A pass leaves gate.json in the
-bundle, bound to its manifest.json by sha256: `bioconice hf-push` pushes only such a bundle.
+The mechanics are `cdsci.publish.gate`, shared with cancer-on-ice (cdsci-lake ADR-0027):
+per table, manifest row count and columns against the Parquet; against the reference's
+manifest.json, no table missing, columns and types unchanged, row counts within bounds;
+declared keys not null and unique, declared references covered; README queries as warnings;
+a reference that must be strictly older; gate.json on a pass, bound to manifest.json by
+sha256 (`bioconice hf-push` pushes only such a bundle). This module is the bioc policy:
+the `TableContract` of every published table (`BUNDLE`, the keys and references the gate
+checks), the exemption list for tables still without one (#208), the row bounds (0.9, 1.5),
+`--allow-schema-change` (named tables may drop the row-history columns, #222) and
+`--allow-column-change` (any column change, #183), both owner-approved and recorded.
 """
 
-import hashlib
-import json
-import re
-from datetime import UTC, date, datetime
 from pathlib import Path
 
-import duckdb
+import cdsci.publish.gate
 from cdsci.lake.contracts import (
     ColumnContract,
     DatasetContract,
     TableContract,
     TemporalModel,
 )
-from cdsci.lake.publish.release import AcceptanceCheck
-from cdsci.lake.publish.verify import verify_release_over_release
-from cdsci.publish import sql_literal as _lit
+from cdsci.publish.gate import GATE_FILE, Check  # noqa: F401 (GATE_FILE re-exported for hf)
 from pyiceberg.types import ListType
 
 from . import icite, pubtator3
-from .publish import PUBMED_ARTICLE, ROW_HISTORY
-from .release import BUGSIGDB
+from .publish import PUBMED_ARTICLE, ROW_HISTORY, SIGNATURE_TAXON
 from .schemas import _OBO_ONTOLOGIES
 from .schemas import TABLES as DECLARED
 from .upload import PUBLIC_URL
@@ -83,11 +76,12 @@ OBO_LICENSE = " AND ".join(sorted({licence for _, licence in _OBO_ONTOLOGIES}))
 ENSEMBL_LICENSE = "LicenseRef-ensembl-no-restrictions"
 
 
-# The bundle's own tables that have a contract outside a dataset release of their own.
+# Every published table with a TableContract: the gate checks its key and references.
 BUNDLE = DatasetContract(
     id="bioconice", title="biocOnIce release bundle",
     description="Tables of the bioconice publish bundle", publisher="bioc-on-ice",
     tables={c.name: c for c in (
+        SIGNATURE_TAXON,
         PUBMED_ARTICLE,
         # Read from cdsci-lake since #183 step 7: one version per source, so the raw
         # tables are keyed without their version column.
@@ -235,12 +229,11 @@ BUNDLE = DatasetContract(
         declared_contract("annotation.icite__citation", license="CC-BY-4.0", published=True,
                           references={"citing_pmid": "annotation.icite__publication.pmid"}),
     )})
-CONTRACTS = [BUGSIGDB, BUNDLE]
+KEYS = {c.name: c.primary_key for c in BUNDLE.tables.values() if c.primary_key}
+REFERENCES = {c.name: c.references for c in BUNDLE.tables.values() if c.references}
 # latest/ is the newest completed release: upload writes its manifest.json last.
 DEFAULT_REFERENCE = f"{PUBLIC_URL}/latest"
-# Proof of a pass, in the bundle. Re-running the gate later is no substitute: once uploaded,
-# latest/ is the bundle itself, and the gate refuses a reference that is not older.
-GATE_FILE = "gate.json"
+USER_AGENT = "bioconice gate (+https://github.com/seandavi/bioc-on-ice)"
 
 # Tables with no TableContract yet (#208). They get only the column and row-count checks:
 # no key or join checks. Writing a contract for one means deleting its line here.
@@ -250,175 +243,31 @@ UNCONTRACTED_TABLES = frozenset({
 })
 
 
-def readme_queries(path=README):
-    """(line, sql) for each ```sql block in the README that is a query (SELECT / WITH)."""
-    text = path.read_text()
-    return [(text[:m.start()].count("\n") + 2, m[1].strip().rstrip(";"))
-            for m in re.finditer(r"```sql\n(.*?)```", text, re.DOTALL)
-            if re.match(r"\s*(SELECT|WITH)\b", m[1], re.IGNORECASE)]
-
-
-def release_con(release: Path, tables):
-    """The bundle's local Parquet as `bioc.<schema>.<table>` views, the names the README uses."""
-    con = duckdb.connect()
-    con.execute("ATTACH ':memory:' AS bioc")
-    for s in sorted({t["schema"] for t in tables}):
-        con.execute(f"CREATE SCHEMA bioc.{s}")
-    for t in tables:
-        con.execute(f"CREATE VIEW bioc.{t['schema']}.{t['table']} AS "
-                    f"SELECT * FROM read_parquet({_lit(str(release / t['path']))})")
-    # Schema-qualified names in a README query (`provenance.release`) resolve in bioc.
-    con.execute("USE bioc")
-    return con
-
-
-def bundle_checks(con, tables, queries):
-    """Required: each table's manifest row_count, columns and types match its Parquet.
-    Optional: each README query runs on the bundle."""
-    checks = []
-    for t in tables:
+def contract_policy(con, manifest, ref):
+    """#208: a table with no TableContract fails `contract_declared`, unless it is in
+    UNCONTRACTED_TABLES and in the reference (owner-approved exemption: it still gets the
+    column and row-count checks), and then only warns. A new table is never exempt."""
+    previous = {f"{t['schema']}.{t['table']}" for t in ref["tables"]} if ref else set()
+    for t in manifest["tables"]:
         name = f"{t['schema']}.{t['table']}"
-        n = con.execute(f"SELECT count(*) FROM bioc.{name}").fetchone()[0]
-        columns = [tuple(c[:2]) for c in con.execute(f"DESCRIBE bioc.{name}").fetchall()]
-        declared = [(c["name"], c["type"]) for c in t["columns"]]
-        checks.append(AcceptanceCheck(f"{name}.manifest_row_count", n == t["row_count"], True,
-                                      f"parquet {n}, manifest {t['row_count']}"))
-        checks.append(AcceptanceCheck(f"{name}.manifest_columns", columns == declared, True,
-                                      "" if columns == declared else "manifest and Parquet differ"))
-    for line, sql in queries:
-        try:
-            n, detail = len(con.execute(sql).fetchall()), ""
-        except duckdb.Error as e:  # type name only: the message can carry a local path
-            n, detail = None, type(e).__name__
-        checks.append(AcceptanceCheck(f"readme_query_line_{line}", n is not None, False,
-                                      detail or f"{n} rows"))
-    return checks
-
-
-def manifest_sha256(release: Path) -> str:
-    return hashlib.sha256((release / "manifest.json").read_bytes()).hexdigest()
-
-
-def _columns(manifest):
-    return {f"{t['schema']}.{t['table']}": [(c["name"], c["type"]) for c in t["columns"]]
-            for t in manifest["tables"]}
-
-
-def allow_dropped_history(checks, allowed, ref_manifest, manifest):
-    """(checks, {table: dropped columns}): a failed columns_unchanged of a table in `allowed`
-    passes when its only change from the reference is dropped ROW_HISTORY columns (#222)."""
-    before, after = _columns(ref_manifest), _columns(manifest)
-    changes = {t: [] for t in sorted(allowed)}
-    out = []
-    for c in checks:
-        table = c.name.removesuffix(".columns_unchanged")
-        kept = [col for col in before.get(table, []) if col[0] not in ROW_HISTORY]
-        if not c.passed and table in changes and kept == after.get(table):
-            changes[table] = [n for n, _ in before[table] if n in ROW_HISTORY]
-            c = AcceptanceCheck(c.name, True, c.required,
-                                f"schema change allowed: dropped {', '.join(changes[table])}")
-        out.append(c)
-    return out, changes
-
-
-def column_diff(before, after):
-    """The exact change from column list `before` to `after`, of (name, type) pairs: a
-    rename is a removal and an addition."""
-    old, new = dict(before), dict(after)
-    return {"added": {n: t for n, t in after if n not in old},
-            "removed": {n: t for n, t in before if n not in new},
-            "retyped": {n: {"from": t, "to": new[n]} for n, t in before
-                        if n in new and new[n] != t},
-            "reordered": [n for n, _ in before if n in new] != [n for n, _ in after if n in old]}
-
-
-def _describe(diff):
-    parts = [f"{k} " + ", ".join(f"{n} {t}" for n, t in diff[k].items())
-             for k in ("added", "removed") if diff[k]]
-    if diff["retyped"]:
-        parts.append("retyped " + ", ".join(f"{n} {t['from']} -> {t['to']}"
-                                            for n, t in diff["retyped"].items()))
-    return "; ".join(parts + ["reordered"] * diff["reordered"]) or "none"
-
-
-def allow_changed_columns(checks, allowed, ref_manifest, manifest):
-    """(checks, {table: column_diff}): a failed columns_unchanged of a table in `allowed`
-    passes whatever its change from the reference (owner approval, #183 lake migration)."""
-    before, after = _columns(ref_manifest), _columns(manifest)
-    changes = {t: column_diff(before.get(t, []), after.get(t, [])) for t in sorted(allowed)}
-    out = []
-    for c in checks:
-        table = c.name.removesuffix(".columns_unchanged")
-        if not c.passed and table in changes and c.name != table:
-            c = AcceptanceCheck(c.name, True, c.required,
-                                f"column change allowed: {_describe(changes[table])}")
-        out.append(c)
-    return out, changes
+        if name not in BUNDLE.tables:
+            exempt = name in UNCONTRACTED_TABLES and name in previous
+            yield Check(f"{name}.contract_declared", False, not exempt,
+                        "no TableContract: key and join checks not run"
+                        + ("; exempted by caller" if exempt else ""))
 
 
 def gate(release: Path, reference: str | None = DEFAULT_REFERENCE,
          allow_schema_change=(), allow_column_change=()) -> bool:
     """Print the gate report for the bundle `release` against `reference` (a release base
-    URL or directory); True when every required check passes, and then write gate.json.
-    Tables in `allow_schema_change` may drop row-history columns (owner approval, #222);
-    those in `allow_column_change` may change columns in any way (owner approval, #183).
-    Every other check still runs on both."""
-    (release / GATE_FILE).unlink(missing_ok=True)
-    manifest = json.loads((release / "manifest.json").read_text())
-    ref_release = None
-    ref_manifest = {"tables": []}
-    con = release_con(release, manifest["tables"])
-    if reference is not None:
-        try:
-            ref_manifest = json.loads(con.execute(
-                "SELECT content FROM read_text(?)",
-                [f"{reference.rstrip('/')}/manifest.json"]).fetchone()[0])
-            ref_release = ref_manifest["release"]
-        except (duckdb.Error, ValueError, KeyError) as e:
-            print(f"FAIL: reference {reference}: no readable manifest.json ({type(e).__name__})")
-            return False
-        print(f"release {manifest['release']} against {reference} (release {ref_release})")
-        try:
-            older = date.fromisoformat(ref_release) < date.fromisoformat(manifest["release"])
-        except (TypeError, ValueError):
-            print(f"FAIL: release ids must be YYYY-MM-DD dates: reference {ref_release!r}, "
-                  f"release {manifest['release']!r}")
-            return False
-        # latest/ after an upload is the bundle itself.
-        if not older:
-            print(f"FAIL: reference release {ref_release} is not older than {manifest['release']}; "
-                  f"pass --reference {PUBLIC_URL}/v<date> with an earlier release date")
-            return False
-    report = verify_release_over_release(
-        "bioconice", release, reference, CONTRACTS, UNCONTRACTED_TABLES)
-    checks, schema_changes = allow_dropped_history(report.checks, allow_schema_change,
-                                                   ref_manifest, manifest)
-    checks, column_changes = allow_changed_columns(
-        checks, allow_column_change, ref_manifest, manifest)
-    checks += bundle_checks(con, manifest["tables"], readme_queries())
-    if schema_changes:
-        print("schema change allowed (owner approval, #222): " + "; ".join(
-            f"{t} drops {', '.join(cols) or 'nothing'}" for t, cols in schema_changes.items()))
-    if column_changes:
-        print("column change allowed (owner approval, #183): " + "; ".join(
-            f"{t}: {_describe(d)}" for t, d in column_changes.items()))
-    by_table: dict[str, list] = {}
-    for c in checks:
-        # Table checks are named `<schema>.<table>.<check>`; release-wide ones have no dot.
-        parts = c.name.split(".", 2)
-        table, check = (".".join(parts[:2]), parts[2]) if len(parts) == 3 else ("(release)", c.name)
-        by_table.setdefault(table, []).append((check, c))
-    for table, rows in by_table.items():
-        print(table)
-        for check, c in rows:
-            status = "ok" if c.passed else "FAIL" if c.required else "warn"
-            print(f"  {status:4}  {check}" + (f"  ({c.detail})" if c.detail else ""))
-    failed = sum(c.required and not c.passed for c in checks)
-    print(f"FAIL: {failed} required check(s) failed" if failed else "PASS")
-    if not failed:
-        (release / GATE_FILE).write_text(json.dumps({
-            "release": manifest["release"], "manifest_sha256": manifest_sha256(release),
-            "reference": reference, "reference_release": ref_release,
-            "schema_changes": schema_changes, "column_changes": column_changes,
-            "passed_at": datetime.now(UTC).isoformat(timespec="seconds")}, indent=2) + "\n")
-    return not failed
+    URL or directory); True when every required check passes, and then gate.json is in the
+    bundle. Tables in `allow_schema_change` may drop row-history columns (owner approval,
+    #222); those in `allow_column_change` may change columns in any way (owner approval,
+    #183). Every other check still runs on both."""
+    passed, _ = cdsci.publish.gate.gate(
+        release, reference, queries=cdsci.publish.gate.readme_queries(README), catalog="bioc",
+        keys=KEYS, references=REFERENCES,
+        allow_dropped={t: ROW_HISTORY for t in allow_schema_change},
+        allow_column_change=allow_column_change, extra_checks=contract_policy,
+        user_agent=USER_AGENT)
+    return passed

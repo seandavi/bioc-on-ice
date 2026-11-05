@@ -372,10 +372,10 @@ uv run bioconice upload --release release/ --apply
 uv run bioconice upload --prune-only --apply    # only the keep-4 pruning, around latest/
 ```
 
-The gate (`src/bioconice/gate.py`) checks every table's columns and types and keeps
-its row count within bounds of the previous release. Tables with a contract also
-get key (not null, unique) and join checks. Tables still without one are listed
-in `UNCONTRACTED_TABLES` (#208). It also checks that `manifest.json` gives each
+The gate (`src/bioconice/gate.py`, over the shared `cdsci.publish.gate`) checks every
+table's columns and types and keeps its row count within bounds of the previous
+release. Tables with a contract also get key (not null, unique) and join checks.
+Tables still without one are listed in `UNCONTRACTED_TABLES` (#208). It also checks that `manifest.json` gives each
 table's true row count, columns and types, and it refuses a reference that is not
 older than the bundle: once `latest/` is this release, pass
 `--reference https://data.bioconice.cancerdatasci.org/v<date>` instead. The README
@@ -392,7 +392,8 @@ uv run bioconice hf-push --release release/ --apply  # seandavis/bioconice@YYYY-
 ```
 
 `hf-push` refuses a bundle without a matching `gate.json` or whose Parquet does
-not match the manifest sha256s, and does nothing if the tag already exists. The
+not match the manifest sha256s, does nothing if the tag already holds this
+`manifest.json`, and fails if it holds another (a release is never replaced). The
 token is `HF_TOKEN`, else GSM secret `cdsci-huggingface-token` (project
 `cdsci-infra`). `systemd/bioconice-hf-push.{service,timer}` runs it on the
 Monday after each month's first Sunday; the units are not installed yet.

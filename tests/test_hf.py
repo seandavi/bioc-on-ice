@@ -1,4 +1,7 @@
-"""`bioconice hf-push`: a gated bundle to a stand-in for the Hugging Face API, offline (#214)."""
+"""`bioconice hf-push`: a gated bundle to a stand-in for the Hugging Face API, offline (#214).
+
+The push mechanics are cdsci.publish.hf (cdsci-lake ADR-0027, tested there); these tests
+cover what bioc adds: the gate proof first, the YYYY-MM tag, the card, and the CLI."""
 
 import json
 import shutil
@@ -8,7 +11,9 @@ from types import SimpleNamespace
 import duckdb
 import httpx2
 import pytest
+from cdsci.publish.gate import manifest_sha256
 from huggingface_hub.errors import RepositoryNotFoundError
+from pyarrow import fs as pafs
 from test_gate import PROVENANCE, SIGNATURE_TAXON, _bundle
 
 from bioconice import gate, hf, upload
@@ -18,8 +23,8 @@ from bioconice.__main__ import main
 class FakeHub:
     """The HfApi calls hf_push makes; `files` None means the repo does not exist."""
 
-    def __init__(self, tags=(), files=None, fail_tag=False):
-        self.tags, self.files, self.calls, self.fail_tag = list(tags), files, [], fail_tag
+    def __init__(self, tags=(), files=None):
+        self.tags, self.files, self.calls = list(tags), files, []
 
     def create_repo(self, repo, **kw):
         self.calls.append(("create_repo", repo, kw))
@@ -44,9 +49,6 @@ class FakeHub:
 
     def create_tag(self, repo, **kw):
         self.calls.append(("create_tag", repo, kw))
-        if self.fail_tag:
-            self.fail_tag = False
-            raise OSError("tag failed")
         self.tags.append(kw["tag"])
 
 
@@ -65,13 +67,9 @@ def gated(tmp_path):
 
 def test_gate_pass_writes_proof_bound_to_the_manifest(gated):
     proof = json.loads((gated / gate.GATE_FILE).read_text())
-    assert proof["manifest_sha256"] == gate.manifest_sha256(gated)
+    assert proof["manifest_sha256"] == manifest_sha256(gated)
     assert proof["release"] == "2026-11-01" and proof["reference_release"] == "2026-10-31"
 
-
-def test_failed_gate_removes_a_stale_proof(gated):
-    assert not gate.gate(gated, str(gated))  # a reference not older than the bundle
-    assert not (gated / gate.GATE_FILE).exists()
 
 
 def test_dry_run_writes_nothing_even_before_the_repo_exists(gated, capsys):
@@ -111,17 +109,10 @@ def test_apply_is_one_commit_tagged_yyyy_mm_with_local_views(gated, tmp_path, mo
     duckdb.connect().execute(added["restore.sql"].decode())  # errors if a row count differs from manifest
 
 
-def test_an_existing_tag_is_left_alone_gated_or_not(gated, capsys):
-    (gated / gate.GATE_FILE).unlink()
-    hub = FakeHub(tags=["2026-11"], files=[".gitattributes"])
-    hf.hf_push(gated, hub, apply=True)
-    assert [c[0] for c in hub.calls] == ["create_repo"]
-    assert capsys.readouterr().out == "seandavis/bioconice@2026-11 already exists; nothing to do\n"
-
 
 def test_an_ungated_bundle_is_refused(gated):
     (gated / gate.GATE_FILE).unlink()
-    with pytest.raises(SystemExit, match="only a release that passed `bioconice gate`"):
+    with pytest.raises(SystemExit, match="no gate.json"):
         hf.hf_push(gated, FakeHub())
 
 
@@ -131,31 +122,14 @@ def test_a_proof_for_another_manifest_is_refused(gated):
     hub = FakeHub(files=[".gitattributes"])
     with pytest.raises(SystemExit, match="is for another manifest.json"):
         hf.hf_push(gated, hub, apply=True)
-    assert [c[0] for c in hub.calls] == ["create_repo"]
+    assert hub.calls == []  # the proof is checked before the Hub is touched
 
 
-def test_parquet_changed_after_the_gate_is_refused(gated):
-    (gated / "annotation/signature_taxon.parquet").write_bytes(b"not the gated file")
-    hub = FakeHub(files=[".gitattributes"])
-    with pytest.raises(SystemExit, match="signature_taxon.parquet does not match its manifest"):
-        hf.hf_push(gated, hub, apply=True)
-    assert [c[0] for c in hub.calls] == ["create_repo"]
-
-
-def test_a_failed_tag_is_retried_by_the_next_run(gated):
-    hub = FakeHub(files=[".gitattributes"], fail_tag=True)
-    with pytest.raises(OSError, match="tag failed"):
-        hf.hf_push(gated, hub, apply=True)
-    hf.hf_push(gated, hub, apply=True)  # no tag yet: commit again (a no-op on the Hub), then tag
-    assert [c[0] for c in hub.calls] == ["create_repo", "create_commit", "create_tag"] * 2
-    assert hub.tags == ["2026-11"]
-    hf.hf_push(gated, hub, apply=True)  # tagged: nothing more
-    assert [c[0] for c in hub.calls][6:] == ["create_repo"]
 
 
 def test_upload_ignores_the_gate_proof(gated, tmp_path, capsys):
     (tmp_path / "bucket").mkdir()
-    upload.upload(gated, upload.pafs.LocalFileSystem(), str(tmp_path / "bucket"))
+    upload.upload(gated, pafs.LocalFileSystem(), str(tmp_path / "bucket"))
     assert "gate.json" not in capsys.readouterr().out
 
 

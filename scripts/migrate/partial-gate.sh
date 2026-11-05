@@ -5,9 +5,9 @@
 #
 # Run from the scratch dir with the ADR-0015 local-backend env set. Builds a bundle of
 # only those tables from the lake the env points at, cuts the reference manifest to the
-# same tables (its release, published_at and git_sha kept as published), then calls
-# `verify_release_over_release` and the bundle's own manifest checks directly:
-# `bioconice gate` refuses a partial bundle and a same-day reference. Writes nothing
+# same tables (its release, published_at and git_sha kept as published), then runs the
+# cdsci.publish.gate checks `bioconice gate` runs, directly: `bioconice gate` refuses a
+# partial bundle and a same-day reference. Writes nothing
 # outside <out dir>. ALLOW_COLUMN_CHANGE="<schema.table> ..." passes those tables'
 # column change, as `bioconice gate --allow-column-change` does (owner approval, #183).
 set -euo pipefail
@@ -19,23 +19,27 @@ jq '.tables |= map(select((.schema + "." + .table) as $n | $ARGS.positional | in
 uv run --project "$W" python - "$OUT/bundle" "$OUT/ref" <<'EOF'
 import json, os, sys
 from pathlib import Path
+from cdsci.publish.gate import (bundle_con, bundle_checks, key_checks, print_report, readme_queries,
+                                reference_checks, reference_covered)
 from bioconice import gate
 bundle, ref = Path(sys.argv[1]), sys.argv[2]
 m = json.loads((bundle / "manifest.json").read_text())
 r = json.loads(Path(ref, "manifest.json").read_text())
 print(f"release {m['release']} against {ref} (release {r['release']}, "
       f"published_at {r['published_at']}, git_sha {r['git_sha']})")
-checks = list(gate.verify_release_over_release(
-    "bioconice", bundle, ref, gate.CONTRACTS, gate.UNCONTRACTED_TABLES).checks)
-checks, changes = gate.allow_changed_columns(
-    checks, os.environ.get("ALLOW_COLUMN_CHANGE", "").split(), r, m)
-for t, d in changes.items():
-    print(f"column change allowed (owner approval, #183): {t}: {gate._describe(d)}")
-checks += gate.bundle_checks(gate.release_con(bundle, m["tables"]), m["tables"],
-                             gate.readme_queries())
-for c in checks:
-    status = "ok" if c.passed else "FAIL" if c.required else "warn"
-    print(f"  {status:4}  {c.name}" + (f"  ({c.detail})" if c.detail else ""))
+names = {f"{t['schema']}.{t['table']}" for t in m["tables"]}
+con = bundle_con(bundle, m["tables"], "bioc")
+checks = bundle_checks(con, m["tables"], readme_queries(gate.README))
+checks += reference_checks(m["tables"], r["tables"],
+                           allow_column_change=os.environ.get("ALLOW_COLUMN_CHANGE", "").split())
+for name, key in gate.KEYS.items():
+    if name in names:
+        checks += key_checks(con, name, key)
+for name, refs in gate.REFERENCES.items():
+    if name in names:
+        checks += [reference_covered(con, name, col, target, names) for col, target in refs.items()]
+checks += list(gate.contract_policy(con, m, r))
+print_report(checks)
 failed = sum(c.required and not c.passed for c in checks)
 print(f"FAIL: {failed} required check(s) failed" if failed else "PASS")
 sys.exit(1 if failed else 0)

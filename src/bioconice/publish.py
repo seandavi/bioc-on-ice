@@ -16,7 +16,6 @@ from cdsci.lake.contracts import ColumnContract, TableContract, TemporalModel
 from . import (bedbase, biogrid, bugsigdb, cellosaurus, cellxgene, complexportal, encode, ensembl,
                eqtlcatalogue, gwas_catalog, hgnc, icite, intact, mane, ncbi, ncbi_accession, ncbi_go,
                ncbi_orthologs, ncbi_pubmed, obo, pubtator3, rnacentral, wikipathways)
-from .release import SIGNATURE_TAXON, SIGNATURE_TAXON_SELECT
 from .schemas import TABLES as DECLARED
 
 DEFAULT_BASE_URL = "https://data.bioconice.cancerdatasci.org/latest"
@@ -65,11 +64,19 @@ FROM_LAKE = {**hgnc.RELEASE, **complexportal.RELEASE, **wikipathways.RELEASE,
                                                          mane, rnacentral)]
                  + ["SELECT * FROM lake.uniprot.identifier_mapping WHERE taxon_id = 9606"])}
 
+# Not declared in schemas.py: the bundle's annotation.signature_taxon is the cdsci-lake table
+# lake.bugsigdb.signature_taxon in the published columns; SIGNATURE_TAXON (below) documents it.
+SIGNATURE_TAXON_SELECT = (
+    "SELECT bsdb_id, CAST(member_index AS BIGINT) AS member_index, taxon_rank, taxon_name, "
+    "CAST(ncbitaxon_id AS BIGINT) AS ncbitaxon_id, taxon_lineage, taxon_lineage_ids "
+    "FROM lake.bugsigdb.signature_taxon"
+)
+
 # Every table of the live catalog except annotation.identifier_mapping__pre_repair.
 TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))
           for name, d in DECLARED.items()] + [
-    # Not declared in schemas.py: signature_taxon is the bioconice-bugsigdb release
-    # contract's table (release.py), read from the lake; raw.metadata has no writer here.
+    # Not declared in schemas.py: signature_taxon is read from the lake (ADR-0012);
+    # raw.metadata has no writer here.
     ("annotation", "signature_taxon", SIGNATURE_TAXON_SELECT),
     # iCite metadata straight from cdsci-lake (#183 wave A): the Iceberg copy was its old
     # reverse-ETL export, same 17 columns and types. The columns the lake added for
@@ -78,6 +85,69 @@ TABLES = [(*name.split("."), FROM_LAKE.get(name) or _current(name, d))
     # From cdsci-lake (#194); becomes lake.pubmed.article with seandavi/cdsci-lake#136.
     ("annotation", "pubmed__article", "SELECT * FROM lake.omicidx.pubmed_article"),
 ]
+_NULL_UNCURATED = "BugSigDB curated no value for this member."
+
+SIGNATURE_TAXON = TableContract(
+    name="annotation.signature_taxon",
+    description=(
+        "BugSigDB signature <-> NCBI taxon bridge: one row per taxon member of a curated "
+        "signature, exploded from the two positionally-matched member-list columns of the "
+        "BugSigDB full dump. Each member is reported at the rank the curators asserted "
+        "(taxon_rank), with no rollup to a fixed rank; join ncbitaxon_id to a taxonomy for "
+        "that. Study, experiment and contrast attributes are not in this table. Licence "
+        "CC BY 4.0 (BugSigDB)."
+    ),
+    grain="one row per (bsdb_id, member_index)",
+    primary_key=("bsdb_id", "member_index"),
+    sort_by=("bsdb_id", "member_index"),
+    temporal_model=TemporalModel.UPSERT_LATEST_SNAPSHOT,
+    owner="bioc-on-ice",
+    license="CC-BY-4.0",
+    columns=(
+        ColumnContract(
+            "bsdb_id", "string",
+            "BugSigDB signature id, e.g. 'bsdb:83/1/1' (the 'bsdb:' prefix is part of the "
+            "value). Part of the key; recurs once per member of the signature.",
+            False, identifier_namespace="bugsigdb"),
+        ColumnContract(
+            "member_index", "int64",
+            "1-based position of this member in the signature's curated member list. Part "
+            "of the key: (bsdb_id, member_index) is the grain. Not stable across BugSigDB "
+            "versions if curators reorder a signature.",
+            False),
+        ColumnContract(
+            "taxon_rank", "string",
+            "MetaPhlAn rank letter of the asserted taxon: k (kingdom), p, c, o, f, g, s "
+            "(species), or t (strain). The rank the curators reported the member at, not "
+            "rolled up to a fixed rank; a signature mixes ranks.",
+            True, null_meaning=_NULL_UNCURATED),
+        ColumnContract(
+            "taxon_name", "string",
+            "Name of the asserted taxon with its rank prefix stripped, e.g. 'Anaerostipes "
+            "caccae' from 's__Anaerostipes caccae'. MetaPhlAn's spelling, which may lag "
+            "NCBI's current name.",
+            True, null_meaning=_NULL_UNCURATED),
+        ColumnContract(
+            "ncbitaxon_id", "int64",
+            "NCBI Taxonomy id of the asserted taxon: the last element of the member's "
+            "lineage ids. Bare local id (bioregistry prefix ncbitaxon). Not part of the "
+            "key: two members of one signature may resolve to the same taxon.",
+            True, identifier_namespace="ncbitaxon",
+            null_meaning="BugSigDB curated no taxonomy id for this member, or it is not "
+                         "an integer."),
+        ColumnContract(
+            "taxon_lineage", "string",
+            "The member's full MetaPhlAn lineage verbatim, '|'-separated with k__/p__/.../"
+            "s__ prefixes. Kept for provenance; taxon_name/taxon_rank are its leaf.",
+            True, null_meaning=_NULL_UNCURATED),
+        ColumnContract(
+            "taxon_lineage_ids", "string",
+            "The member's NCBI Taxonomy ids up its lineage, '|'-separated, in the same "
+            "rank order as taxon_lineage. Kept verbatim; ncbitaxon_id is its last element.",
+            True, null_meaning=_NULL_UNCURATED),
+    ),
+)
+
 _EMPTY = "Empty string, not null, when the PubMed record has no value."
 
 
