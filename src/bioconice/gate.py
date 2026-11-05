@@ -27,10 +27,11 @@ from cdsci.lake.contracts import (
 )
 from cdsci.lake.publish.release import AcceptanceCheck
 from cdsci.lake.publish.verify import verify_release_over_release
+from cdsci.publish import sql_literal as _lit
 from pyiceberg.types import ListType
 
 from . import icite, pubtator3
-from .publish import PUBMED_ARTICLE, ROW_HISTORY, _lit
+from .publish import PUBMED_ARTICLE, ROW_HISTORY
 from .release import BUGSIGDB
 from .schemas import _OBO_ONTOLOGIES
 from .schemas import TABLES as DECLARED

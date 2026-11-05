@@ -15,9 +15,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from cdsci.publish import build_db, restore_sql, views_sql
 from pyarrow import fs as pafs
 
-from . import publish
+from .publish import DB_FILE
 
 BUCKET = "data-bioconice"
 PUBLIC_URL = "https://data.bioconice.cancerdatasci.org"
@@ -73,12 +74,12 @@ def _folder(fs, root, bundle, manifest, folder, apply):
         _put(fs, bundle / t["path"], f"{root}/{folder}/{t['path']}", apply)
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        views = publish.views_sql(manifest["tables"], base)
+        views = views_sql(manifest["tables"], base)
         (tmp / "views.sql").write_text(views)
-        (tmp / "restore.sql").write_text(publish.restore_sql(manifest["tables"], base))
+        (tmp / "restore.sql").write_text(restore_sql(manifest["tables"], base))
         (tmp / "manifest.json").write_text(json.dumps({**manifest, "base_url": base}, indent=2) + "\n")
-        publish._build_db(tmp / publish.DB_FILE, views, base, bundle)
-        for name in ("views.sql", "restore.sql", publish.DB_FILE, "manifest.json"):
+        build_db(tmp / DB_FILE, views, base, bundle)
+        for name in ("views.sql", "restore.sql", DB_FILE, "manifest.json"):
             _put(fs, tmp / name, f"{root}/{folder}/{name}", apply)
 
 

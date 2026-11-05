@@ -1,4 +1,7 @@
-"""`bioconice publish`: a release bundle from the local sqlite warehouse, offline."""
+"""`bioconice publish`: a release bundle from the local sqlite warehouse, offline.
+
+The bundle mechanics are cdsci.publish (cdsci-lake ADR-0027, tested there); these tests
+cover what bioc adds: TABLES over the live catalog, current rows only, and the docs."""
 
 import json
 from pathlib import Path
@@ -43,7 +46,7 @@ def test_bundle_attaches_with_current_rows_and_docs(con, tmp_path):
     m = publish.publish(con, out, out.as_uri(), ONLY)
 
     assert json.loads((out / "manifest.json").read_text()) == json.loads(json.dumps(m))
-    assert len(m["release"]) == 10 and m["provenance"]
+    assert m["manifest_version"] == 1 and len(m["release"]) == 10 and m["provenance"]
     current = {"annotation.gene": "WHERE valid_to IS NULL", "annotation.exon": "WHERE valid_to IS NULL",
                "raw.ensembl__gtf": "", "provenance.release": ""}
     want = {n: con.sql(f"SELECT count(*) FROM bioc.{n} {w}").fetchone()[0] for n, w in current.items()}
@@ -80,17 +83,13 @@ def test_published_docs_never_mention_row_history():
         assert not [t for t in texts if any(c in t for c in publish.ROW_HISTORY)], f"{schema}.{table}"
 
 
-def test_a_failed_publish_leaves_no_manifest_from_an_earlier_run(con, tmp_path, monkeypatch):
+def test_publish_refuses_an_earlier_runs_directory(con, tmp_path):
+    # cdsci-publish's rule; scripts/release.sh clears an interrupted run's directory first
     out = tmp_path / "release"
     out.mkdir()
     (out / "manifest.json").write_text('{"tables": []}')
-
-    def killed(*a):
-        raise KeyboardInterrupt
-    monkeypatch.setattr(publish, "_build_db", killed)
-    with pytest.raises(KeyboardInterrupt):
+    with pytest.raises(ValueError, match="not empty"):
         publish.publish(con, out, out.as_uri(), ONLY)
-    assert not (out / "manifest.json").exists()
 
 
 def test_views_keep_the_https_url_before_it_is_uploaded(con, tmp_path):
@@ -100,8 +99,3 @@ def test_views_keep_the_https_url_before_it_is_uploaded(con, tmp_path):
     assert f"read_parquet('{url}')" in (out / "views.sql").read_text()
     db = duckdb.connect(str(out / publish.DB_FILE), read_only=True)
     assert url in db.sql("SELECT sql FROM duckdb_views() WHERE view_name = 'gene'").fetchone()[0]
-
-
-def test_unknown_table_is_refused(con, tmp_path):
-    with pytest.raises(ValueError, match="not a published table"):
-        publish.publish(con, tmp_path, tmp_path.as_uri(), ["annotation.nope"])
