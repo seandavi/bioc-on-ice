@@ -15,8 +15,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from cdsci.publish import restore_sql, views_sql
-from cdsci.publish.bundle import _build_db
+from cdsci.publish import build_db, restore_sql, views_sql
 from pyarrow import fs as pafs
 
 from .publish import DB_FILE
@@ -79,7 +78,7 @@ def _folder(fs, root, bundle, manifest, folder, apply):
         (tmp / "views.sql").write_text(views)
         (tmp / "restore.sql").write_text(restore_sql(manifest["tables"], base))
         (tmp / "manifest.json").write_text(json.dumps({**manifest, "base_url": base}, indent=2) + "\n")
-        _build_db(tmp / DB_FILE, views, base, bundle)
+        build_db(tmp / DB_FILE, views, base, bundle)
         for name in ("views.sql", "restore.sql", DB_FILE, "manifest.json"):
             _put(fs, tmp / name, f"{root}/{folder}/{name}", apply)
 

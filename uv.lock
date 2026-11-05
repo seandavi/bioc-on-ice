@@ -58,8 +58,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?rev=5a40ab9c71de2964d7d7ae658651524189dc1d25" },
-    { name = "cdsci-publish", git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=5a40ab9c71de2964d7d7ae658651524189dc1d25" },
+    { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?rev=c9fccf4c16db2df127cdb111919a117e1d1f5c6f" },
+    { name = "cdsci-publish", git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=c9fccf4c16db2df127cdb111919a117e1d1f5c6f" },
     { name = "duckdb", specifier = ">=1.4" },
     { name = "huggingface-hub", specifier = ">=2.2.0" },
     { name = "mcp", specifier = ">=1.2,<2" },
@@ -81,7 +81,7 @@ wheels = [
 [[package]]
 name = "cdsci-lake"
 version = "0.4.2"
-source = { git = "https://github.com/seandavi/cdsci-lake?rev=5a40ab9c71de2964d7d7ae658651524189dc1d25#5a40ab9c71de2964d7d7ae658651524189dc1d25" }
+source = { git = "https://github.com/seandavi/cdsci-lake?rev=c9fccf4c16db2df127cdb111919a117e1d1f5c6f#c9fccf4c16db2df127cdb111919a117e1d1f5c6f" }
 dependencies = [
     { name = "duckdb" },
     { name = "httpx" },
@@ -93,7 +93,7 @@ dependencies = [
 [[package]]
 name = "cdsci-publish"
 version = "0.1.0"
-source = { git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=5a40ab9c71de2964d7d7ae658651524189dc1d25#5a40ab9c71de2964d7d7ae658651524189dc1d25" }
+source = { git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=c9fccf4c16db2df127cdb111919a117e1d1f5c6f#c9fccf4c16db2df127cdb111919a117e1d1f5c6f" }
 dependencies = [
     { name = "duckdb" },
     { name = "fsspec" },

@@ -39,6 +39,8 @@ fi
 if complete; then
   log "complete bundle already in $dir; not rebuilding it"
 else
+  # publish wants a new or empty directory (cdsci-publish): clear an interrupted run's
+  rm -rf "$dir"
   log "publish -> $dir"
   bioconice publish --out "$dir"
 fi

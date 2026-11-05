@@ -6,7 +6,6 @@ cover what bioc adds: TABLES over the live catalog, current rows only, and the d
 import json
 from pathlib import Path
 
-import cdsci.publish.bundle
 import duckdb
 import pytest
 
@@ -84,17 +83,13 @@ def test_published_docs_never_mention_row_history():
         assert not [t for t in texts if any(c in t for c in publish.ROW_HISTORY)], f"{schema}.{table}"
 
 
-def test_a_failed_publish_leaves_no_manifest_from_an_earlier_run(con, tmp_path, monkeypatch):
+def test_publish_refuses_an_earlier_runs_directory(con, tmp_path):
+    # cdsci-publish's rule; scripts/release.sh clears an interrupted run's directory first
     out = tmp_path / "release"
     out.mkdir()
     (out / "manifest.json").write_text('{"tables": []}')
-
-    def killed(*a):
-        raise KeyboardInterrupt
-    monkeypatch.setattr(cdsci.publish.bundle, "_build_db", killed)
-    with pytest.raises(KeyboardInterrupt):
+    with pytest.raises(ValueError, match="not empty"):
         publish.publish(con, out, out.as_uri(), ONLY)
-    assert not (out / "manifest.json").exists()
 
 
 def test_views_keep_the_https_url_before_it_is_uploaded(con, tmp_path):

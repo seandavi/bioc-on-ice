@@ -27,7 +27,7 @@ from cdsci.lake.contracts import (
 )
 from cdsci.lake.publish.release import AcceptanceCheck
 from cdsci.lake.publish.verify import verify_release_over_release
-from cdsci.publish.bundle import _lit
+from cdsci.publish import sql_literal as _lit
 from pyiceberg.types import ListType
 
 from . import icite, pubtator3
