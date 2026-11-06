@@ -1,0 +1,47 @@
+---
+title: NCBI Gene
+description: "NCBI Gene's nightly dumps for every organism, landed whole: gene_info, gene2go, gene2pubmed, gene2accession, gene2ensembl, gene_history, gene_orthologs and gene_group."
+---
+
+[NCBI Gene](https://www.ncbi.nlm.nih.gov/gene) is the Entrez gene catalog
+and the content of Bioconductor's OrgDb packages. Its
+[FTP dumps](https://ftp.ncbi.nlm.nih.gov/gene/DATA/) are regenerated nightly
+and cover every organism NCBI knows. The release lands each dump whole and
+derives:
+
+- `annotation.ncbi__gene` from `gene_info`: symbol, aliases, description, type, map location, keyed by Entrez GeneID.
+- `annotation.ncbi__gene_go` from `gene2go`: direct GO annotations with evidence and qualifier (OrgDb's GO table; no ancestor closure).
+- `annotation.ncbi__gene_pubmed` from `gene2pubmed`: gene to publication links.
+- `annotation.ortholog` from `gene_orthologs`: each pair stored in both directions (Orthology.eg.db).
+- NCBI's cross-references, from `gene_info` dbXrefs, `gene2ensembl` and `gene2accession`, in `annotation.identifier_mapping`.
+
+There is no release number, so the version is the retrieval date, and
+`provenance.release` says so with `version_method = 'retrieval_date'`. Each
+dump gets its own provenance row because the ingests run independently.
+
+## Licence and citation
+
+[NCBI Molecular Data Usage](https://www.ncbi.nlm.nih.gov/home/about/policies/)
+terms: NCBI places no restrictions on the use of its molecular data, and asks
+that NCBI and the retrieval date be cited.
+
+## Join keys
+
+- `gene_id` is the Entrez GeneID as text, with `taxon_id` beside it, on every table.
+- `annotation.identifier_mapping` rows under `source = 'NCBI'` (gene_info and gene2ensembl) and `source = 'NCBI_ACCESSION'` (gene2accession) map Entrez to Ensembl, HGNC, MIM, RefSeq RNA and protein accessions (versioned, `NM_000546.6`) and the model-organism databases.
+- `pubmed_id` joins `annotation.pubmed__article.pmid` and `annotation.icite__publication.pmid`; `go_id` joins `ontology.term` where `ontology = 'go'`.
+- `annotation.ortholog` rows belong to the taxon of their first gene; pairs between two non-primary members of a set are not inferred.
+
+## Good to know
+
+- `gene2go` is direct annotations only; a GOALL-style closure needs the GO DAG in `ontology.relationship`.
+- `gene_group` is landed but not derived: it carries readthrough and related-gene relationships, no longer orthologs.
+- `gene2accession` is the largest table in the release; `-` cells are NULL and `orientation` is the only column where `-` is a real value.
+
+## In the release
+
+::: {.source-facts data-source="ncbi_gene"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

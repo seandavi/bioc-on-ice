@@ -3,17 +3,16 @@
 [BugSigDB](https://bugsigdb.org) is a curated database of published microbial
 signatures, meaning the taxa reported as more or less abundant between two groups in a
 microbiome study. biocOnIce publishes it as two tables that anyone can query
-anonymously from DuckDB, R or Python without downloading anything first.
-
-| Table | Rows | One row per |
-| --- | --- | --- |
-| `raw.bugsigdb__full_dump` | 7,425 | signature: study, experiment, condition, body site, groups, methods, direction |
-| `annotation.signature_taxon` | 59,486 | taxon member of a signature (7,365 signatures; the other 60 list no members) |
+anonymously from DuckDB, R or Python without downloading anything first:
+`raw.bugsigdb__full_dump`, one row per signature (study, experiment, condition,
+body site, groups, methods, direction), and `annotation.signature_taxon`, one row
+per taxon member of a signature (a few dozen signatures list no members).
 
 The two tables join on `bsdb_id`, e.g. `'bsdb:83/1/1'` (study/experiment/signature,
-with the `bsdb:` prefix included). Row counts are from the `v2026-11-01` release,
-built from BugSigDBExports `v1.3.1`. Licence: CC BY 4.0, so cite BugSigDB as its
-site asks.
+with the `bsdb:` prefix included). The row counts and the BugSigDBExports version
+of the current release are on the site's
+[BugSigDB page](https://bioconice.cancerdatasci.org/sources/bugsigdb.html), read
+from the latest manifest. Licence: CC BY 4.0, so cite BugSigDB as its site asks.
 
 ## Connect
 
@@ -28,14 +27,9 @@ instead, e.g. `https://data.bioconice.cancerdatasci.org/v2026-11-01/bioconice.du
 Only the newest 4 dated releases are kept (plus the one just uploaded, if it
 is older), about four weeks. For long-term pins use the monthly Hugging Face
 archive once it starts ([#214](https://github.com/seandavi/bioc-on-ice/issues/214)).
-Both are listed at <https://bioconice.cancerdatasci.org/releases>.
-
-Each table is also a plain Parquet file that any Parquet reader can open:
-
-```
-https://data.bioconice.cancerdatasci.org/latest/annotation/signature_taxon.parquet
-https://data.bioconice.cancerdatasci.org/latest/raw/bugsigdb__full_dump.parquet
-```
+Both are listed at <https://bioconice.cancerdatasci.org/releases>. Each table
+is also a plain Parquet file under `latest/<schema>/<table>.parquet` that any
+Parquet reader can open.
 
 ## What's in the tables
 

@@ -1,0 +1,34 @@
+---
+title: UniProt
+description: UniProt's cross-references between protein accessions and gene identifiers, in annotation.identifier_mapping for human only so far.
+---
+
+[UniProt](https://www.uniprot.org) is the protein sequence and annotation
+knowledgebase. bioc-on-ice carries only its identifier cross-references: rows
+in `annotation.identifier_mapping` mapping UniProtKB accessions to Entrez,
+Ensembl and the other gene identifier authorities. They come from the
+[cdsci-lake](https://github.com/seandavi/cdsci-lake) UniProt model, which the
+release reads for taxon 9606 only. There is no UniProt module in bioc-on-ice
+and no table of UniProt's own.
+
+## Licence and citation
+
+CC BY 4.0. Cite UniProt as [its site asks](https://www.uniprot.org/help/publications).
+
+## Join keys
+
+- `annotation.identifier_mapping` rows under `source = 'UniProt'`, taxon 9606: this is the path from the UniProtKB accessions in `annotation.interaction` (IntAct), `annotation.complexportal__participant` and `raw.biogrid__interactions` to genes.
+- As everywhere in `identifier_mapping`, mappings are many-to-many in both directions.
+
+## Good to know
+
+- Human only. Other taxa's UniProt mappings are not in the release yet.
+- This source has no row in `provenance.release`: its version is the lake's.
+
+## In the release
+
+::: {.source-facts data-source="uniprot"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

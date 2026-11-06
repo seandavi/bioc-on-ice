@@ -4,3 +4,11 @@ description: BugSigDB's curated microbial signatures as two tables you can query
 ---
 
 {{< include ../../../docs/bugsigdb.md >}}
+
+## In the release
+
+::: {.source-facts data-source="bugsigdb"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

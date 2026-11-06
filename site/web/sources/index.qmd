@@ -1,0 +1,44 @@
+---
+title: Sources
+description: Every upstream source in the bioc-on-ice release, with its licence, tables and upstream version, read from the latest manifest.
+toc: false
+---
+
+One page per source. Each says what the source is, where it comes from, its
+licence and how to cite it, how its tables join the rest of the release, and
+the caveats worth knowing. The tables, row counts and upstream versions on
+every page are read from the latest release's `manifest.json` when the page
+loads, so they do not go stale between releases.
+
+## Connect
+
+Every table is a view in `bioconice.duckdb` and a plain Parquet file. In DuckDB
+(CLI, R or Python), with no account, token or extension:
+
+```sql
+ATTACH 'https://data.bioconice.cancerdatasci.org/latest/bioconice.duckdb' AS bioc (READ_ONLY);
+SELECT * FROM bioc.annotation.hgnc__gene LIMIT 5;
+```
+
+`latest/` moves with each weekly release; pin a dated folder or a monthly
+Hugging Face release for reproducible work, as [Versions and
+citation](../guides/versions-and-citation.qmd) explains. From R, the
+[`bioconice` package](https://github.com/seandavi/bioconice) wraps the same
+connection. The Parquet files are linked from each source's table below, and
+any Parquet reader can open them directly.
+
+## The sources
+
+::: {#sources-index}
+Loading from the latest release…
+:::
+
+Three tables stack rows from several sources and appear on each contributor's
+page: `annotation.identifier_mapping` (NCBI Gene, Ensembl, HGNC, MANE,
+RNAcentral, UniProt), `annotation.interaction` (BioGRID, IntAct) and
+`resource.resource_relationship` (BEDbase, CELLxGENE, ENCODE, eQTL Catalogue).
+Each row names its writer in a `source` column. `provenance.release` records,
+per release and source, the upstream version, URL and retrieval time every
+table was built from.
+
+{{< include _facts.qmd >}}

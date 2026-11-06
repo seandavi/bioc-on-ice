@@ -1,0 +1,36 @@
+---
+title: IntAct
+description: IntAct's molecular interaction evidence in PSI-MI MITAB 2.7, landed whole and stacked into annotation.interaction beside BioGRID.
+---
+
+[IntAct](https://www.ebi.ac.uk/intact/) (EMBL-EBI, with the IMEx curators)
+publishes dated releases of curated molecular interactions. The release lands
+`psimitab/intact.zip` whole: `intact.txt` and `intact_negative.txt`
+(interactions shown *not* to occur), all 42 MITAB columns as text, every
+organism and molecule type, the latest release only. The derived rows stack
+into `annotation.interaction` under `source = 'INTACT'`. The directory date is
+the version.
+
+## Licence and citation
+
+CC BY 4.0: "IntAct (EMBL-EBI), CC BY 4.0; del Toro et al. NAR 2022". Cite
+the release date as `provenance.release` records it.
+
+## Join keys
+
+- The key is the interaction AC (`intact:EBI-…`) plus the pair as published: a MITAB row is binary, and most rows are the spoke expansion of an n-ary interaction under one AC.
+- Interactors stay in IntAct's identifier space, split into namespace and id: UniProtKB accessions (95%, isoform suffixes kept), IntAct's own `EBI-` ids, ChEBI, Ensembl, RNAcentral. Nothing is mapped to genes; map UniProt accessions through `annotation.identifier_mapping` (human only so far).
+- Single-participant interactions repeat A as B, the form BioGRID uses for self-interaction.
+
+## Good to know
+
+- The confidence score (`intact-miscore`) is recomputed every release and stays in raw.
+- Negative interactions are told apart by MITAB's own `negative` column.
+
+## In the release
+
+::: {.source-facts data-source="intact"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

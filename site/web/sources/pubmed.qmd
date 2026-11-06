@@ -1,0 +1,37 @@
+---
+title: PubMed
+description: "PubMed citations, one row per PMID, from the cdsci-lake PubMed table: title, abstract, journal, authors, MeSH terms, references and grants."
+---
+
+[PubMed](https://pubmed.ncbi.nlm.nih.gov) is the citation database behind
+every `pmid` in the release. `annotation.pubmed__article` has one row per
+PMID with title, abstract, journal, authors (with ORCID where given),
+publication date, MeSH headings, publication types, chemicals, keywords, DOI,
+cited references, and grants. It is read from the
+[cdsci-lake](https://github.com/seandavi/cdsci-lake) PubMed table
+(`lake.omicidx.pubmed_article`), not from a bioc-on-ice source module.
+
+## Licence and citation
+
+[NLM Terms and Conditions](https://www.nlm.nih.gov/databases/download/terms_and_conditions.html)
+for PubMed data. Cite PubMed and NLM.
+
+## Join keys
+
+- `pmid` (text) joins `annotation.ncbi__gene_pubmed.pubmed_id`, `annotation.icite__publication.pmid`, `annotation.pubtator3__mention.pmid`, `raw.bugsigdb__full_dump.pmid` and `clinical.gwas_catalog__study.pubmed_id`.
+- `references` is a list of (citation, pmid) structs; `authors` and `grant_ids` are lists of structs.
+- MeSH terms are one `; `-separated string of `Dnnnnnn:Heading / Qnnnnnn:Qualifier`, with `*` marking a major topic.
+
+## Good to know
+
+- Missing values are the empty string, not NULL.
+- This table has no row in `provenance.release`: its version is the lake's, not an upstream release number.
+- A small fraction of the PMIDs in `gene2pubmed` are newer than the lake's load and not yet here.
+
+## In the release
+
+::: {.source-facts data-source="pubmed"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

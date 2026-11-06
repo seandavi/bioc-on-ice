@@ -10,6 +10,8 @@ project:
     - "explorer/*.qmd"
   resources:
     - shell-links.js
+    - sources/source-facts.js
+    - sources/sources.json
 
 website:
   title: "bioc-on-ice"
@@ -47,9 +49,50 @@ website:
           - href: guides/mcp.qmd
             text: Ask an assistant (MCP)
       - section: Sources
+        href: sources/index.qmd
         contents:
+          - href: sources/bedbase.qmd
+            text: BEDbase
+          - href: sources/biogrid.qmd
+            text: BioGRID
           - href: sources/bugsigdb.qmd
             text: BugSigDB
+          - href: sources/cellosaurus.qmd
+            text: Cellosaurus
+          - href: sources/cellxgene.qmd
+            text: CELLxGENE
+          - href: sources/complexportal.qmd
+            text: Complex Portal
+          - href: sources/encode.qmd
+            text: ENCODE
+          - href: sources/ensembl.qmd
+            text: Ensembl
+          - href: sources/eqtlcatalogue.qmd
+            text: eQTL Catalogue
+          - href: sources/gwas_catalog.qmd
+            text: GWAS Catalog
+          - href: sources/hgnc.qmd
+            text: HGNC
+          - href: sources/icite.qmd
+            text: iCite
+          - href: sources/intact.qmd
+            text: IntAct
+          - href: sources/mane.qmd
+            text: MANE
+          - href: sources/ncbi_gene.qmd
+            text: NCBI Gene
+          - href: sources/obo.qmd
+            text: Ontologies (OBO)
+          - href: sources/pubmed.qmd
+            text: PubMed
+          - href: sources/pubtator3.qmd
+            text: PubTator3
+          - href: sources/rnacentral.qmd
+            text: RNAcentral
+          - href: sources/uniprot.qmd
+            text: UniProt
+          - href: sources/wikipathways.qmd
+            text: WikiPathways
       - section: In the browser
         contents:
           - href: explorer/index.qmd

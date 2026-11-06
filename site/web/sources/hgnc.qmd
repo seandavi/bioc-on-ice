@@ -1,0 +1,36 @@
+---
+title: HGNC
+description: HGNC's complete set of approved human gene symbols, names and cross-references, and its rows in annotation.identifier_mapping.
+---
+
+[HGNC](https://www.genenames.org) is the authority for human gene symbols and
+names: one TSV, one row per approved HGNC id. The release lands
+`hgnc_complete_set.txt` whole and derives `annotation.hgnc__gene` (symbol,
+name, locus type, location, the cross-references) and HGNC's rows in
+`annotation.identifier_mapping`. The rolling file carries no version, so the
+version is the retrieval date; a dated archive copy, when landed, is recorded
+by its date instead.
+
+## Licence and citation
+
+CC0 1.0. HGNC asks to be cited as
+[its site describes](https://www.genenames.org/about/).
+
+## Join keys
+
+- `hgnc_id` (`HGNC:5`) is the key; `symbol` is the approved symbol, the authoritative one where Ensembl and NCBI disagree.
+- HGNC's Entrez, Ensembl, UCSC and OMIM ids are columns of the raw table and rows of `annotation.identifier_mapping` under `source = 'HGNC'`, for taxon 9606; that is the join to `annotation.ncbi__gene` and `annotation.gene`. NCBI asserts HGNC ids too, under its own `source`.
+- `rna_central_id` is the bare `URS` form; RNAcentral's tables use `URS…_9606`, so the join is `|| '_9606'`.
+
+## Good to know
+
+- The set holds approved records only; withdrawn and merged symbols are in `withdrawn.txt`, which is not landed.
+- The header is the column contract: an upstream column change fails the landing rather than shifting values.
+
+## In the release
+
+::: {.source-facts data-source="hgnc"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

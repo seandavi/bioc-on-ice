@@ -1,0 +1,38 @@
+---
+title: GWAS Catalog
+description: The NHGRI-EBI GWAS Catalog's associations and studies, traits as ontology term ids that join ontology.term.
+---
+
+The [NHGRI-EBI GWAS Catalog](https://www.ebi.ac.uk/gwas/) curates published
+genome-wide association studies: per publication, the variants reported at
+p < 10⁻⁵ with their traits, mapped by curators to EFO and other ontologies.
+The release lands two files of one dated Catalog release, the
+ontology-annotated full associations download and the studies download, and
+derives `clinical.gwas_catalog__association` and
+`clinical.gwas_catalog__study`. The release date is the version.
+
+## Licence and citation
+
+[EMBL-EBI Terms of Use](https://www.ebi.ac.uk/about/terms-of-use). Cite the
+Catalog as [its site asks](https://www.ebi.ac.uk/gwas/docs/about), with the
+release date.
+
+## Join keys
+
+- `study_accession` (`GCST…`) joins associations to studies; `pubmed_id` joins `annotation.pubmed__article`.
+- An association has no identifier in the download, so `association_key` is an md5 of the nine curator-extracted fields that identify a row.
+- `mapped_trait_ids` is a sorted list of term ids (EFO, OBA, MONDO, HP, GO) that join `ontology.term.term_id`; `snp_ids` and `snp_gene_ids` are lists too, the latter Ensembl gene ids joining `annotation.gene.gene_id`.
+
+## Good to know
+
+- Positions, p-values, odds ratios and confidence intervals are text, as published: multi-SNP rows carry several values and the units vary.
+- The ancestry, unpublished-studies and trait-mapping files are not landed.
+- Whole-row duplicates in the associations file are kept in raw.
+
+## In the release
+
+::: {.source-facts data-source="gwas_catalog"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

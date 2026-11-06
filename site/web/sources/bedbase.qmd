@@ -1,0 +1,43 @@
+---
+title: BEDbase
+description: BEDbase's catalog of BED files and bedsets as resource tables, with the region data itself referenced, not copied.
+---
+
+[BEDbase](https://bedbase.org) catalogs hundreds of thousands of BED files,
+mostly GEO and ENCODE peak and region calls processed through its bedboss
+pipeline, grouped into bedsets. bioc-on-ice carries the catalog, not the
+intervals: the `resource` tables say what each file is, which genome it is
+on and where it came from, and the bytes stay at BEDbase.
+
+The release lands BEDbase's own monthly Parquet snapshot (the index at
+`api.bedbase.org/v1/exports`), never a crawl of the API: a crawl of
+`/bed/list` in September 2026 took the service down for an hour and a half.
+The version is the snapshot's date.
+
+## Licence and citation
+
+BEDbase states no site-wide data licence. Each record carries a
+[DUO](https://github.com/EBISPOT/DUO) code, and every record of the 2026-09-01
+snapshot is `DUO:0000042`, general research use. Cite BEDbase as its site
+asks.
+
+## Join keys
+
+- `resource.bedbase__bedfile.resource_id` and `resource.bedbase__bedset.resource_id` are the BEDbase ids.
+- Membership is in `resource.resource_relationship` as `member_of_bedset` rows, and GEO and ENCODE origins as `encode:ENCSR…` / `encode:ENCFF…` targets that join `resource.encode__*.resource_id` with `=`.
+- Genomes are keyed on `genome_digest`, never `genome_alias`: the alias is free text and one Arabidopsis record carries `hg18`.
+- `taxon_id` is a `TRY_CAST` of the species field, which is occasionally a comma-separated pair; it is NULL on those rows.
+
+## Good to know
+
+- Per-file size, checksum, URIs and bedstat statistics are not in the snapshot ([#115](https://github.com/seandavi/bioc-on-ice/issues/115)).
+- The raw column names predate the snapshot (`annotation_*`, from the old listing API) and are kept.
+- Only `ENCSR` targets that are ENCODE *experiments* resolve in `resource.encode__experiment`; most name ENCODE Annotation datasets, which are not landed.
+
+## In the release
+
+::: {.source-facts data-source="bedbase"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

@@ -1,0 +1,35 @@
+---
+title: WikiPathways
+description: WikiPathways' monthly GMT export, every species, as pathway and gene-pathway tables keyed by Entrez GeneID.
+---
+
+[WikiPathways](https://www.wikipathways.org) is a community-curated pathway
+database. It publishes its pathways as gene sets once a month: one GMT file
+per species, the release date in every file name. The release lands every
+species file whole, one row per line, and derives
+`annotation.wikipathways__pathway` (one row per pathway) and
+`annotation.wikipathways__gene_pathway` (one row per pathway and Entrez
+gene). The date in the file names is the version.
+
+## Licence and citation
+
+CC0 1.0. Cite WikiPathways as
+[its site asks](https://www.wikipathways.org/about.html), with the release date.
+
+## Join keys
+
+- `pathway_id` (`WP554`) joins the two tables; `taxon_id` names the species.
+- `gene_id` is the Entrez GeneID, the GMT export's only id system, and joins `annotation.ncbi__gene.gene_id`.
+
+## Good to know
+
+- Pathway ontology tags, authors, last-modified dates and the non-gene nodes (metabolites, interactions) are not in the GMT; they live in the GPML export, which is not landed.
+- Raw keeps each line's gene ids as the verbatim tab-joined string, duplicates and order included.
+
+## In the release
+
+::: {.source-facts data-source="wikipathways"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}
