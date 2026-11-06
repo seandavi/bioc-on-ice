@@ -1,0 +1,40 @@
+---
+title: CELLxGENE
+description: The CELLxGENE Discover dataset catalog as a resource table, with H5AD and Census pointers and ontology-tagged tissues, cell types, assays and diseases.
+---
+
+[CELLxGENE Discover](https://cellxgene.cziscience.com) publishes a listing of
+every public single-cell dataset. The release lands that listing whole and
+derives `resource.cellxgene__dataset`: one row per dataset version with the
+organism resolved to a taxon id, the multi-valued fields exploded to sorted
+lists of ontology term ids, an `h5ad_uri` and the Census release the cells
+join through. Expression matrices are never copied; the row points at public
+S3.
+
+The listing has no version of its own, so the version is the retrieval date
+and raw holds the latest crawl only.
+
+## Licence and citation
+
+CC BY 4.0, CELLxGENE Discover's uniform licence for public data. Cite
+CELLxGENE Discover and the collection's publication, whose DOI the row carries
+(`collection_doi`).
+
+## Join keys
+
+- `resource.cellxgene__dataset.dataset_version_id` is the key, and the `resource_id` in `resource.resource_relationship`, where tissues, cell types, assays and diseases are rows (`has_tissue`, `has_cell_type`, …) whose `target_id` joins `ontology.term.term_id`.
+- The same ids are also on the dataset row as sorted lists, for `list_contains()` filters.
+- `taxon_id` joins every gene table; `census_release` names the Census SOMA build.
+
+## Good to know
+
+- A dataset that disappears from the next crawl, or is superseded by a revision under a new version id, is retired from the table.
+- The Census `var` dataframe (`annotation.cellxgene__gene`) is not landed: it is only published inside the TileDB-SOMA store.
+
+## In the release
+
+::: {.source-facts data-source="cellxgene"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

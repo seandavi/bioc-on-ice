@@ -1,0 +1,38 @@
+---
+title: Ensembl
+description: Ensembl's GTF for every vertebrate species as gene, transcript and exon tables, one assembly per taxon, with the GTF itself kept verbatim.
+---
+
+[Ensembl](https://www.ensembl.org) annotates genes, transcripts and exons on
+each species' reference assembly and publishes a GTF per species per numbered
+release. bioc-on-ice lands each GTF verbatim into `raw.ensembl__gtf` and
+derives `annotation.gene`, `annotation.transcript` and `annotation.exon` from
+it, with `reference.genome` naming the assembly. This is the TxDb and EnsDb
+content for every species at once, in one table each.
+
+## Licence and citation
+
+Ensembl names no licence instrument, only "no restrictions on access to, or
+use of, the data". Cite the Ensembl release number as `provenance.release`
+records it, and [Ensembl's paper](https://www.ensembl.org/info/about/publications.html).
+
+## Join keys
+
+- `annotation.gene.gene_id` is the unversioned stable id (`ENSG…`), with `version` beside it; `annotation.transcript.gene_id` and `annotation.exon.transcript_id` chain the three tables. `taxon_id` is the NCBI Taxonomy id.
+- The genome-feature tables stack providers: every row carries `source = 'ENSEMBL'` today, so a second provider can land without retiring Ensembl's rows.
+- Ensembl's gene symbols are in `annotation.identifier_mapping` as `ENSEMBL` → `SYMBOL` rows, for the canonical assembly only. Entrez and HGNC cross-references to Ensembl ids come from NCBI's `gene2ensembl` and HGNC, under their own `source`.
+- `annotation.mane__transcript.ensembl_transcript_id` joins `annotation.transcript.transcript_id` directly.
+
+## Good to know
+
+- **One assembly per taxon is published.** Ensembl ships several assemblies under one taxon id (13 for mouse, 28 for pig, 12 for sheep); the release carries the canonical one, so the published tables have no `genome_id` column.
+- GTF column 9 lands as one unparsed `attribute` string in raw; parsing it is what the derived tables do.
+- Species come from Ensembl's vertebrates listing, which includes a few model organisms (worm, fly, yeast) imported from Ensembl Metazoa and Fungi.
+
+## In the release
+
+::: {.source-facts data-source="ensembl"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

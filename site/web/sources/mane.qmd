@@ -1,0 +1,36 @@
+---
+title: MANE
+description: MANE's matched RefSeq and Ensembl transcript per human gene, and its rows in annotation.identifier_mapping.
+---
+
+[MANE](https://www.ncbi.nlm.nih.gov/refseq/MANE/) (Matched Annotation from
+NCBI and EMBL-EBI) names, per human protein-coding gene, one transcript that
+RefSeq and Ensembl annotate identically (MANE Select), plus MANE Plus Clinical
+transcripts where Select alone cannot report every known pathogenic variant.
+The release lands the summary file whole and derives
+`annotation.mane__transcript`, one row per matched pair. The release number
+in the file name is the version.
+
+## Licence and citation
+
+[NCBI Molecular Data Usage](https://www.ncbi.nlm.nih.gov/home/about/policies/)
+terms. Cite the MANE release and [Morales et al. 2022](https://www.ncbi.nlm.nih.gov/refseq/MANE/).
+
+## Join keys
+
+- RefSeq accessions keep their version (`NM_000546.6`), as the `REFSEQ_RNA` and `REFSEQ_PROTEIN` namespaces of `annotation.identifier_mapping` do.
+- Ensembl ids are split into stable id and version, so `ensembl_transcript_id` joins `annotation.transcript.transcript_id` and `ensembl_gene_id` joins `annotation.gene.gene_id` directly.
+- `annotation.identifier_mapping` rows under `source = 'MANE'` pair RefSeq and Ensembl transcripts (namespace `ENSEMBL_TRANSCRIPT`), for taxon 9606.
+
+## Good to know
+
+- The 70 `NR_` rows have no protein; `HGNC_ID` is missing on a few dozen rows.
+- Only the summary is landed; the release's GFF, GTF and FASTA are not.
+
+## In the release
+
+::: {.source-facts data-source="mane"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

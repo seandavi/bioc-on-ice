@@ -1,0 +1,39 @@
+---
+title: iCite
+description: NIH iCite's monthly snapshot, every PubMed record with its citation metrics and the full citation graph.
+---
+
+[iCite](https://icite.od.nih.gov) (NIH Office of Portfolio Analysis) publishes
+a complete database snapshot monthly on
+[Figshare](https://nih.figshare.com/collections/4586573): one row per PMID
+with the paper's identifiers, the influence metrics (Relative Citation Ratio,
+NIH percentile, citation counts), the translation scores and the `cited_by`
+and `references` PMID lists. The release lands the latest snapshot whole and
+derives what a paper *is* (`annotation.icite__publication`), how it is cited as
+of the snapshot (`annotation.icite__metrics`) and the graph itself
+(`annotation.icite__citation`, one row per citing and cited pair). The
+snapshot label (`2026-08`) is the version.
+
+## Licence and citation
+
+CC BY 4.0. Cite the snapshot by its Figshare DOI and
+[Hutchins et al.](https://icite.od.nih.gov/about).
+
+## Join keys
+
+- `pmid` joins `annotation.pubmed__article`, `annotation.ncbi__gene_pubmed.pubmed_id` and `annotation.pubtator3__mention.pmid`.
+- "Who cites X" is `WHERE cited_pmid = X` on `annotation.icite__citation`; the table is sharded by `cited_pmid`.
+- `citing_pmid` is always an iCite record; `cited_pmid` is not (some edges cite a paper iCite has no record of).
+
+## Good to know
+
+- `raw.metadata` is the older 17-column export of the same snapshot, kept with its columns unchanged; `raw.icite__metadata` is the typed, complete one.
+- Only the latest snapshot is in raw; earlier snapshots stay citable on Figshare.
+
+## In the release
+
+::: {.source-facts data-source="icite"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

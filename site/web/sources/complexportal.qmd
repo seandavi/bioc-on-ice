@@ -1,0 +1,37 @@
+---
+title: Complex Portal
+description: Curated and predicted macromolecular complexes from EMBL-EBI's Complex Portal, with one row per participant.
+---
+
+[Complex Portal](https://www.ebi.ac.uk/complexportal) (EMBL-EBI) describes
+stable macromolecular complexes: a named assembly, its participants and their
+stoichiometry, a GO annotation and the evidence. That is a different shape
+from a binary interaction, so it has its own two tables rather than rows in
+`annotation.interaction`. It is released with IntAct under a dated directory;
+the date is the version. Every ComplexTab file of the release lands, one per
+species plus the human hu.MAP predictions; the file name is what says
+"predicted".
+
+## Licence and citation
+
+CC0 1.0. Cite [Complex Portal](https://www.ebi.ac.uk/complexportal/about) as
+EMBL-EBI asks.
+
+## Join keys
+
+- The complex AC (`CPX-663`) is the key, unique across curated and predicted files; `annotation.complexportal__participant.complex_ac` joins it.
+- Participants stay in Complex Portal's identifier space, with the namespace read off the id: UniProtKB (98%), ChEBI, a `CPX-` sub-complex, RNAcentral, IntAct. Join UniProt accessions through `annotation.identifier_mapping` (human only so far).
+- A molecule set (interchangeable paralogs filling one position) becomes one row per member, with the set kept beside it.
+
+## Good to know
+
+- GO annotations, cross-references, ligands and disease stay on the complex row as the published `|`-separated strings.
+- The expanded participant list, which flattens sub-complexes, stays in raw.
+
+## In the release
+
+::: {.source-facts data-source="complexportal"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

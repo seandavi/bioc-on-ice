@@ -1,0 +1,40 @@
+---
+title: ENCODE
+description: The ENCODE portal's experiment and file inventory as resource tables, files referenced by URI, never copied.
+---
+
+The [ENCODE portal](https://www.encodeproject.org) catalogs experiments and
+the files they produced. The release lands both inventories from the portal's
+`report.tsv` with an explicit field list, released, archived and revoked alike,
+and derives `resource.encode__experiment` and `resource.encode__file`: assay,
+biosample, target, lab, and per file the format, assembly, size, checksum and
+`href` or S3 URI. The first use is making BEDbase's ENCODE accessions
+resolvable. The portal publishes no release number, so the version is the
+retrieval date and raw holds the latest crawl only.
+
+## Licence and citation
+
+ENCODE's [data use policy](https://www.encodeproject.org/help/citing-encode/):
+"External data users may freely download, analyze and publish results based on
+any ENCODE data without restrictions". Citation of the ENCODE Consortium and
+the producing lab is requested.
+
+## Join keys
+
+- `resource_id` is spelled `encode:ENCSR…` / `encode:ENCFF…`, exactly as BEDbase writes its targets, so the two join with `=`.
+- `resource.resource_relationship` carries file → dataset, and experiment → biosample term and target gene; biosample terms join `ontology.term`, target genes join `annotation.ncbi__gene`.
+- `taxon_id` comes from the biosample organism.
+
+## Good to know
+
+- The columns are a declared subset of each object's properties, landed whole in rows but not in fields; adding a field is a re-land.
+- Cells are unquoted upstream and lists are comma-joined, so a list whose values contain commas cannot be split back.
+- Annotation, Reference and Series datasets share the `ENCSR` space with experiments but are not landed, so a file's `dataset` resolves in `resource.encode__experiment` only when `dataset_type` is `experiments`.
+
+## In the release
+
+::: {.source-facts data-source="encode"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

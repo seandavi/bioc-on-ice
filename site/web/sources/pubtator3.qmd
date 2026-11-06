@@ -1,0 +1,38 @@
+---
+title: PubTator3
+description: PubTator3's five concept files landed whole, and one derived table of which genes, diseases, chemicals, species and variants each paper mentions.
+---
+
+[PubTator3](https://www.ncbi.nlm.nih.gov/research/pubtator3/) (Lu lab, NCBI)
+tags genes, diseases, chemicals, species and variants in PubMed abstracts and
+PMC full text, and merges curated links from gene2pubmed, MeSH, CTD, ClinVar
+and others. It publishes one headerless TSV per entity type, regenerated
+together about monthly. The release lands the five files whole, one table
+each, and derives `annotation.pubtator3__mention`: one row per (paper,
+concept, asserting resource). There is no version, so the version is the
+retrieval date.
+
+## Licence and citation
+
+Public domain, per the FTP directory's README. Cite PubTator3 as
+[its site asks](https://www.ncbi.nlm.nih.gov/research/pubtator3/).
+
+## Join keys
+
+- `pmid` joins `annotation.pubmed__article` and the iCite tables.
+- `concept_id` is an Entrez GeneID for genes (joins `annotation.ncbi__gene.gene_id`), a MeSH or OMIM id for diseases, MeSH for chemicals, an NCBI Taxonomy id for species, and a tmVar id for mutations; `concept_type` says which.
+- `resource` is in the key, one row per asserting resource, so "curated links only" is a filter (`resource <> 'PubTator3'`).
+
+## Good to know
+
+- The mention strings stay in raw: they move with every tagger retrain. Join back on (`pmid`, `concept_id`) to read them.
+- Mentions PubTator3 recognised but could not normalise have concept id `-` in raw and are not derived.
+- A gene mention that resolves to several ids (`6900;1491938`) becomes one row per id; mutation ids are never split.
+
+## In the release
+
+::: {.source-facts data-source="pubtator3"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

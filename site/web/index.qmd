@@ -62,4 +62,5 @@ gives an AI assistant the same read-only access. It runs on your machine:
 
 Large data stays where it lives: the `resource` tables catalog datasets in
 CELLxGENE, ENCODE, BEDbase and the eQTL Catalogue and point at the original
-files. Per-source guides: [BugSigDB](sources/bugsigdb.qmd).
+files. [Sources](sources/index.qmd) has a page per upstream source: what it
+is, its licence, its tables and how they join.

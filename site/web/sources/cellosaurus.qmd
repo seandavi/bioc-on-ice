@@ -1,0 +1,38 @@
+---
+title: Cellosaurus
+description: Cellosaurus cell lines, their cross-references and donor diseases, from the flat-file release.
+---
+
+[Cellosaurus](https://www.cellosaurus.org) is the cell-line registry: one
+entry per line, each with a stable `CVCL_` accession, and the glue between
+CELLxGENE, ENCODE biosamples, BEDbase, GEO and DepMap, which all name cell
+lines differently. The release lands `cellosaurus.txt` whole, one row per
+line of the file, and derives three tables from it: the cell line, its
+cross-references (DR lines) and the donor diseases (DI lines). The version
+is the file's own header (`Version: 56.0`).
+
+## Licence and citation
+
+CC BY 4.0: "Cellosaurus © CALIPHO group, SIB Swiss Institute of
+Bioinformatics". Cite the release version as `provenance.release` records it
+and [the Cellosaurus paper](https://www.cellosaurus.org/description.html).
+
+## Join keys
+
+- `annotation.cellosaurus__cell_line.accession` is the `CVCL_` id; `__xref` and `__disease` join on it.
+- A cell line can have more than one species (hybridomas and hybrid lines), so `taxon_ids` is a sorted list, not a scalar.
+- Cross-references are their own table rather than rows in `annotation.identifier_mapping`: a cell line is not a gene, and a third of the DR lines point at Wikidata.
+
+## Good to know
+
+- Comments (CC), STR profiles (ST), references (RX) and web links (WW) are in raw and not derived.
+- OI lines (same individual) stay in raw.
+- `cellosaurus_refs.txt`, `cellosaurus_xrefs.txt` and the deleted-accessions file are not landed.
+
+## In the release
+
+::: {.source-facts data-source="cellosaurus"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

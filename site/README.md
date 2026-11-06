@@ -34,13 +34,25 @@ The same page lists the monthly Hugging Face tags (`YYYY-MM`, ADR-0016) of
 
 `web/` is a Quarto website ported from omicidx `docs/` (#215): landing page,
 releases, the explorer, the versions-and-citation guide,
-per-source pages (`sources/bugsigdb.qmd` includes `docs/bugsigdb.md`, so the
-text lives in one place) and a 404 page, with site search and light and dark
+a page per source under `sources/` (#268) and a 404 page, with site search and light and dark
 themes (`web/theme/`: omicidx's archify structure in slate, indigo and violet).
 `web/shell-links.js` adds "Open in DuckDB Shell ↗" under every SQL block that
 isn't marked `{.sql .no-shell}`, attaching `latest/` first when the example
 doesn't `ATTACH`. Nothing executes at render time: examples are plain code,
 so rendering needs Quarto only, no R, Python or data.
+
+The source pages (`sources/<source>.qmd`, plus `sources/index.qmd`) are
+hand-written narrative (what the source is, licence and citation, join keys,
+caveats) over generated facts: `sources/source-facts.js` reads
+`latest/manifest.json` in the browser and fills each page's
+`::: {.source-facts data-source="<key>"}` with the source's tables, row counts,
+Parquet links and the upstream version from `provenance.release`, and the
+index's table from the same data. `sources/sources.json` is the registry
+mapping a source key to its tables, the cross-source tables it contributes to
+and its `provenance.release` source names; `tests/test_source_pages.py` checks
+it names every table of `publish.TABLES` exactly once and that every key has a
+page and a sidebar entry. `sources/bugsigdb.qmd` still includes
+`docs/bugsigdb.md` for its narrative.
 
 ## The explorer
 

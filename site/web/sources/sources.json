@@ -1,0 +1,171 @@
+{
+  "_comment": "One entry per source page (sources/<key>.qmd). tables: the release tables this source alone writes; shared: cross-source tables it contributes rows to; provenance: its `source` values in provenance.release. source-facts.js renders this against latest/manifest.json; tests/test_source_pages.py checks it against publish.TABLES.",
+  "bedbase": {
+    "name": "BEDbase",
+    "covers": "BED files and bedsets: GEO/ENCODE region sets, referenced not copied",
+    "licence": "No site-wide licence; every record is DUO:0000042 (general research use)",
+    "tables": ["raw.bedbase__bed", "raw.bedbase__bedset", "raw.bedbase__bedset_membership", "resource.bedbase__bedfile", "resource.bedbase__bedset"],
+    "shared": ["resource.resource_relationship"],
+    "provenance": ["bedbase_bed", "bedbase_bedset", "bedbase_bedset_membership"]
+  },
+  "biogrid": {
+    "name": "BioGRID",
+    "covers": "Curated physical and genetic interactions, every organism",
+    "licence": "MIT",
+    "tables": ["raw.biogrid__interactions"],
+    "shared": ["annotation.interaction"],
+    "provenance": ["biogrid"]
+  },
+  "bugsigdb": {
+    "name": "BugSigDB",
+    "covers": "Curated microbial signatures and their taxa",
+    "licence": "CC BY 4.0",
+    "tables": ["raw.bugsigdb__full_dump", "annotation.signature_taxon"],
+    "shared": [],
+    "provenance": ["bugsigdb"]
+  },
+  "cellosaurus": {
+    "name": "Cellosaurus",
+    "covers": "Cell lines, their cross-references and donor diseases",
+    "licence": "CC BY 4.0",
+    "tables": ["raw.cellosaurus__release", "annotation.cellosaurus__cell_line", "annotation.cellosaurus__xref", "annotation.cellosaurus__disease"],
+    "shared": [],
+    "provenance": ["cellosaurus"]
+  },
+  "cellxgene": {
+    "name": "CELLxGENE",
+    "covers": "Single-cell datasets: H5AD and Census pointers, ontology-tagged",
+    "licence": "CC BY 4.0",
+    "tables": ["raw.cellxgene__dataset", "resource.cellxgene__dataset"],
+    "shared": ["resource.resource_relationship"],
+    "provenance": ["cellxgene", "cellxgene_census"]
+  },
+  "complexportal": {
+    "name": "Complex Portal",
+    "covers": "Macromolecular complexes and their participants",
+    "licence": "CC0 1.0",
+    "tables": ["raw.complexportal__complex", "annotation.complexportal__complex", "annotation.complexportal__participant"],
+    "shared": [],
+    "provenance": ["complexportal"]
+  },
+  "encode": {
+    "name": "ENCODE",
+    "covers": "Experiments and files of the ENCODE portal, referenced not copied",
+    "licence": "ENCODE Data Use Policy (free use; cite the Consortium)",
+    "tables": ["raw.encode__experiment", "raw.encode__file", "resource.encode__experiment", "resource.encode__file"],
+    "shared": ["resource.resource_relationship"],
+    "provenance": ["encode_experiment", "encode_file"]
+  },
+  "ensembl": {
+    "name": "Ensembl",
+    "covers": "Genes, transcripts and exons from the GTF of 276 species",
+    "licence": "No restrictions (Ensembl names no licence instrument)",
+    "tables": ["raw.ensembl__gtf", "reference.genome", "annotation.gene", "annotation.transcript", "annotation.exon"],
+    "shared": ["annotation.identifier_mapping"],
+    "provenance": ["ensembl"]
+  },
+  "eqtlcatalogue": {
+    "name": "eQTL Catalogue",
+    "covers": "QTL datasets with summary-statistics URIs, referenced not copied",
+    "licence": "CC BY 4.0",
+    "tables": ["raw.eqtlcatalogue__dataset", "raw.eqtlcatalogue__tabix_ftp_paths", "resource.eqtlcatalogue__dataset"],
+    "shared": ["resource.resource_relationship"],
+    "provenance": ["eqtlcatalogue"]
+  },
+  "gwas_catalog": {
+    "name": "GWAS Catalog",
+    "covers": "Variant-trait associations and the studies that report them",
+    "licence": "EMBL-EBI Terms of Use",
+    "tables": ["raw.gwas_catalog__associations", "raw.gwas_catalog__studies", "clinical.gwas_catalog__study", "clinical.gwas_catalog__association"],
+    "shared": [],
+    "provenance": ["gwas_catalog"]
+  },
+  "hgnc": {
+    "name": "HGNC",
+    "covers": "Approved human gene symbols, names and cross-references",
+    "licence": "CC0 1.0",
+    "tables": ["raw.hgnc__complete_set", "annotation.hgnc__gene"],
+    "shared": ["annotation.identifier_mapping"],
+    "provenance": ["hgnc"]
+  },
+  "icite": {
+    "name": "iCite",
+    "covers": "Citation metrics and the citation graph for every PubMed record",
+    "licence": "CC BY 4.0",
+    "tables": ["raw.icite__metadata", "raw.metadata", "annotation.icite__publication", "annotation.icite__metrics", "annotation.icite__citation"],
+    "shared": [],
+    "provenance": ["icite"]
+  },
+  "intact": {
+    "name": "IntAct",
+    "covers": "Molecular interaction evidence in PSI-MI MITAB",
+    "licence": "CC BY 4.0",
+    "tables": ["raw.intact__mitab"],
+    "shared": ["annotation.interaction"],
+    "provenance": ["intact"]
+  },
+  "mane": {
+    "name": "MANE",
+    "covers": "The RefSeq to Ensembl matched transcript per human gene",
+    "licence": "NCBI Molecular Data Usage",
+    "tables": ["raw.ncbi__mane_summary", "annotation.mane__transcript"],
+    "shared": ["annotation.identifier_mapping"],
+    "provenance": ["mane"]
+  },
+  "ncbi_gene": {
+    "name": "NCBI Gene",
+    "covers": "Entrez genes, GO annotations, PubMed links, accessions and orthologs, every organism",
+    "licence": "NCBI Molecular Data Usage",
+    "tables": ["raw.ncbi__gene_info", "raw.ncbi__gene_history", "raw.ncbi__gene2ensembl", "raw.ncbi__gene2accession", "raw.ncbi__gene2go", "raw.ncbi__gene2pubmed", "raw.ncbi__gene_orthologs", "raw.ncbi__gene_group", "annotation.ncbi__gene", "annotation.ncbi__gene_go", "annotation.ncbi__gene_pubmed", "annotation.ortholog"],
+    "shared": ["annotation.identifier_mapping"],
+    "provenance": ["ncbi_gene", "ncbi_gene2accession", "ncbi_gene2go", "ncbi_gene2pubmed", "ncbi_gene_orthologs", "ncbi_gene_group"]
+  },
+  "obo": {
+    "name": "Ontologies (OBO)",
+    "covers": "GO, CL, UBERON, MONDO, EFO, DOID, HsapDv and MmusDv terms and edges",
+    "licence": "Per ontology: CC BY 4.0, CC BY 3.0, CC0 1.0 or Apache 2.0",
+    "tables": ["raw.obo__go", "raw.obo__cl", "raw.obo__uberon", "raw.obo__mondo", "raw.obo__efo", "raw.obo__doid", "raw.obo__hsapdv", "raw.obo__mmusdv", "ontology.term", "ontology.relationship"],
+    "shared": [],
+    "provenance": ["obo_go", "obo_cl", "obo_uberon", "obo_mondo", "obo_efo", "obo_doid", "obo_hsapdv", "obo_mmusdv"]
+  },
+  "pubmed": {
+    "name": "PubMed",
+    "covers": "Citations: title, abstract, authors, MeSH, references, grants",
+    "licence": "NLM Terms and Conditions",
+    "tables": ["annotation.pubmed__article"],
+    "shared": [],
+    "provenance": []
+  },
+  "pubtator3": {
+    "name": "PubTator3",
+    "covers": "Genes, diseases, chemicals, species and variants mentioned in each paper",
+    "licence": "Public domain",
+    "tables": ["raw.pubtator3__gene", "raw.pubtator3__disease", "raw.pubtator3__chemical", "raw.pubtator3__species", "raw.pubtator3__mutation", "annotation.pubtator3__mention"],
+    "shared": [],
+    "provenance": ["pubtator3_gene", "pubtator3_disease", "pubtator3_chemical", "pubtator3_species", "pubtator3_mutation"]
+  },
+  "rnacentral": {
+    "name": "RNAcentral",
+    "covers": "Non-coding RNA sequences and their member-database cross-references",
+    "licence": "CC0 1.0",
+    "tables": ["raw.rnacentral__id_mapping", "annotation.rnacentral__rna"],
+    "shared": ["annotation.identifier_mapping"],
+    "provenance": ["rnacentral"]
+  },
+  "uniprot": {
+    "name": "UniProt",
+    "covers": "Protein accession cross-references, human only so far",
+    "licence": "CC BY 4.0",
+    "tables": [],
+    "shared": ["annotation.identifier_mapping"],
+    "provenance": []
+  },
+  "wikipathways": {
+    "name": "WikiPathways",
+    "covers": "Pathways as Entrez gene sets, 18 species",
+    "licence": "CC0 1.0",
+    "tables": ["raw.wikipathways__gmt", "annotation.wikipathways__pathway", "annotation.wikipathways__gene_pathway"],
+    "shared": [],
+    "provenance": ["wikipathways"]
+  }
+}

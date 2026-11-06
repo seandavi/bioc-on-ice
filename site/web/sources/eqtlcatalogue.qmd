@@ -1,0 +1,37 @@
+---
+title: eQTL Catalogue
+description: The eQTL Catalogue's dataset metadata as a resource table, with summary statistics and credible sets referenced by URI on the EBI FTP.
+---
+
+The [eQTL Catalogue](https://www.ebi.ac.uk/eqtl/) (EMBL-EBI and the University
+of Tartu) reprocesses public QTL studies uniformly and publishes, per dataset
+(one study, sample group and quantification method), tabix-indexed summary
+statistics and fine-mapping results on the EBI FTP. The release lands the two
+metadata files of a numbered Catalogue release from the
+[resources repository](https://github.com/eQTL-Catalogue/eQTL-Catalogue-resources)
+and derives `resource.eqtlcatalogue__dataset`: what was measured, in which
+tissue or cell type, and the three FTP URIs. No summary statistic is copied.
+
+## Licence and citation
+
+CC BY 4.0 ([ebi.ac.uk/eqtl/License](https://www.ebi.ac.uk/eqtl/License)).
+Cite the Catalogue release as [its site asks](https://www.ebi.ac.uk/eqtl/).
+
+## Join keys
+
+- `dataset_id` (`QTD000001`) is the key of all three tables.
+- `tissue_term_id` is a UBERON, CL or EFO CURIE that joins `ontology.term.term_id` (BTO is not landed), and is a row in `resource.resource_relationship`.
+- `pmid` joins `annotation.pubmed__article` and `annotation.icite__publication`.
+
+## Good to know
+
+- Attributes come from the metadata file, which upstream keeps correcting; only the URIs come from the paths file, and the two must name the same datasets or nothing lands.
+- Credible sets are referenced by `credible_sets_uri` and not landed; the GTEx v8 imported files are not landed either.
+
+## In the release
+
+::: {.source-facts data-source="eqtlcatalogue"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}

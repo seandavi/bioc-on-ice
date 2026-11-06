@@ -1,0 +1,3 @@
+```{=html}
+<script src="source-facts.js"></script>
+```

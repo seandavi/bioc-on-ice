@@ -1,0 +1,37 @@
+---
+title: RNAcentral
+description: RNAcentral's id_mapping landed whole, and the non-coding RNA cross-references OrgDb lacks, derived for human and mouse.
+---
+
+[RNAcentral](https://rnacentral.org) aggregates non-coding RNA sequences: one
+`URS` id per distinct sequence, cross-referenced to the records of its member
+databases (ENA, Rfam, Ensembl, RefSeq, miRBase, HGNC, GtRNAdb and more). The
+release lands `id_mapping.tsv.gz` whole, one row per cross-reference across
+every taxon, and derives `annotation.rnacentral__rna` (one row per sequence
+per organism, with its RNA type) and RNAcentral's rows in
+`annotation.identifier_mapping`. The release number is the version.
+
+## Licence and citation
+
+CC0 1.0 (from release 20). Cite RNAcentral as
+[its site asks](https://rnacentral.org/about-us), with the release number.
+
+## Join keys
+
+- The id is the taxon-qualified `URS0000626831_9606` (`urs_taxid`), not the bare `URS`: a sequence occurs in many organisms. HGNC's `rna_central_id` is the bare form, so the join is `|| '_9606'`.
+- `annotation.identifier_mapping` rows under `source = 'RNACENTRAL'` use the member database names as target namespaces (`HGNC`, `MIRBASE`, `RFAM`, `REFSEQ_RNA`, `ENSEMBL_TRANSCRIPT`), the forms NCBI and MANE already write.
+- `taxon_id` joins every gene table.
+
+## Good to know
+
+- The derived tables cover human and mouse so far; raw covers every taxon.
+- ENA composite ids (`GU786683.1:1..200:rRNA`) are kept as published in raw and are most of the rows.
+- RNAcentral's Ensembl ids are transcripts, so they land under `ENSEMBL_TRANSCRIPT`, not `ENSEMBL`.
+
+## In the release
+
+::: {.source-facts data-source="rnacentral"}
+Loading from the latest release…
+:::
+
+{{< include _facts.qmd >}}
