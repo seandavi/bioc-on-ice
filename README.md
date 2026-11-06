@@ -425,3 +425,9 @@ yet meet are strict xfails, which start failing the day the gap closes.
 [`tests/acceptance/questions.json`](tests/acceptance/questions.json) is the
 held-out question set for criterion B4: an agent under test gets the endpoint
 and the `question` text only, and is right when its SQL returns `expected`.
+
+## Licence
+
+The code is [MIT](LICENSE). The data keep their sources' own terms: each
+source's licence is on its page at
+<https://bioconice.cancerdatasci.org/sources/> and in the table descriptions.
