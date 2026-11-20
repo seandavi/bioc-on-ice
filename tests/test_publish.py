@@ -99,3 +99,15 @@ def test_views_keep_the_https_url_before_it_is_uploaded(con, tmp_path):
     assert f"read_parquet('{url}')" in (out / "views.sql").read_text()
     db = duckdb.connect(str(out / publish.DB_FILE), read_only=True)
     assert url in db.sql("SELECT sql FROM duckdb_views() WHERE view_name = 'gene'").fetchone()[0]
+
+
+def test_croissant_carries_the_dataset_and_bioregistry_prefixes(con, tmp_path):
+    out = tmp_path / "release"
+    publish.publish(con, out, out.as_uri(), ONLY)
+    doc = json.loads((out / "croissant.json").read_text())
+
+    assert doc["name"] == "biocOnIce" and doc["license"]["url"].endswith("/sources/")
+    assert {rs["name"] for rs in doc["recordSet"]} == set(ONLY)
+    fields = {f["@id"]: f for rs in doc["recordSet"] for f in rs["field"]}
+    assert fields["annotation.gene/taxon_id"]["dataType"] == ["sc:Integer", "bioregistry:ncbitaxon"]
+    assert fields["annotation.gene/gene_id"]["dataType"] == ["sc:Text", "bioregistry:ensembl"]

@@ -57,8 +57,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?rev=c9fccf4c16db2df127cdb111919a117e1d1f5c6f" },
-    { name = "cdsci-publish", extras = ["upload", "hf"], git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=c9fccf4c16db2df127cdb111919a117e1d1f5c6f" },
+    { name = "cdsci-lake", git = "https://github.com/seandavi/cdsci-lake?rev=b4911b740e9855d16878d6fdb7c005c2002c9941" },
+    { name = "cdsci-publish", extras = ["upload", "hf"], git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=b4911b740e9855d16878d6fdb7c005c2002c9941" },
     { name = "duckdb", specifier = ">=1.4" },
     { name = "mcp", specifier = ">=1.2,<2" },
     { name = "pyiceberg", extras = ["sql-sqlite", "pyarrow"], specifier = ">=0.9" },
@@ -79,7 +79,7 @@ wheels = [
 [[package]]
 name = "cdsci-lake"
 version = "0.4.2"
-source = { git = "https://github.com/seandavi/cdsci-lake?rev=c9fccf4c16db2df127cdb111919a117e1d1f5c6f#c9fccf4c16db2df127cdb111919a117e1d1f5c6f" }
+source = { git = "https://github.com/seandavi/cdsci-lake?rev=b4911b740e9855d16878d6fdb7c005c2002c9941#b4911b740e9855d16878d6fdb7c005c2002c9941" }
 dependencies = [
     { name = "duckdb" },
     { name = "httpx" },
@@ -91,7 +91,7 @@ dependencies = [
 [[package]]
 name = "cdsci-publish"
 version = "0.1.0"
-source = { git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=c9fccf4c16db2df127cdb111919a117e1d1f5c6f#c9fccf4c16db2df127cdb111919a117e1d1f5c6f" }
+source = { git = "https://github.com/seandavi/cdsci-lake?subdirectory=packages%2Fcdsci-publish&rev=b4911b740e9855d16878d6fdb7c005c2002c9941#b4911b740e9855d16878d6fdb7c005c2002c9941" }
 dependencies = [
     { name = "duckdb" },
     { name = "fsspec" },
