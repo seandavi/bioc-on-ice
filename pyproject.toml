@@ -20,8 +20,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-cdsci-lake = { git = "https://github.com/seandavi/cdsci-lake", rev = "c9fccf4c16db2df127cdb111919a117e1d1f5c6f" }
-cdsci-publish = { git = "https://github.com/seandavi/cdsci-lake", rev = "c9fccf4c16db2df127cdb111919a117e1d1f5c6f", subdirectory = "packages/cdsci-publish" }
+cdsci-lake = { git = "https://github.com/seandavi/cdsci-lake", rev = "b4911b740e9855d16878d6fdb7c005c2002c9941" }
+cdsci-publish = { git = "https://github.com/seandavi/cdsci-lake", rev = "b4911b740e9855d16878d6fdb7c005c2002c9941", subdirectory = "packages/cdsci-publish" }
 
 [project.scripts]
 bioconice = "bioconice.__main__:main"

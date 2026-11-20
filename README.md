@@ -225,6 +225,11 @@ curl -O https://data.bioconice.cancerdatasci.org/latest/restore.sql
 duckdb bioconice-local.duckdb < restore.sql
 ```
 
+Each folder also holds `croissant.json`,
+[Croissant 1.1](https://docs.mlcommons.org/croissant/docs/croissant-spec-1.1.html) metadata
+for the release: one record set per table, column docs and types, and each identifier
+column's Bioregistry prefix as its semantic type (`gene_id` → `bioregistry:ncbigene`).
+
 From R, the same `ATTACH` through the duckdb package:
 
 ```r

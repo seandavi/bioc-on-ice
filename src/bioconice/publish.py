@@ -232,10 +232,41 @@ def _docs(name):
     return None, {}
 
 
+# croissant.json's sc:Dataset (#262). The data keep their sources' terms, so the licence is
+# a pointer to the per-source pages, as the README and the Hugging Face card say.
+DATASET = {
+    "name": "biocOnIce",
+    "description": "Public biological annotation (NCBI Gene, Ensembl, GO, HGNC, UniProt "
+                   "mappings, WikiPathways, ontologies, ...) as versioned Parquet tables with "
+                   "DuckDB views, one release a week. Each table keeps its source's terms.",
+    "url": "https://bioconice.cancerdatasci.org",
+    "license": {"@type": "sc:CreativeWork",
+                "name": "Mixed: each table keeps its upstream source's terms",
+                "url": "https://bioconice.cancerdatasci.org/sources/"},
+    "creator": {"@type": "sc:Person", "name": "Sean Davis"},
+    "citeAs": "Davis, Sean. biocOnIce. https://bioconice.cancerdatasci.org",
+    "keywords": ["biology", "genomics", "bioinformatics", "annotation", "Bioconductor"],
+    "@context": {"bioregistry": "https://bioregistry.io/registry/"},
+}
+
+
+def field_semantics():
+    """Each column with a declared Bioregistry prefix (`bioc.column.<col>.prefix`) gets that
+    prefix as a semantic data type, e.g. gene_id -> bioregistry:ncbigene."""
+    out = {}
+    for name, d in DECLARED.items():
+        cols = {k.split(".")[2]: v for k, v in d.properties.items()
+                if k.startswith("bioc.column.") and k.endswith(".prefix")}
+        if cols:
+            out[name] = {c: {"dataType": f"bioregistry:{p}"} for c, p in cols.items()}
+    return out
+
+
 def publish(con, out: Path, base_url: str = DEFAULT_BASE_URL, only=None) -> dict:
     """Build one release bundle in `out` from `con` (`connect()`): the shared mechanics are
     cdsci.publish (cdsci-lake ADR-0027); this module supplies the table list and docs."""
     return cdsci.publish.publish(
         con, out, tables=TABLES, docs=_docs, base_url=base_url, db_file=DB_FILE,
         code_dir=Path(__file__).parent,
-        provenance_sql="SELECT * FROM bioc.provenance.release ORDER BY ALL", only=only)
+        provenance_sql="SELECT * FROM bioc.provenance.release ORDER BY ALL", only=only,
+        dataset=DATASET, field_semantics=field_semantics())
